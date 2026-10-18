@@ -87,7 +87,7 @@ public enum FrameUniformsBuilder {
         return faces.map { forward, right, up in
             // Cameras look down their local −Z, so the third column is −forward.
             let m = Mat4(columns: Vec4(right, 0), Vec4(up, 0), Vec4(-forward, 0), Vec4(position, 1))
-            return RenderCamera(entity: .invalid, camera: cam, worldMatrix: m, aspect: 1)
+            return RenderCamera(entity: .null, camera: cam, worldMatrix: m, aspect: 1)
         }
     }
 }

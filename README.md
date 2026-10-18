@@ -20,11 +20,11 @@ The open-source game engine for macOS and Apple Silicon.
 ---
 
 > [!IMPORTANT]
-> **Project status: pre-release (0.1.0, unreleased).** With Swift 6.1.3 on Linux, every target
-> builds and all 491 tests pass, and `HelloFerox --headless` runs. The Metal renderer and the
-> macOS-only code (AppKit, AVFoundation, MetalFX) are compiled out on Linux, so they have **not yet
-> been compiled or run on a Mac**. There are no render screenshots and no performance figures
-> here, because none have been measured on Apple hardware. Please report any build errors.
+> **Project status: pre-release (0.1.0, unreleased).** Verified on a Mac (Apple M1 Max, macOS 27,
+> Swift 6.4): every target builds with no warnings, all 494 tests pass, the Metal renderer draws
+> offscreen frames, and the examples run. The Linux CI builds and tests the platform-independent
+> modules. Testing so far covers one machine, so please report build errors or rendering issues on
+> other Macs.
 
 ## Contents
 

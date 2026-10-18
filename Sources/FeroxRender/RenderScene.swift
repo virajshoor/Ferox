@@ -114,6 +114,9 @@ public struct ExtractionOptions: Sendable {
     public var shadowDistance: Float = 120
     public var maxPunctualLights = 1024
     public var collectRayTracingInstances = false
+    /// Renders from this camera instead of the world's main camera (reflection-probe
+    /// faces, render-to-texture cameras).
+    public var cameraOverride: RenderCamera?
     public init() {}
 }
 
@@ -159,9 +162,14 @@ public enum RenderSceneExtractor {
         if let env = world.entities(with: Environment.self).first.flatMap({ world.get(Environment.self, $0) }) {
             frame.environment = env
         }
-        guard let main = mainCamera(in: world) else { return frame }
-        let camEntity = main.0, cam = main.1
-        let rc = RenderCamera(entity: camEntity, camera: cam, worldMatrix: worldMatrix(world, camEntity), aspect: aspect)
+        let rc: RenderCamera
+        if let override = options.cameraOverride {
+            rc = override
+        } else {
+            guard let main = mainCamera(in: world) else { return frame }
+            rc = RenderCamera(entity: main.0, camera: main.1, worldMatrix: worldMatrix(world, main.0), aspect: aspect)
+        }
+        let cam = rc.camera
         frame.camera = rc
         let frustum = Frustum(viewProjection: rc.viewProjection)
 

@@ -100,6 +100,10 @@ final class ScenePasses {
 
     private var depthStates: [String: any MTLDepthStencilState] = [:]
 
+    /// Winding of front faces. Counter-clockwise for every normal view; reflection-probe
+    /// capture sets clockwise while it encodes, because cube-face cameras are mirrored.
+    var frontFacing: MTLWinding = .counterClockwise
+
     init(device: any MTLDevice, shaders: ShaderLibrary, capabilities: DeviceCapabilities) {
         self.device = device
         self.shaders = shaders
@@ -416,7 +420,7 @@ final class ScenePasses {
             guard let enc = cb.makeRenderCommandEncoder(descriptor: pass) else { continue }
             enc.label = "Ferox.Shadow.Cascade\(c)"
             enc.setDepthStencilState(depthState(.less, write: true))
-            enc.setFrontFacing(.counterClockwise)
+            enc.setFrontFacing(frontFacing)
             // Slope-scaled hardware bias complements the shader's constant/normal bias.
             enc.setDepthBias(0, slopeScale: 1.5, clamp: 0.01)
             enc.setVertexValue(matrix, index: BufferIndex.cascade, allocator: r.allocator)
@@ -544,7 +548,7 @@ final class ScenePasses {
         }
         guard !frame.opaque.isEmpty else { return }
         enc.setDepthStencilState(depthState(.greater, write: true))
-        enc.setFrontFacing(.counterClockwise)
+        enc.setFrontFacing(frontFacing)
         bindCommon(enc, state: state, resources: r)
         encodeOpaqueDraws(enc, kind: .prepass, frame: frame, state: state, resources: r, lighting: nil)
     }
@@ -615,7 +619,7 @@ final class ScenePasses {
         enc.pushDebugGroup("Ferox.ForwardOpaque")
         defer { enc.popDebugGroup() }
         enc.setDepthStencilState(depthState(.greaterEqual, write: false))
-        enc.setFrontFacing(.counterClockwise)
+        enc.setFrontFacing(frontFacing)
         bindCommon(enc, state: state, resources: r)
         bindLighting(enc, state: state, lighting: lighting, resources: r)
         encodeOpaqueDraws(enc, kind: .forward, frame: frame, state: state, resources: r, lighting: lighting)
@@ -643,7 +647,7 @@ final class ScenePasses {
         enc.pushDebugGroup("Ferox.Transparent")
         defer { enc.popDebugGroup() }
         enc.setDepthStencilState(depthState(.greaterEqual, write: false))
-        enc.setFrontFacing(.counterClockwise)
+        enc.setFrontFacing(frontFacing)
         bindCommon(enc, state: state, resources: r)
         bindLighting(enc, state: state, lighting: lighting, resources: r)
         var last: (any MTLRenderPipelineState)?

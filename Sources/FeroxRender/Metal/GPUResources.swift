@@ -200,6 +200,18 @@ extension MTLComputeCommandEncoder {
         dispatchThreadgroups(grid, threadsPerThreadgroup: group)
     }
 
+    /// Binds `pipeline` and covers `width`×`height`×`depth` threads, with `depth` mapped to
+    /// whole threadgroup layers (cube faces, array slices).
+    func dispatch3D(_ pipeline: any MTLComputePipelineState, width: Int, height: Int, depth: Int) {
+        guard width > 0, height > 0, depth > 0 else { return }
+        setComputePipelineState(pipeline)
+        let w = min(8, pipeline.threadExecutionWidth)
+        let h = max(min(pipeline.maxTotalThreadsPerThreadgroup / w, 8), 1)
+        let group = MTLSize(width: w, height: h, depth: 1)
+        let grid = MTLSize(width: RenderMath.groups(width, w), height: RenderMath.groups(height, h), depth: depth)
+        dispatchThreadgroups(grid, threadsPerThreadgroup: group)
+    }
+
     /// Binds `pipeline` and dispatches enough threadgroups to cover `count` threads in one
     /// dimension.
     func dispatch1D(_ pipeline: any MTLComputePipelineState, count: Int, groupSize: Int? = nil) {

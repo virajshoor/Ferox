@@ -96,10 +96,11 @@ let package = Package(
         // MARK: Tests
         .testTarget(name: "FeroxMathTests", dependencies: ["FeroxMath"]),
         .testTarget(name: "FeroxCoreTests", dependencies: ["FeroxCore"]),
-        .testTarget(name: "FeroxSceneTests", dependencies: ["FeroxScene"]),
-        .testTarget(name: "FeroxPhysicsTests", dependencies: ["FeroxPhysics"]),
+        .testTarget(name: "FeroxSceneTests", dependencies: ["FeroxScene", "FeroxCore"]),
+        .testTarget(name: "FeroxPhysicsTests", dependencies: ["FeroxPhysics", "FeroxScene", "FeroxCore"]),
         .testTarget(name: "FeroxSubsystemTests",
-                    dependencies: ["FeroxInput", "FeroxAnimation", "FeroxAssets", "FeroxNet", "FeroxUI", "FeroxAudio"]),
+                    dependencies: ["FeroxInput", "FeroxAnimation", "FeroxAssets", "FeroxNet", "FeroxUI", "FeroxAudio",
+                                   "FeroxScene", "FeroxCore"]),
         .testTarget(name: "FeroxRenderTests", dependencies: ["FeroxRender", "Ferox"]),
         .testTarget(name: "FeroxIntegrationTests", dependencies: ["Ferox"]),
     ]

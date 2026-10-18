@@ -285,37 +285,3 @@ public enum GraphicsFeatureResolver {
             screenSpaceAO: ssao, fallbacks: fallbacks)
     }
 }
-
-/// Controller that adjusts the render scale to hold a GPU frame-time target.
-///
-/// Uses a damped proportional controller on the measured GPU time with hysteresis so
-/// resolution does not oscillate frame to frame, and quantises scale to 1/64 steps so
-/// render targets are only reallocated on meaningful changes.
-public struct DynamicResolutionController: Sendable {
-    public var minScale: Float
-    public var maxScale: Float
-    public var targetMilliseconds: Double
-    public private(set) var scale: Float
-    private var smoothedMs: Double = 0
-
-    public init(minScale: Float, maxScale: Float, targetMilliseconds: Double, initialScale: Float = 1) {
-        self.minScale = minScale
-        self.maxScale = maxScale
-        self.targetMilliseconds = targetMilliseconds
-        scale = min(max(initialScale, minScale), maxScale)
-    }
-
-    /// Feeds one GPU frame time measurement and returns the new scale.
-    @discardableResult
-    public mutating func update(gpuMilliseconds ms: Double) -> Float {
-        smoothedMs = smoothedMs == 0 ? ms : smoothedMs * 0.9 + ms * 0.1
-        let ratio = targetMilliseconds / max(smoothedMs, 0.01)
-        // GPU cost scales roughly with pixel count = scale²; adjust by sqrt of the ratio.
-        if ratio < 0.95 || ratio > 1.1 {
-            let desired = scale * Float(ratio.squareRoot())
-            let next = scale + (desired - scale) * 0.25
-            scale = (min(max(next, minScale), maxScale) * 64).rounded() / 64
-        }
-        return scale
-    }
-}

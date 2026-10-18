@@ -51,7 +51,7 @@ jobs:
         run: swift build --target Ferox
 
       - name: Test platform-independent modules
-        run: swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests|FeroxSubsystemTests|FeroxIntegrationTests"
+        run: swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests|FeroxSubsystemTests|FeroxRenderTests|FeroxIntegrationTests"
 
   docs:
     name: Markdown links

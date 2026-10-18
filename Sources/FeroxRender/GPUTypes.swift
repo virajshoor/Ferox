@@ -134,7 +134,7 @@ public struct ProbeData {
     public init() {}
 }
 
-/// 2D batch vertex (40 bytes).
+/// 2D batch vertex (48-byte stride: SIMD4 alignment pads the trailing SIMD2).
 public struct SpriteVertex {
     public var position: SIMD2<Float>
     public var uv: SIMD2<Float>
@@ -150,7 +150,7 @@ public struct SpriteVertex {
     }
 }
 
-/// UI vertex (64 bytes): position, uv, colour, rect info for SDF rounded corners.
+/// UI vertex (80 bytes): position, uv, colour, rect info for SDF rounded corners.
 public struct UIVertex {
     public var position: SIMD2<Float>
     public var uv: SIMD2<Float>
@@ -218,4 +218,147 @@ public enum TextureIndex {
     public static let ambientOcclusion = 10
     public static let irradiance = 11
     public static let probes = 12
+}
+
+// MARK: - Pass-specific constants (mirrors of the structs declared in each shader module)
+
+/// Post-processing constants (`Post.metal`, buffer 0). 14 × 16 bytes.
+public struct PostUniforms {
+    /// x threshold, y soft knee, z intensity, w upsample radius.
+    public var bloom = Vec4.zero
+    /// x operator (0 none, 1 Reinhard, 2 ACES, 3 AgX), y exposure multiplier, z contrast, w saturation.
+    public var tonemap = Vec4(3, 1, 1, 1)
+    /// xyz LMS white-balance scale, w vignette.
+    public var whiteBalance = Vec4(1, 1, 1, 0)
+    /// rgb lift, a auto exposure enabled.
+    public var lift = Vec4.zero
+    /// rgb gamma, a dither strength.
+    public var gamma = Vec4(1, 1, 1, 1)
+    /// rgb gain.
+    public var gain = Vec4(1, 1, 1, 0)
+    /// x focus distance (m), y f-number, z focal length (m), w max circle of confusion (px).
+    public var dof = Vec4.zero
+    /// x shutter fraction, y sample count, z max length (px).
+    public var motionBlur = Vec4.zero
+    /// x history feedback, z sharpness, w reset.
+    public var taa = Vec4.zero
+    /// x amount.
+    public var sharpen = Vec4.zero
+    /// x radius, y intensity, z bias, w sample count.
+    public var ssao = Vec4.zero
+    /// xy source size, zw destination size (pixels).
+    public var sizes = Vec4.zero
+    /// xy 1/source size, zw 1/destination size.
+    public var texel = Vec4.zero
+    /// x frame index, y delta time, z exposure adaptation speed, w mip / pass index.
+    public var misc = Vec4.zero
+    public init() {}
+
+    /// Sets `sizes` and `texel` for a pass reading `source` and writing `destination`.
+    public mutating func setSizes(source: SIMD2<Int>, destination: SIMD2<Int>) {
+        let s = Vec2(Float(max(source.x, 1)), Float(max(source.y, 1)))
+        let d = Vec2(Float(max(destination.x, 1)), Float(max(destination.y, 1)))
+        sizes = Vec4(s.x, s.y, d.x, d.y)
+        texel = Vec4(1 / s.x, 1 / s.y, 1 / d.x, 1 / d.y)
+    }
+}
+
+/// Sky and image-based-lighting generation constants (`Sky.metal`, buffer 0).
+public struct SkyParams {
+    /// xyz towards the sun, w turbidity.
+    public var sunDirection = Vec4(0, 1, 0, 2.5)
+    /// rgb ground colour, a sun disc angular radius (radians).
+    public var groundColor = Vec4(0.1, 0.1, 0.1, 0.0047)
+    /// rgb flat colour (mode 2), a overall scale.
+    public var tint = Vec4(1, 1, 1, 1)
+    /// x mode (0 procedural, 1 equirect, 2 colour), y face size, z sample count, w mip.
+    public var mode = SIMD4<UInt32>.zero
+    /// x roughness (prefilter), y source resolution.
+    public var filter = Vec4.zero
+    public init() {}
+}
+
+/// Ray-tracing constants (`RayTracing.metal`, buffer 0).
+public struct RTUniforms {
+    /// x AO radius, y max reflection roughness, z sun cone half-angle, w frame index.
+    public var params = Vec4.zero
+    /// xy output size, z rays per pixel, w flags (bit 0 history valid).
+    public var size = SIMD4<UInt32>.zero
+    /// x à-trous step, y depth sigma, z normal power, w temporal blend.
+    public var denoise = Vec4(1, 0.05, 32, 0.15)
+    /// xy full-resolution depth size, zw 1/output size.
+    public var depthSize = Vec4.zero
+    public init() {}
+}
+
+/// Constant material values for reflection-ray hits, indexed by acceleration-structure instance.
+public struct RTInstanceMaterial {
+    public var albedoRoughness = Vec4(1, 1, 1, 0.5)
+    public var emissiveMetallic = Vec4.zero
+    public init() {}
+}
+
+/// GPU culling constants (`Culling.metal`, buffer 0).
+public struct CullUniforms {
+    public var planes = (Vec4.zero, Vec4.zero, Vec4.zero, Vec4.zero, Vec4.zero, Vec4.zero)
+    public var previousViewProjection = Mat4.identity
+    /// xy mip-0 size, z mip count.
+    public var hizSize = Vec4.zero
+    /// x instance count, y flags (bit 0 occlusion), z batch count.
+    public var counts = SIMD4<UInt32>.zero
+    public init() {}
+}
+
+/// 2D batch constants (`Sprite.metal`, buffer 1).
+public struct Sprite2DUniforms {
+    public var viewProjection = Mat4.identity
+    /// rgb ambient light for lit sprites.
+    public var ambient = Vec4(1, 1, 1, 1)
+    /// x light count, y flags (bit 0 normal map).
+    public var counts = SIMD4<UInt32>.zero
+    /// x pixel snap, yz target size, w mask alpha cut-off.
+    public var params = Vec4(0, 1, 1, 0.5)
+    public init() {}
+}
+
+/// A 2D light (`Sprite.metal`, buffer 2).
+public struct Light2D {
+    /// xy position, z height, w radius.
+    public var positionRadius = Vec4.zero
+    /// rgb colour × intensity, a falloff exponent.
+    public var color = Vec4(1, 1, 1, 1)
+    /// x inner radius fraction, y spot cosine (≤ -1 point light), zw spot direction.
+    public var params = Vec4(0, -2, 0, 0)
+    public init() {}
+}
+
+/// UI constants (`UI.metal`, buffer 1).
+public struct UIUniforms {
+    /// xy viewport size in points, zw content scale.
+    public var viewport = Vec4(1, 1, 1, 1)
+    public init() {}
+}
+
+/// GPU particle (`Particles.metal`). 64 bytes.
+public struct GPUParticle {
+    /// xyz position, w lifetime.
+    public var posLife = Vec4.zero
+    /// xyz velocity, w age.
+    public var velAge = Vec4.zero
+    /// Premultiplied linear colour.
+    public var color = Vec4(1, 1, 1, 1)
+    /// x start size, y end size, z rotation, w angular velocity.
+    public var sizeRot = Vec4(0.1, 0.1, 0, 0)
+    public init() {}
+}
+
+/// GPU particle simulation constants (`Particles.metal`, buffer 0).
+public struct ParticleSimUniforms {
+    /// xyz gravity, w drag.
+    public var gravityDrag = Vec4.zero
+    /// x dt, y fade-out fraction.
+    public var params = Vec4.zero
+    /// x capacity, y spawn count, z ring offset.
+    public var counts = SIMD4<UInt32>.zero
+    public init() {}
 }

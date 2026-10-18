@@ -204,7 +204,7 @@ kernel void rtReflections(constant RTUniforms &u [[buffer(RT_BUF_UNIFORMS)]],
         ray sr(hp + hn * 0.01f, L, 0.0f, 1e4f);
         float sunVis = shadowIsect.intersect(sr, accel, 0x01u).type == intersection_type::none ? 1.0f : 0.0f;
         float3 albedo = m.albedoRoughness.rgb * (1.0f - m.emissiveMetallic.a * 0.5f);
-        float3 lit = albedo * (frame.ambient.rgb + frame.sunColor.rgb * frame.sunColor.a * sunVis * saturate(dot(hn, L) * 0.5f + 0.5f) / FEROX_PI);
+        float3 lit = albedo * (frame.ambient.rgb + frame.sunColor.rgb * frame.sunDirection.w * sunVis * saturate(dot(hn, L) * 0.5f + 0.5f) / FEROX_PI);
         sum += lit + m.emissiveMetallic.rgb;
     }
     float3 color = min(sum / float(count), float3(64000.0f));

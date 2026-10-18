@@ -20,14 +20,14 @@ struct ParticleSimUniforms {
 
 kernel void spawnParticles(constant ParticleSimUniforms &u [[buffer(0)]],
                            const device GPUParticle *spawned [[buffer(1)]],
-                           device GPUParticle *particles [[buffer(2)]],
+                           device GPUParticle *particles [[buffer(3)]],
                            uint gid [[thread_position_in_grid]]) {
     if (gid >= u.counts.y || u.counts.x == 0u) { return; }
     particles[(u.counts.z + gid) % u.counts.x] = spawned[gid];
 }
 
 kernel void simulateParticles(constant ParticleSimUniforms &u [[buffer(0)]],
-                              device GPUParticle *particles [[buffer(2)]],
+                              device GPUParticle *particles [[buffer(3)]],
                               uint gid [[thread_position_in_grid]]) {
     if (gid >= u.counts.x) { return; }
     GPUParticle p = particles[gid];
@@ -48,7 +48,7 @@ struct ParticleOut {
     float4 color;
 };
 
-vertex ParticleOut particleVertex(const device GPUParticle *particles [[buffer(2)]],
+vertex ParticleOut particleVertex(const device GPUParticle *particles [[buffer(3)]],
                                   constant FrameUniforms &frame [[buffer(BUF_FRAME)]],
                                   constant ParticleSimUniforms &u [[buffer(0)]],
                                   uint vid [[vertex_id]]) {

@@ -371,3 +371,10 @@ public struct ParticleSimUniforms {
     public var counts = SIMD4<UInt32>.zero
     public init() {}
 }
+
+/// Debug line constants (`Debug.metal`, buffer 1).
+public struct DebugUniforms {
+    /// World → clip transform of the camera the lines are drawn with.
+    public var viewProjection = Mat4.identity
+    public init() {}
+}

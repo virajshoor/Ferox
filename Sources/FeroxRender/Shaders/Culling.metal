@@ -7,7 +7,7 @@
 // 3. `cullInstances` tests every instance's bounding sphere against the frustum and,
 //    optionally, the Hi-Z pyramid (previous view-projection), then appends survivors to
 //    their batch's indirect draw arguments. The vertex shader reads
-//    `instanceIndices[instance_id + baseInstance]`.
+//    `instanceIndices[instance_id]` (Metal's instance_id already includes baseInstance).
 //
 // Hi-Z testing uses the previous frame's depth, so an object revealed by fast camera
 // motion can be culled for one frame. The CPU path is used where this is unacceptable.

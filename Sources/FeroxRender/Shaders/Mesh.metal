@@ -48,9 +48,10 @@ vertex MeshOut meshVertex(MeshVertexIn v [[stage_in]],
                           const device InstanceData *instances [[buffer(BUF_INSTANCES)]],
                           const device uint *instanceIndices [[buffer(BUF_INSTANCE_INDICES)]],
                           constant float4x4 *joints [[buffer(BUF_JOINTS), function_constant(HAS_SKINNING)]],
-                          uint iid [[instance_id]],
-                          uint baseInstance [[base_instance]]) {
-    uint index = instanceIndices[iid + baseInstance];
+                          uint iid [[instance_id]]) {
+    // Metal's instance_id already includes the draw's base instance, so it indexes the
+    // batch's slice of `instanceIndices` directly.
+    uint index = instanceIndices[iid];
     InstanceData inst = instances[index];
     SkinResult s;
     if (HAS_SKINNING_V) {
@@ -84,9 +85,8 @@ vertex MeshOut shadowVertex(MeshVertexIn v [[stage_in]],
                             const device InstanceData *instances [[buffer(BUF_INSTANCES)]],
                             const device uint *instanceIndices [[buffer(BUF_INSTANCE_INDICES)]],
                             constant float4x4 *joints [[buffer(BUF_JOINTS), function_constant(HAS_SKINNING)]],
-                            uint iid [[instance_id]],
-                            uint baseInstance [[base_instance]]) {
-    uint index = instanceIndices[iid + baseInstance];
+                            uint iid [[instance_id]]) {
+    uint index = instanceIndices[iid];  // instance_id includes the base instance
     InstanceData inst = instances[index];
     float4 p = float4(v.position, 1.0f);
     if (HAS_SKINNING_V) { p = skin(v, joints, uint(inst.params.w)).position; }
@@ -287,7 +287,11 @@ fragment float4 forwardFragment(MeshOut in [[stage_in]], bool frontFacing [[fron
     SurfaceData sd = buildSurface(in, frontFacing, mat, instances[in.instance], baseColorTex, normalTex, metalRoughTex,
                                   occlusionTex, emissiveTex, s, frame.cameraPosition.xyz);
     if (HAS_ALPHA_TEST_V && sd.alpha < mat.params2.x) { discard_fragment(); }
-    if (IS_UNLIT_V) { return float4((sd.albedo + sd.emissive) * frame.exposure.x, sd.alpha); }
+    if (IS_UNLIT_V) {
+        // Same premultiplied convention as the lit path below.
+        float a = mat.params2.y > 1.5f ? sd.alpha : 1.0f;
+        return float4((sd.albedo + sd.emissive) * frame.exposure.x * a, a);
+    }
 
     float2 screenUV = in.position.xy * frame.viewport.zw;
     float viewDepth = -(frame.view * float4(in.worldPosition, 1.0f)).z;

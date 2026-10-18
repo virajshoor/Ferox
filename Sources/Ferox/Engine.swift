@@ -135,6 +135,7 @@ public final class Engine {
         assets.hotReload = configuration.hotReloadAssets
 
         audio = Engine.makeAudioBackend(enabled: configuration.enableAudio)
+        audio.memoryBudgetBytes = assets.budget.audioBytes
         ui = UIContext(fonts: Engine.makeFontProvider())
         clock = FrameClock(fixedHz: max(configuration.graphics.frame.fixedUpdateHz, 1))
 
@@ -192,14 +193,15 @@ public final class Engine {
     /// Asks the host to stop after the current frame (e.g. from a "Quit" button).
     public func requestQuit() { quitRequested = true }
 
-    /// Calls `Game.shutdown`, unloads scenes and gives audio a final update. The audio
-    /// backend itself stops when the engine is released. Idempotent.
+    /// Calls `Game.shutdown`, unloads scenes and stops every voice. The audio backend
+    /// itself is released with the engine. Idempotent.
     public func shutdown() {
         guard !isShutDown else { return }
         isShutDown = true
         game?.shutdown(engine: self)
         game = nil
         scenes.unloadAll()
+        audio.stopAll(fadeOut: 0)
         audio.update(dt: 0)
         Log.info("Engine", "\(configuration.title) stopped")
     }

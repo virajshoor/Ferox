@@ -57,6 +57,8 @@ public enum FrameFlags {
     public static let shadows: UInt32 = 2
     public static let pcss: UInt32 = 4
     public static let reverseZ: UInt32 = 8
+    /// One unfiltered comparison per shadow lookup (`ShadowSoftness.hard`).
+    public static let hardShadows: UInt32 = 16
 }
 
 /// Per-instance transform and overrides.
@@ -69,7 +71,8 @@ public struct InstanceData {
     public var normal2 = Vec4.zero
     /// Multiplied with the material base colour.
     public var colorTint = Vec4(1, 1, 1, 1)
-    /// Added to the material emissive (rgb), a unused.
+    /// Added to the material emissive (rgb); a = 1 when the instance does not receive
+    /// shadows (`MeshRenderer.receivesShadows == false`).
     public var emissiveAdd = Vec4.zero
     /// x metallic override (<0 = none), y roughness override (<0 = none), z bounding radius,
     /// w joint palette offset (skinned meshes).
@@ -97,8 +100,9 @@ public struct LightData {
     public var color = Vec4.zero
     /// xyz direction the light points to, w cos(outer angle).
     public var direction = Vec4.zero
-    /// x cos(inner angle), yzw unused.
-    public var extra = Vec4.zero
+    /// x cos(inner angle), y first local shadow slice (< 0 = no shadow; point lights use six
+    /// consecutive slices, ordered +X, −X, +Y, −Y, +Z, −Z), z shadow texel size, w normal bias.
+    public var extra = Vec4(0, -1, 0, 0)
     public init() {}
 }
 
@@ -210,6 +214,8 @@ public enum BufferIndex {
     public static let instanceIndices = 9
     public static let probes = 10
     public static let cascade = 11
+    /// Light view-projection matrices of the point and spot shadow slices.
+    public static let localShadowMatrices = 12
 }
 
 /// Texture argument indices shared with the shaders.
@@ -227,6 +233,8 @@ public enum TextureIndex {
     public static let ambientOcclusion = 10
     public static let irradiance = 11
     public static let probes = 12
+    /// Point and spot shadow slices (depth 2D array).
+    public static let localShadows = 13
 }
 
 // MARK: - Pass-specific constants (mirrors of the structs declared in each shader module)

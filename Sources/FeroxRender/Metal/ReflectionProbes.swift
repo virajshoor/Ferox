@@ -19,12 +19,16 @@ import Metal
 /// changed go first, then `realtime` probes round-robin. Probes that have never been
 /// captured are not submitted to the shader, so nothing ever samples an empty slice.
 ///
-/// Limitations: a fixed face size (`faceSize`, ignoring `ReflectionProbe.resolution`),
-/// at most `maxProbes` probes, and the innermost containing probe wins (no blending
-/// between overlapping probes). See Docs/08-Rendering-3D.md.
+/// All probes share one cube array, so they share one face size: the largest
+/// `ReflectionProbe.resolution` in the scene, rounded up to a power of two within
+/// `RenderMath.probeFaceSizeRange`. A change of size reallocates the array and recaptures
+/// every probe.
+///
+/// Limitations: at most `maxProbes` probes, and the innermost containing probe wins (no
+/// blending between overlapping probes). See Docs/08-Rendering-3D.md.
 final class ReflectionProbes {
     static let maxProbes = 16
-    static let faceSize = 128
+    static let defaultFaceSize = 128
     /// Must equal `EnvironmentLighting.prefilteredMips`: the forward shader uses one
     /// roughness → LOD mapping for both.
     static let mips = EnvironmentLighting.prefilteredMips
@@ -38,18 +42,22 @@ final class ReflectionProbes {
 
     let device: any MTLDevice
     let shaders: ShaderLibrary
+    /// Edge length of every probe face, in texels.
+    private(set) var faceSize: Int
     /// Prefiltered probe cubes (`texturecube_array`, bound at `TextureIndex.probes`).
-    let array: any MTLTexture
+    private(set) var array: any MTLTexture
     /// Scratch cube the faces are rendered into before prefiltering.
-    private let captureCube: any MTLTexture
+    private var captureCube: any MTLTexture
     /// One cube view per (slice, mip), written by `prefilterSpecular`.
     private var sliceViews: [[any MTLTexture]] = []
-    /// 128² colour/depth targets for one face (no MSAA, no history).
+    /// `faceSize`² colour/depth targets for one face (no MSAA, no history).
     private let targets: RenderTargets
     private var slots: [Entity: Slot] = [:]
     private var freeSlots: [Int]
     private var realtimeCursor = 0
     private var trackedBytes = 0
+    /// A face size whose allocation failed; not retried until the requested size changes.
+    private var failedFaceSize: Int?
 
     /// Number of probe captures performed (diagnostics and tests).
     private(set) var captures = 0
@@ -57,19 +65,36 @@ final class ReflectionProbes {
     init(device: any MTLDevice, shaders: ShaderLibrary) throws {
         self.device = device
         self.shaders = shaders
+        let size = Self.defaultFaceSize
+        let t = RenderTargets(device: device)
+        let textures = try Self.makeTextures(device: device, faceSize: size, targets: t)
+        faceSize = size
+        array = textures.array
+        captureCube = textures.cube
+        sliceViews = textures.views
+        targets = t
+        freeSlots = Array((0..<Self.maxProbes).reversed())
+        trackedBytes = textures.array.allocatedSize + textures.cube.allocatedSize
+        MemoryTracker.shared.allocate("GPU.ReflectionProbes", bytes: trackedBytes)
+    }
+
+    /// Allocates the probe array, the capture cube, the per-slice views and the face
+    /// targets for `faceSize`.
+    private static func makeTextures(device: any MTLDevice, faceSize: Int, targets: RenderTargets) throws
+        -> (array: any MTLTexture, cube: any MTLTexture, views: [[any MTLTexture]]) {
         let ad = MTLTextureDescriptor()
         ad.textureType = .typeCubeArray
         ad.pixelFormat = .rgba16Float
-        ad.width = Self.faceSize
-        ad.height = Self.faceSize
-        ad.arrayLength = Self.maxProbes
-        ad.mipmapLevelCount = Self.mips
+        ad.width = faceSize
+        ad.height = faceSize
+        ad.arrayLength = maxProbes
+        ad.mipmapLevelCount = mips
         ad.usage = [.shaderRead, .shaderWrite, .pixelFormatView]
         ad.storageMode = .private
         guard let arr = device.makeTexture(descriptor: ad) else { throw RenderError.allocation("probe cube array") }
         arr.label = "Ferox.ReflectionProbes"
 
-        let cd = MTLTextureDescriptor.textureCubeDescriptor(pixelFormat: .rgba16Float, size: Self.faceSize,
+        let cd = MTLTextureDescriptor.textureCubeDescriptor(pixelFormat: .rgba16Float, size: faceSize,
                                                             mipmapped: true)
         cd.usage = [.shaderRead, .renderTarget]
         cd.storageMode = .private
@@ -77,26 +102,42 @@ final class ReflectionProbes {
         cube.label = "Ferox.ProbeCapture"
 
         var views: [[any MTLTexture]] = []
-        for slice in 0..<Self.maxProbes {
-            let perMip = (0..<Self.mips).compactMap { level in
+        for slice in 0..<maxProbes {
+            let perMip = (0..<mips).compactMap { level in
                 arr.makeTextureView(pixelFormat: .rgba16Float, textureType: .typeCube,
                                     levels: level..<(level + 1), slices: (slice * 6)..<(slice * 6 + 6))
             }
-            guard perMip.count == Self.mips else { throw RenderError.allocation("probe cube views") }
+            guard perMip.count == mips else { throw RenderError.allocation("probe cube views") }
             views.append(perMip)
         }
+        try targets.ensure(RenderTargets.Config(renderWidth: faceSize, renderHeight: faceSize,
+                                                outputWidth: faceSize, outputHeight: faceSize,
+                                                msaaSamples: 1, temporalHistory: false, hiz: false))
+        return (arr, cube, views)
+    }
 
-        let t = RenderTargets(device: device)
-        try t.ensure(RenderTargets.Config(renderWidth: Self.faceSize, renderHeight: Self.faceSize,
-                                          outputWidth: Self.faceSize, outputHeight: Self.faceSize,
-                                          msaaSamples: 1, temporalHistory: false, hiz: false))
-        array = arr
-        captureCube = cube
-        sliceViews = views
-        targets = t
-        freeSlots = Array((0..<Self.maxProbes).reversed())
-        trackedBytes = arr.allocatedSize + cube.allocatedSize
-        MemoryTracker.shared.allocate("GPU.ReflectionProbes", bytes: trackedBytes)
+    /// Reallocates for a new face size and marks every probe for recapture. On failure
+    /// the previous textures stay in use.
+    private func resize(to size: Int) {
+        do {
+            let textures = try Self.makeTextures(device: device, faceSize: size, targets: targets)
+            MemoryTracker.shared.free("GPU.ReflectionProbes", bytes: trackedBytes)
+            faceSize = size
+            array = textures.array
+            captureCube = textures.cube
+            sliceViews = textures.views
+            trackedBytes = textures.array.allocatedSize + textures.cube.allocatedSize
+            MemoryTracker.shared.allocate("GPU.ReflectionProbes", bytes: trackedBytes)
+            failedFaceSize = nil
+            invalidateAll()
+        } catch {
+            Log.error("Render", "Could not resize reflection probes to \(size)²: \(error)")
+            failedFaceSize = size  // do not retry the same size every frame
+            // Keep the face targets matching the textures still in use.
+            try? targets.ensure(RenderTargets.Config(renderWidth: faceSize, renderHeight: faceSize,
+                                                     outputWidth: faceSize, outputHeight: faceSize,
+                                                     msaaSamples: 1, temporalHistory: false, hiz: false))
+        }
     }
 
     deinit { MemoryTracker.shared.free("GPU.ReflectionProbes", bytes: trackedBytes) }
@@ -110,6 +151,8 @@ final class ReflectionProbes {
     /// and returns the GPU records of captured probes, innermost (smallest) first so the
     /// shader's first-hit lookup picks the most specific probe.
     func update(_ probes: [RenderProbe], frameIndex: UInt64) -> [ProbeData] {
+        let size = RenderMath.probeFaceSize(requested: probes.map(\.probe.resolution), current: faceSize)
+        if size != faceSize && size != failedFaceSize { resize(to: size) }
         for p in probes {
             if slots[p.entity] == nil {
                 guard let index = freeSlots.popLast() else {
@@ -168,7 +211,8 @@ final class ReflectionProbes {
         let lighting = LightingTextures(prefiltered: environment.prefiltered, brdfLUT: environment.brdfLUT,
                                         shadowMap: r.fallback.shadowArray, rtShadow: r.fallback.white,
                                         rtReflection: r.fallback.clear, ambientOcclusion: r.fallback.white,
-                                        irradiance: environment.irradiance, probes: r.fallback.cubeArray)
+                                        irradiance: environment.irradiance, probes: r.fallback.cubeArray,
+                                        localShadows: r.fallback.shadowArray)
         let extentLength = probe.probe.extents.length
         let faces = FrameUniformsBuilder.cubeFaceCameras(position: probe.position, near: 0.05,
                                                          far: max(extentLength * 8, 500))
@@ -183,7 +227,7 @@ final class ReflectionProbes {
             let frame = RenderSceneExtractor.extract(world: world, assets: r.assets, animations: animations,
                                                      aspect: 1, options: options)
             // Exposure 1: probes store linear radiance; the forward pass applies exposure.
-            let u = FrameUniformsBuilder.make(camera: camera, width: Self.faceSize, height: Self.faceSize,
+            let u = FrameUniformsBuilder.make(camera: camera, width: faceSize, height: faceSize,
                                               jitter: .zero, previous: nil, environment: frame.environment,
                                               exposure: 1, time: 0, frameIndex: r.frameIndex,
                                               environmentMips: environment.prefilteredMipCount)
@@ -199,7 +243,7 @@ final class ReflectionProbes {
 
             guard let hdr = targets.hdr, let blit = cb.makeBlitCommandEncoder() else { return }
             blit.copy(from: hdr, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(),
-                      sourceSize: MTLSize(width: Self.faceSize, height: Self.faceSize, depth: 1),
+                      sourceSize: MTLSize(width: faceSize, height: faceSize, depth: 1),
                       to: captureCube, destinationSlice: face, destinationLevel: 0, destinationOrigin: MTLOrigin())
             blit.endEncoding()
         }
@@ -215,11 +259,11 @@ final class ReflectionProbes {
             enc.setTexture(captureCube, index: 0)
             for (level, view) in sliceViews[slot.index].enumerated() {
                 var p = SkyParams()
-                p.mode = SIMD4(0, UInt32(Self.faceSize), 64, UInt32(level))
-                p.filter = Vec4(Float(level) / Float(max(Self.mips - 1, 1)), Float(Self.faceSize), 0, 0)
+                p.mode = SIMD4(0, UInt32(faceSize), 64, UInt32(level))
+                p.filter = Vec4(Float(level) / Float(max(Self.mips - 1, 1)), Float(faceSize), 0, 0)
                 enc.setValue(p, index: 0, allocator: r.allocator)
                 enc.setTexture(view, index: 1)
-                let size = max(Self.faceSize >> level, 1)
+                let size = max(faceSize >> level, 1)
                 enc.dispatch3D(pso, width: size, height: size, depth: 6)
             }
             slots[probe.entity]?.captured = true

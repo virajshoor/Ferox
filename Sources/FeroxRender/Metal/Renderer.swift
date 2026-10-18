@@ -98,9 +98,12 @@ public struct RenderFrameStatistics: Sendable, Hashable {
 /// GPU is still reading.
 ///
 /// The renderer is not thread-safe: create and use it on one thread (normally the main
-/// thread). Limitations: one camera per frame (the highest-priority enabled camera),
-/// `Camera.viewport` and `Camera.renderTarget` are not yet honoured, and the sky is drawn
-/// only for perspective cameras (orthographic cameras show `clearColor`).
+/// thread). The camera renders into its `Camera.viewport` rectangle of the output, at that
+/// rectangle's size and aspect; the rest of the output is cleared to black and the UI
+/// still covers the whole output. Limitations: one camera per frame (the highest-priority
+/// enabled camera, so split-screen needs one renderer per view), `Camera.renderTarget` is
+/// not yet honoured, and the sky is drawn only for perspective cameras (orthographic
+/// cameras show `clearColor`).
 /// See Docs/08-Rendering-3D.md and Docs/03-Architecture.md.
 public final class Renderer {
     public let renderDevice: RenderDevice
@@ -396,7 +399,12 @@ public final class Renderer {
     private func encodeFrame(world: World, output: RenderOutput, time: Double, deltaTime: Float, ui: UIContext?,
                              slot: Int, scene cb: any MTLCommandBuffer, post cbPost: any MTLCommandBuffer,
                              resources r: SceneResources) {
-        let ow = max(output.texture.width, 1), oh = max(output.texture.height, 1)
+        let fullWidth = max(output.texture.width, 1), fullHeight = max(output.texture.height, 1)
+        // The main camera's viewport is the frame's output: render size, aspect and post
+        // all work on that rectangle, and the present pass places it in the drawable.
+        let viewportRect = RenderSceneExtractor.mainCamera(in: world)?.1.viewport ?? .unit
+        let viewport = RenderMath.viewportPixels(viewportRect, outputWidth: fullWidth, outputHeight: fullHeight)
+        let ow = viewport.width, oh = viewport.height
         statistics.outputWidth = ow
         statistics.outputHeight = oh
 
@@ -493,6 +501,8 @@ public final class Renderer {
         }
         let shadowMap = passes.encodeShadows(cb, frame: frame, state: state, settings: resolved.settings.shadows,
                                              resources: r)
+        let localShadows = passes.encodeLocalShadows(cb, frame: frame, state: state,
+                                                     settings: resolved.settings.shadows, resources: r)
         passes.encodeCompute(cb, frame: frame, state: state, targets: targets, resources: r)
         overlays.updateGPUParticles(cb, world: world, deltaTime: deltaTime, frameIndex: frameIndex,
                                     allocator: r.allocator)
@@ -520,7 +530,8 @@ public final class Renderer {
                                         shadowMap: shadowMap, rtShadow: rt.shadow ?? fallback.white,
                                         rtReflection: rt.reflection ?? fallback.clear, ambientOcclusion: ao,
                                         irradiance: environment.irradiance,
-                                        probes: probeData.isEmpty ? fallback.cubeArray : probes.array)
+                                        probes: probeData.isEmpty ? fallback.cubeArray : probes.array,
+                                        localShadows: localShadows)
 
         if let pass = passes.mainPassDescriptor(targets: targets, clearColor: camera.camera.clearColor),
            let enc = cb.makeRenderCommandEncoder(descriptor: pass) {
@@ -566,10 +577,11 @@ public final class Renderer {
         }
         let uiData = ui.map { buildUI($0) }
         let pages = ui.map { glyphPageData($0) } ?? []
-        post.encodePresent(cbPost, source: final, targets: targets, destination: output.texture) { enc, format in
+        post.encodePresent(cbPost, source: final, targets: targets, destination: output.texture,
+                           viewport: viewport) { enc, format in
             if let uiData {
-                self.overlays.encodeUI(enc, data: uiData, format: format, size: SIMD2(ow, oh), glyphPages: pages,
-                                       resources: r)
+                self.overlays.encodeUI(enc, data: uiData, format: format, size: SIMD2(fullWidth, fullHeight),
+                                       glyphPages: pages, resources: r)
             }
         }
     }

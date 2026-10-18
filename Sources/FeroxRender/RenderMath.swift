@@ -197,3 +197,54 @@ public enum RenderMath {
         return (max(n, 0) + g - 1) / g
     }
 }
+
+// MARK: Reflection probes
+
+extension RenderMath {
+    /// Smallest and largest probe face edge, in texels. All probes share one cube array,
+    /// so the largest `ReflectionProbe.resolution` in the scene decides the size for all.
+    public static let probeFaceSizeRange = 32...256
+
+    /// The shared probe face size for the requested resolutions: the largest request,
+    /// rounded up to a power of two and clamped to `probeFaceSizeRange`. With no probes
+    /// the current size is kept, so probes coming and going do not reallocate the array.
+    public static func probeFaceSize(requested: [Int], current: Int) -> Int {
+        guard let largest = requested.max() else { return current }
+        var size = probeFaceSizeRange.lowerBound
+        while size < min(largest, probeFaceSizeRange.upperBound) { size *= 2 }
+        return min(size, probeFaceSizeRange.upperBound)
+    }
+}
+
+// MARK: Camera viewport
+
+/// A camera's viewport in output pixels (origin top-left, y down, as Metal's viewport).
+public struct PixelRect: Hashable, Sendable {
+    public var x: Int
+    public var y: Int
+    public var width: Int
+    public var height: Int
+    public init(x: Int, y: Int, width: Int, height: Int) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+}
+
+extension RenderMath {
+    /// Converts `Camera.viewport` (normalised, origin at the top-left of the output) to
+    /// whole output pixels. The rectangle is clipped to the output and is never smaller
+    /// than 1 × 1, so a degenerate or off-screen viewport still renders something valid.
+    public static func viewportPixels(_ viewport: Rect, outputWidth: Int, outputHeight: Int) -> PixelRect {
+        let w = max(outputWidth, 1), h = max(outputHeight, 1)
+        func clamp01(_ v: Float) -> Float { v.isFinite ? min(max(v, 0), 1) : 0 }
+        let x0 = clamp01(viewport.minX), y0 = clamp01(viewport.minY)
+        let x1 = clamp01(viewport.minX + viewport.size.x), y1 = clamp01(viewport.minY + viewport.size.y)
+        let px = min(Int((x0 * Float(w)).rounded()), w - 1)
+        let py = min(Int((y0 * Float(h)).rounded()), h - 1)
+        let pw = max(Int((x1 * Float(w)).rounded()) - px, 1)
+        let ph = max(Int((y1 * Float(h)).rounded()) - py, 1)
+        return PixelRect(x: px, y: py, width: min(pw, w - px), height: min(ph, h - py))
+    }
+}

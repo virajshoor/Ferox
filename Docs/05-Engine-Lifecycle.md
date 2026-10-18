@@ -24,7 +24,7 @@ This document describes the life of an engine: how it is configured, how a game 
 2. **Create.** `Engine(configuration:)` creates the world, the event bus, the scheduler, the scene manager, input, assets, animation, the optional physics systems, audio, the UI context and the frame clock. It registers the built-in component types. It throws `EngineError.assetRootMissing` if `assetRoot` names a folder that does not exist.
 3. **Start.** `engine.start(_:)` attaches the game, resets the clock, and calls `Game.setup(engine:)`. It may be called only once per engine.
 4. **Run.** Each frame calls `tick`. In a window, `GameHost` calls it once per display frame. A headless run calls `tick(delta:)` in a loop.
-5. **Shut down.** `engine.shutdown()` calls `Game.shutdown(engine:)`, unloads all scenes, and gives audio a final update (voices stop when the audio backend is released). It is idempotent.
+5. **Shut down.** `engine.shutdown()` calls `Game.shutdown(engine:)`, unloads all scenes, stops every audio voice and gives audio a final update. It is idempotent.
 
 In a window, step 2 and step 3 are made by `GameHost.run`, which also creates the renderer and the window. `GameLauncher.main` calls `GameHost.run` unless `--headless` is given.
 
@@ -247,7 +247,7 @@ The flag can be changed at any time from the thread that drives the engine.
 2. Calls `Game.shutdown(engine:)`.
 3. Releases the game.
 4. Calls `scenes.unloadAll()`.
-5. Calls `audio.update(dt: 0)`.
+5. Calls `audio.stopAll(fadeOut: 0)` and then `audio.update(dt: 0)`.
 
 In a window, closing the window calls `GameHost.shutdown()`. That method pauses the view, calls `engine.shutdown()`, waits for the GPU to go idle with `renderer.waitUntilIdle()`, and purges the renderer's caches. The application then terminates. Quitting from the menu also reaches `GameHost.shutdown()` through the application delegate. Both paths are idempotent.
 

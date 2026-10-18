@@ -9,7 +9,8 @@ import Foundation
 /// spatialisation, distance attenuation, playback rate and reverb send) → main mixer.
 /// Voices are pooled (`maxVoices`) and stolen by priority. Clips are either decoded into
 /// `AVAudioPCMBuffer`s (sound effects) or streamed from disk with `AVAudioFile` segments
-/// (music). Supported formats are those of `AVAudioFile` on macOS: WAV, AIFF, CAF, MP3,
+/// (music). Decoding is limited by `memoryBudgetBytes`: a clip that would exceed it is
+/// streamed instead, with a warning. Supported formats are those of `AVAudioFile` on macOS: WAV, AIFF, CAF, MP3,
 /// AAC/M4A, ALAC and FLAC.
 ///
 /// Threading: call all methods from the main thread. AVAudioEngine renders on its own
@@ -57,6 +58,8 @@ public final class AVAudioBackend: AudioBackend, @unchecked Sendable {
     private let lock = NSLock()
     private var observer: NSObjectProtocol?
     private var clock: Double = 0
+    public var memoryBudgetBytes = defaultAudioMemoryBudget
+    public private(set) var decodedBytes = 0
 
     public init(maxVoices: Int = 48) throws {
         self.maxVoices = max(1, maxVoices)
@@ -89,8 +92,10 @@ public final class AVAudioBackend: AudioBackend, @unchecked Sendable {
 
     deinit {
         if let observer { NotificationCenter.default.removeObserver(observer) }
+        for v in voices where v.busy { stopNow(v) }
         engine.stop()
         for c in clips.values { if let t = c.temporaryURL { try? FileManager.default.removeItem(at: t) } }
+        if decodedBytes > 0 { MemoryTracker.shared.free("audio", bytes: decodedBytes) }
     }
 
     // MARK: Clips
@@ -102,7 +107,8 @@ public final class AVAudioBackend: AudioBackend, @unchecked Sendable {
         try data.write(to: url, options: [.atomic])
         do {
             let id = try loadClip(url: url, stream: stream)
-            if stream {
+            // The budget may have turned a decode into a stream, which keeps reading the file.
+            if clips[id.value]?.info.isStreamed == true {
                 clips[id.value]?.temporaryURL = url
             } else {
                 try? FileManager.default.removeItem(at: url)
@@ -125,10 +131,16 @@ public final class AVAudioBackend: AudioBackend, @unchecked Sendable {
             throw AudioError.decodeFailed(url.lastPathComponent, "unsupported channel layout")
         }
         let duration = Double(file.length) / fmt.sampleRate
+        let bytes = AudioMemoryPolicy.decodedBytes(frames: file.length, channels: Int(fmt.channelCount))
+        let streamed = AudioMemoryPolicy.shouldStream(requested: stream, bytes: bytes, resident: decodedBytes,
+                                                      budget: memoryBudgetBytes)
+        if streamed && !stream {
+            Log.warning("Audio", "Decoding '\(url.lastPathComponent)' (\(bytes) bytes) would exceed the audio memory budget (\(decodedBytes) of \(memoryBudgetBytes) bytes used); streaming it instead")
+        }
         var clip = Clip(
             info: AudioClipInfo(name: url.lastPathComponent, duration: duration, sampleRate: fmt.sampleRate,
-                                channels: Int(fmt.channelCount), isStreamed: stream))
-        if stream {
+                                channels: Int(fmt.channelCount), isStreamed: streamed))
+        if streamed {
             clip.file = file
         } else {
             guard file.length < 48_000 * 60 * 10,
@@ -136,7 +148,9 @@ public final class AVAudioBackend: AudioBackend, @unchecked Sendable {
             else { throw AudioError.decodeFailed(url.lastPathComponent, "clip too long to decode into memory; stream it instead") }
             try file.read(into: buffer)
             clip.buffer = buffer
-            MemoryTracker.shared.allocate("audio", bytes: Int(buffer.frameLength) * Int(fmt.channelCount) * 4)
+            let resident = Int(buffer.frameLength) * Int(fmt.channelCount) * 4
+            decodedBytes += resident
+            MemoryTracker.shared.allocate("audio", bytes: resident)
         }
         let id = nextClip
         nextClip += 1
@@ -149,7 +163,11 @@ public final class AVAudioBackend: AudioBackend, @unchecked Sendable {
     public func unloadClip(_ id: AudioClipID) {
         for v in voices where v.clip == id.value && v.busy { stopNow(v) }
         if let c = clips.removeValue(forKey: id.value) {
-            if let b = c.buffer { MemoryTracker.shared.free("audio", bytes: Int(b.frameLength) * Int(b.format.channelCount) * 4) }
+            if let b = c.buffer {
+                let resident = Int(b.frameLength) * Int(b.format.channelCount) * 4
+                decodedBytes -= resident
+                MemoryTracker.shared.free("audio", bytes: resident)
+            }
             if let t = c.temporaryURL { try? FileManager.default.removeItem(at: t) }
         }
     }
@@ -267,6 +285,12 @@ public final class AVAudioBackend: AudioBackend, @unchecked Sendable {
             v.stopAfterFade = true
         } else {
             stopNow(v)
+        }
+    }
+
+    public func stopAll(fadeOut: Double) {
+        for (index, v) in voices.enumerated() where v.busy {
+            stop(VoiceHandle(index: index, generation: v.generation), fadeOut: fadeOut)
         }
     }
 

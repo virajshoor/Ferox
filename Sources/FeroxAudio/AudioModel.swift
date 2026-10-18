@@ -114,6 +114,31 @@ public enum VoiceAllocator {
     }
 }
 
+/// Decides whether a clip may be decoded into memory under the audio memory budget.
+///
+/// Decoded clips are 32-bit float PCM, so a clip costs `frames × channels × 4` bytes.
+/// A clip that would push the decoded total over the budget is streamed from disk
+/// instead: it still plays, but costs only a small read buffer. Streamed clips are never
+/// counted against the budget.
+public enum AudioMemoryPolicy {
+    /// Bytes a clip of `frames` frames and `channels` channels occupies once decoded.
+    public static func decodedBytes(frames: Int64, channels: Int) -> Int {
+        let f = max(frames, 0), c = Int64(max(channels, 0))
+        let (bytes, overflow) = f.multipliedReportingOverflow(by: c * 4)
+        return overflow || bytes > Int64(Int.max) ? Int.max : Int(bytes)
+    }
+
+    /// True when the clip should be streamed: either the caller asked for streaming, or
+    /// decoding `bytes` more would exceed `budget` given `resident` decoded bytes.
+    /// A budget of zero or less streams every clip.
+    public static func shouldStream(requested: Bool, bytes: Int, resident: Int, budget: Int) -> Bool {
+        if requested { return true }
+        guard budget > 0 else { return true }
+        let (total, overflow) = max(resident, 0).addingReportingOverflow(max(bytes, 0))
+        return overflow || total > budget
+    }
+}
+
 /// Converts decibels to linear gain and back.
 public enum Decibels {
     public static func toGain(_ db: Float) -> Float { pow(10, db / 20) }
@@ -140,10 +165,22 @@ public protocol AudioBackend: AnyObject {
     func setListener(position: Vec3, forward: Vec3, up: Vec3)
     func setBus(_ bus: AudioBus, _ settings: BusSettings)
     func bus(_ bus: AudioBus) -> BusSettings
+    /// Stops every voice, fading each out over `fadeOut` seconds (0 stops at once).
+    func stopAll(fadeOut: Double)
     /// Called once per frame on the main thread (fades, finished voices).
     func update(dt: Double)
     var activeVoiceCount: Int { get }
+    /// Upper bound for decoded (non-streamed) clip memory, in bytes. A clip that would
+    /// exceed it is streamed instead (see `AudioMemoryPolicy`). Clips already decoded
+    /// are not affected when the budget is lowered.
+    var memoryBudgetBytes: Int { get set }
+    /// Bytes currently held by decoded clips.
+    var decodedBytes: Int { get }
 }
+
+/// Default for `AudioBackend.memoryBudgetBytes`; matches `AssetManager`'s default
+/// `MemoryBudget.audioBytes`. `Engine` replaces it with the asset manager's budget.
+public let defaultAudioMemoryBudget = 128 << 20
 
 public struct AudioClipID: Hashable, Sendable {
     public let value: Int
@@ -156,19 +193,33 @@ public final class SilentAudioBackend: AudioBackend {
     private var voices: [Int: (clip: Int, playing: Bool, time: Double, generation: UInt32, loops: Bool)] = [:]
     private var nextVoice = 0
     private var buses: [AudioBus: BusSettings] = [:]
+    /// Decoded size per clip; the silent backend charges a clip's data size.
+    private var clipBytes: [Int: Int] = [:]
+    public var memoryBudgetBytes = defaultAudioMemoryBudget
+    public private(set) var decodedBytes = 0
     public init() {}
 
     public func loadClip(_ data: Data, name: String, stream: Bool) throws -> AudioClipID {
         let id = nextClip
         nextClip += 1
-        clips[id] = AudioClipInfo(name: name, duration: 1, sampleRate: 48000, channels: 1, isStreamed: stream)
+        let streamed = AudioMemoryPolicy.shouldStream(requested: stream, bytes: data.count, resident: decodedBytes,
+                                                      budget: memoryBudgetBytes)
+        clips[id] = AudioClipInfo(name: name, duration: 1, sampleRate: 48000, channels: 1, isStreamed: streamed)
+        if !streamed {
+            clipBytes[id] = data.count
+            decodedBytes += data.count
+        }
         return AudioClipID(value: id)
     }
     public func loadClip(url: URL, stream: Bool) throws -> AudioClipID {
         try loadClip(Data(), name: url.lastPathComponent, stream: stream)
     }
     public func clipInfo(_ id: AudioClipID) -> AudioClipInfo? { clips[id.value] }
-    public func unloadClip(_ id: AudioClipID) { clips[id.value] = nil }
+    public func unloadClip(_ id: AudioClipID) {
+        clips[id.value] = nil
+        voices = voices.filter { $0.value.clip != id.value }
+        if let b = clipBytes.removeValue(forKey: id.value) { decodedBytes -= b }
+    }
     public func play(_ clip: AudioClipID, options: PlaybackOptions) -> VoiceHandle {
         guard clips[clip.value] != nil else { return .invalid }
         let i = nextVoice
@@ -177,6 +228,7 @@ public final class SilentAudioBackend: AudioBackend {
         return VoiceHandle(index: i, generation: 1)
     }
     public func stop(_ v: VoiceHandle, fadeOut: Double) { voices[v.index] = nil }
+    public func stopAll(fadeOut: Double) { voices.removeAll() }
     public func pause(_ v: VoiceHandle) { voices[v.index]?.playing = false }
     public func resume(_ v: VoiceHandle) { voices[v.index]?.playing = true }
     public func seek(_ v: VoiceHandle, to seconds: Double) { voices[v.index]?.time = seconds }

@@ -218,3 +218,28 @@ final class GraphicsFeatureResolverTests: XCTestCase {
         XCTAssertTrue(r.fallbacks.contains { $0.feature == .dynamicResolution })
     }
 }
+
+final class ShadowSettingsTests: XCTestCase {
+    /// Settings files written before local shadows existed decode with the default local budget.
+    func testShadowSettingsDecodeWithoutLocalFields() throws {
+        var settings = ShadowSettings()
+        settings.resolution = 1024
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any])
+        json.removeValue(forKey: "localShadowSlices")
+        json.removeValue(forKey: "localResolution")
+        let decoded = try JSONDecoder().decode(ShadowSettings.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(decoded.resolution, 1024)
+        XCTAssertEqual(decoded.localShadowSlices, ShadowSettings().localShadowSlices)
+        XCTAssertEqual(decoded.localResolution, ShadowSettings().localResolution)
+    }
+
+    /// Presets scale the local shadow budget: none on low, more on ultra.
+    func testPresetsSetLocalShadowBudget() {
+        XCTAssertEqual(GraphicsSettings(preset: .low).shadows.localShadowSlices, 0)
+        XCTAssertEqual(GraphicsSettings(preset: .medium).shadows.localShadowSlices, 6)
+        XCTAssertEqual(GraphicsSettings(preset: .high).shadows.localShadowSlices, 12)
+        XCTAssertEqual(GraphicsSettings(preset: .ultra).shadows.localShadowSlices, 24)
+        XCTAssertGreaterThan(GraphicsSettings(preset: .ultra).shadows.localResolution,
+                             GraphicsSettings(preset: .low).shadows.localResolution)
+    }
+}

@@ -178,7 +178,7 @@ With `hotReload` set to true, `update()` starts a background scan every `hotRelo
 
 ### Memory budget
 
-`MemoryBudget(textureBytes:meshBytes:audioBytes:)` has defaults of 1 GiB for textures, 256 MiB for meshes and 128 MiB for audio. Each `update()` checks the CPU-side texture total against `textureBytes`. If it is exceeded, textures in the `loaded` state are removed from the cache, least recently used first, **but only when no other code holds their handle**. The check uses `isKnownUniquelyReferenced`. A warning is logged if the budget is still exceeded afterwards. Only texture memory is enforced. See [section 15](#15-limitations-and-discrepancies).
+`MemoryBudget(textureBytes:meshBytes:audioBytes:)` has defaults of 1 GiB for textures, 256 MiB for meshes and 128 MiB for audio. Each `update()` checks the CPU-side texture total against `textureBytes`. If it is exceeded, textures in the `loaded` state are removed from the cache, least recently used first, **but only when no other code holds their handle**. The check uses `isKnownUniquelyReferenced`. A warning is logged if the budget is still exceeded afterwards. The asset manager enforces only texture memory; `Engine` hands `audioBytes` to the audio backend, which enforces it (see [16-Audio.md](16-Audio.md#3-loading-clips)). See [section 15](#15-limitations-and-discrepancies).
 
 ## 5. Supported formats
 
@@ -429,7 +429,7 @@ Practical points:
 - **Discrepancy: texture settings not applied.** `TextureImportSettings.srgb` is used, but `filter`, `wrap` and `isCubemap` are stored and never applied by this module. The `TextureImportSettings.srgb` comment says that materials mark normal and occlusion-roughness-metallic maps as linear. No code in this repository does that. Only the glTF importer sets colour space, through its colour flags.
 - **Discrepancy: model settings partly ignored.** `ModelImportSettings.generateTangents` is not read. Tangents are generated whenever UVs exist and tangents are missing.
 - **Discrepancy: audio settings unused.** `AudioImportSettings` is stored, but there is no audio loader in this module.
-- **Limitation: only textures are budgeted.** `meshBytes` and `audioBytes` are stored but not enforced.
+- **Limitation: meshes are not budgeted.** `meshBytes` is stored but not enforced. `audioBytes` is enforced by the audio backend, not by this module.
 - **Limitation: in-memory textures can be evicted.** Textures registered with `registerTexture`, including built-ins and textures from models, are subject to the same LRU rule. If one is evicted and later requested by ID, the manager starts a file load, which fails for built-in identifiers and falls back to the checkerboard.
 - **Limitation: derived identifiers may not match.** An atlas that loads before its image is indexed uses `AssetID.derived(fromPath:)`, which may not match the identifier the database later assigns. Keep `.meta` files committed, and let the database index before loading atlases.
 - **Limitation: KTX and KTX2 have no decoder.** They are classified as textures but are not decoded by this module.

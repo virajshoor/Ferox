@@ -591,20 +591,31 @@ final class PostProcessor {
     /// texture) and then calls `overlay` in the same render pass, so UI and other
     /// screen-space overlays are drawn at output resolution over the final image.
     func encodePresent(_ cb: any MTLCommandBuffer, source: any MTLTexture, targets: RenderTargets,
-                       destination: any MTLTexture,
+                       destination: any MTLTexture, viewport: PixelRect? = nil,
                        overlay: ((any MTLRenderCommandEncoder, MTLPixelFormat) -> Void)? = nil) {
         guard let view = srgbView(source, keep: targets.ldr) else { return }
+        let full = PixelRect(x: 0, y: 0, width: destination.width, height: destination.height)
+        let rect = viewport ?? full
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = destination
-        pass.colorAttachments[0].loadAction = .dontCare
+        // A partial viewport leaves the rest of the drawable uncovered: clear it to black.
+        pass.colorAttachments[0].loadAction = rect == full ? .dontCare : .clear
+        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         pass.colorAttachments[0].storeAction = .store
+        func setViewport(_ enc: any MTLRenderCommandEncoder, _ r: PixelRect) {
+            enc.setViewport(MTLViewport(originX: Double(r.x), originY: Double(r.y), width: Double(r.width),
+                                        height: Double(r.height), znear: 0, zfar: 1))
+        }
         do {
             let pso = try pipeline("blitFragment", format: destination.pixelFormat)
             guard let enc = cb.makeRenderCommandEncoder(descriptor: pass) else { return }
             enc.label = "Ferox.Present"
             enc.setRenderPipelineState(pso)
             enc.setFragmentTexture(view, index: 0)
+            setViewport(enc, rect)
             enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+            // The UI overlay covers the whole drawable, whatever the camera viewport.
+            if rect != full { setViewport(enc, full) }
             overlay?(enc, destination.pixelFormat)
             enc.endEncoding()
         } catch {

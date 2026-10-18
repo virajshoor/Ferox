@@ -152,7 +152,7 @@ The challenge reply is padded so that it is never larger than the request, which
 | `maxConnectRequestsPerSecond` | 10 per endpoint. |
 | `maxPacketsPerSecond` | 300 per client. Extra packets are dropped. |
 
-**Transport.** `UDPTransport` uses Network.framework. Its doc comment says that "plain UDP is unencrypted and unauthenticated". Passing `dtls: true` to the initialiser wraps the traffic in DTLS, which is off by default. The doc comment also says that game-level validation is still needed when DTLS is on. `LoopbackTransport` is in-process and carries no network traffic.
+**Transport.** `UDPTransport` uses Network.framework. Its doc comment says that "plain UDP is unencrypted and unauthenticated". Passing `security: .preSharedKey(identity:passphrase:)` wraps the traffic in DTLS 1.2 with a pre-shared key; it is off by default. The configuration is validated before any socket opens, and the passphrase should be loaded from configuration kept out of source control. The handshake has not been tested on hardware. Game-level validation is still needed when DTLS is on, because a passphrase shipped in every client is not a secret from players. See [Networking](23-Networking.md#2-transports). `LoopbackTransport` is in-process and carries no network traffic.
 
 **Input from clients.** `InputMessage` is described in its doc comment as untrusted intent. The server should validate it, for example by clamping movement vectors. The framework does not validate game-specific values.
 

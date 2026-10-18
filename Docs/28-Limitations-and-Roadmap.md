@@ -25,12 +25,14 @@ The most important limitation is the first one: nothing in Ferox has been verifi
 ## 2. Rendering
 
 - **Limitation: single active camera.** The renderer picks one camera for each frame: the enabled camera with the highest `priority`, and the lowest entity index on a tie. The source calls it the active camera.
-- **Limitation: Camera viewport and renderTarget are ignored.** The renderer's doc comment says that `Camera.viewport` and `Camera.renderTarget` "are not yet honoured". `viewport` is meant for split-screen and picture-in-picture. A camera that sets `renderTarget` is skipped when the main camera is chosen.
+- **Limitation: Camera renderTarget is ignored.** The active camera's `viewport` is honoured: the scene is presented into that rectangle of the drawable, the rest is cleared to black, and UI still covers the full drawable. `Camera.renderTarget` is not yet honoured, and a camera that sets it is skipped when the main camera is chosen. Because only one camera renders per frame, split-screen is not possible yet.
 - **Limitation: the sky is drawn only for perspective cameras.** For an orthographic camera the background is the clear colour (`Renderer`'s doc comment).
 - **Limitation: changing `maxFramesInFlight` needs the renderer recreated.** The renderer logs a warning when the value changes at run time. See [section 7 of 24-Graphics-Settings-and-Presets.md](24-Graphics-Settings-and-Presets.md#7-changing-settings-at-run-time).
 - **Limitation: the monospace font provider renders white boxes.** `MonospaceFontProvider` emits glyph quads with placeholder texture coordinates, so the glyphs do not show. The engine uses it only where CoreText is unavailable. On macOS, the engine uses `CoreTextFontProvider` instead.
-- **Limitation: reflection probes are fixed at 128 px and at most 16.** Each probe face is 128 × 128, whatever `ReflectionProbe.resolution` says. At most 16 probes are captured, and extra probes are ignored with a warning. Where probes overlap, the innermost one wins, and nothing is blended.
+- **Limitation: reflection probes share one face size and are capped at 16.** All probes share one cube array, so the face size is the largest `ReflectionProbe.resolution` among the probes, rounded up to a power of two and clamped to 32–256 px. A change of size re-captures every probe. At most 16 probes are captured, and extra probes are ignored with a warning. Where probes overlap, the innermost one wins, and nothing is blended.
 - **Limitation: Hi-Z occlusion can pop for one frame.** Occlusion culling uses a Hi-Z pyramid built from the previous frame's depth, so objects can pop in or out for one frame.
+- **Limitation: local shadows are budgeted.** Point and spot lights with `castsShadows` get shadow maps, nearest to the camera first, until `ShadowSettings.localShadowSlices` runs out (a spot light takes one slice, a point light six). Lights beyond the budget are lit without shadows. PCSS applies to the sun only; local shadows use hard or PCF filtering.
+- **Limitation: the mesh memory budget is not enforced.** `MemoryBudget.meshBytes` is stored but not enforced. Textures are evicted under `textureBytes`, and audio clips that would exceed `audioBytes` are streamed from disk instead of decoded.
 - **Limitation: indirect draw counters are an upper bound.** The counts are known only on the GPU after culling. The CPU counters report the upper bound.
 - **Limitation: skinned motion vectors use the current pose.** Motion vectors for skinned meshes are taken from the current pose.
 
@@ -59,7 +61,7 @@ See [11-Ray-Tracing.md](11-Ray-Tracing.md) for the budget rules, and [24-Graphic
 ## 7. Networking
 
 - **Limitation: networking is limited in scope.** The points below come from the doc comments in `Sources/FeroxNet`.
-  - **Plain UDP is unencrypted and unauthenticated.** `UDPTransport` can wrap traffic in DTLS when `dtls: true` is passed. That option is off by default. The transport's doc comment says that game-level validation is still needed when DTLS is on.
+  - **Plain UDP is unencrypted and unauthenticated.** `UDPTransport` can wrap traffic in DTLS-PSK when `security: .preSharedKey(identity:passphrase:)` is passed. That option is off by default, and the handshake has not been tested on hardware. Game-level validation is still needed when DTLS is on.
   - **The handshake is not authentication.** It deters spoofed and flooded connection requests, and nothing more. See [section 6 of 26-Security.md](26-Security.md#6-networking).
   - **Message and packet sizes are fixed.** A message payload is limited to 1024 bytes, a packet payload to 1150 bytes, and a UDP datagram to 1400 bytes. Larger data has to be split by the game.
   - **Snapshots carry at most 22 objects each.** `SnapshotMessage.maxObjects` is 22, so a full snapshot fits the 1024-byte message limit. `SnapshotMessage.split` divides larger sets across messages; there is no delta compression.
@@ -75,13 +77,13 @@ The items below are plans. They are based on gaps that the source records or tha
 
 - **Verify on hardware.** Build the package, run the tests, and run `FeroxDiag --render` on named Apple Silicon Macs. Record the Mac model, chip, macOS version and commit, as [CONTRIBUTING.md](../CONTRIBUTING.md) asks, and then update [25-Platform-Support.md](25-Platform-Support.md) and this document.
 - **Verify MetalFX.** Check the spatial and temporal MetalFX paths on devices that support them and on devices that do not, and confirm each fallback.
-- **Camera viewports and render targets.** Honour `Camera.viewport` and render to `renderTarget`, and support more than one camera in a frame. This would enable split-screen and picture-in-picture.
+- **Render targets and multiple cameras.** Render to `Camera.renderTarget`, and support more than one camera in a frame. This would enable split-screen and picture-in-picture.
 - **Sky for other projections.** Draw the sky for orthographic cameras, or document the clear-colour behaviour as the intended design.
-- **Reflection probes.** Honour `ReflectionProbe.resolution`, support blending between overlapping probes, and review the limit of 16 probes.
+- **Reflection probes.** Support per-probe face sizes, blending between overlapping probes, and review the limit of 16 probes.
 - **GPU particles.** Support colour over lifetime on the GPU path, and let local-space emitters follow the emitter.
 - **Editor viewport picking.** Select entities by clicking them in the viewport.
 - **More glTF features.** The importer's header lists what it rejects or skips: sparse accessors, morph target rendering (weights are imported only as animation channels), non-triangle primitives, Draco and meshopt compression, and `KHR_texture_transform`. Any of these could be supported in a later version.
-- **Stronger transport security.** Make DTLS a documented option for real deployments, and consider authenticated messages on top of the handshake.
+- **Stronger transport security.** Verify the DTLS-PSK handshake on hardware, and consider per-player credentials so that one leaked passphrase does not expose every session.
 - **Physics.** The gaps in [13-Physics.md](13-Physics.md), section 14, include continuous collision detection and 3D convex hulls. Those are candidates for later work as well.
 
 ## 9. Related documents

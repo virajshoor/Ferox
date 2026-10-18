@@ -36,7 +36,8 @@ public struct GraphicsSettings: Codable, Sendable, Hashable {
         case .low:
             antiAliasing.mode = .fxaa
             upscaling = UpscalingSettings(mode: .automaticSpatial, quality: .performance)
-            shadows = ShadowSettings(enabled: true, resolution: 1024, cascades: 2, softness: .hard)
+            shadows = ShadowSettings(enabled: true, resolution: 1024, cascades: 2, softness: .hard,
+                                     localShadowSlices: 0, localResolution: 256)
             post.bloom.enabled = false
             post.ambientOcclusion.enabled = false
             post.depthOfField.enabled = false
@@ -48,7 +49,8 @@ public struct GraphicsSettings: Codable, Sendable, Hashable {
         case .medium:
             antiAliasing.mode = .taa
             upscaling = UpscalingSettings(mode: .automaticTemporal, quality: .balanced)
-            shadows = ShadowSettings(enabled: true, resolution: 2048, cascades: 3, softness: .pcf)
+            shadows = ShadowSettings(enabled: true, resolution: 2048, cascades: 3, softness: .pcf,
+                                     localShadowSlices: 6, localResolution: 512)
             post.bloom.enabled = true
             post.ambientOcclusion.enabled = true
             post.ambientOcclusion.quality = .low
@@ -70,7 +72,8 @@ public struct GraphicsSettings: Codable, Sendable, Hashable {
         case .ultra:
             antiAliasing.mode = .taa
             upscaling = UpscalingSettings(mode: .native, quality: .native)
-            shadows = ShadowSettings(enabled: true, resolution: 4096, cascades: 4, softness: .pcss)
+            shadows = ShadowSettings(enabled: true, resolution: 4096, cascades: 4, softness: .pcss,
+                                     localShadowSlices: 24, localResolution: 1024)
             post.bloom.enabled = true
             post.ambientOcclusion.enabled = true
             post.ambientOcclusion.quality = .high
@@ -223,21 +226,56 @@ public struct RayTracingSettings: Codable, Sendable, Hashable {
 
 // MARK: Shadows and post
 
+/// Shadow filtering. `hard` takes one unfiltered depth comparison per pixel, `pcf` a 3 × 3
+/// bilinear comparison kernel, and `pcss` widens that kernel with the estimated penumbra
+/// (sun only; point and spot shadows use `pcf` when `pcss` is requested).
 public enum ShadowSoftness: String, Codable, Sendable, CaseIterable { case hard, pcf, pcss }
 
 public struct ShadowSettings: Codable, Sendable, Hashable {
     public var enabled = true
+    /// Edge length of each sun cascade, in texels.
     public var resolution = 2048
     public var cascades = 4
     public var softness: ShadowSoftness = .pcf
     public var maxDistance: Float = 120
     public var depthBias: Float = 0.0015
     public var normalBias: Float = 0.02
-    public init(enabled: Bool = true, resolution: Int = 2048, cascades: Int = 4, softness: ShadowSoftness = .pcf) {
+    /// Shadow-map slices available to point and spot lights with `castsShadows`. A spot
+    /// light uses one slice and a point light six (one per cube face). Lights nearest the
+    /// camera are served first; the rest are lit without shadows. 0 disables local shadows.
+    public var localShadowSlices = 12
+    /// Edge length of each point or spot shadow slice, in texels.
+    public var localResolution = 512
+
+    public init(enabled: Bool = true, resolution: Int = 2048, cascades: Int = 4, softness: ShadowSoftness = .pcf,
+                localShadowSlices: Int = 12, localResolution: Int = 512) {
         self.enabled = enabled
         self.resolution = resolution
         self.cascades = cascades
         self.softness = softness
+        self.localShadowSlices = localShadowSlices
+        self.localResolution = localResolution
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled, resolution, cascades, softness, maxDistance, depthBias, normalBias
+        case localShadowSlices, localResolution
+    }
+
+    /// Decodes every field when present and keeps the default otherwise, so settings files
+    /// written before a field existed still load.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = ShadowSettings()
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? d.enabled
+        resolution = try c.decodeIfPresent(Int.self, forKey: .resolution) ?? d.resolution
+        cascades = try c.decodeIfPresent(Int.self, forKey: .cascades) ?? d.cascades
+        softness = try c.decodeIfPresent(ShadowSoftness.self, forKey: .softness) ?? d.softness
+        maxDistance = try c.decodeIfPresent(Float.self, forKey: .maxDistance) ?? d.maxDistance
+        depthBias = try c.decodeIfPresent(Float.self, forKey: .depthBias) ?? d.depthBias
+        normalBias = try c.decodeIfPresent(Float.self, forKey: .normalBias) ?? d.normalBias
+        localShadowSlices = try c.decodeIfPresent(Int.self, forKey: .localShadowSlices) ?? d.localShadowSlices
+        localResolution = try c.decodeIfPresent(Int.self, forKey: .localResolution) ?? d.localResolution
     }
 }
 

@@ -193,7 +193,8 @@ Networking: packets, messages, server and client, replication and transports. So
 | `NetDecodeError` | Errors raised while decoding untrusted network data. |
 | `NetEndpoint`, `NetTransport` | An address, and the datagram transport protocol. |
 | `LoopbackTransport`, `LoopbackNetwork`, `NetworkConditioner` | An in-process transport for tests, the network that connects such transports, and simulated latency and loss. |
-| `UDPTransport` **(macOS)** | UDP transport over Network.framework, with optional DTLS. |
+| `UDPTransport` **(macOS)** | UDP transport over Network.framework, with optional DTLS-PSK. |
+| `TransportSecurity` | Plain UDP (`none`) or DTLS 1.2 with a pre-shared key (`preSharedKey(identity:passphrase:)`), validated before a socket opens. |
 | `ObjectState`, `SnapshotMessage`, `SpawnMessage`, `InputMessage`, `TextMessage` | Replication messages: object transforms, a per-tick snapshot, spawns and despawns, client input and text. |
 | `SnapshotInterpolator` | Client-side interpolation between snapshots, rendering remote objects slightly in the past. |
 
@@ -206,6 +207,7 @@ Audio model and backends. Source: `Sources/FeroxAudio`. See [16-Audio.md](16-Aud
 | `AudioBackend` | Protocol for the audio engine that the rest of Ferox uses. |
 | `AVAudioBackend` **(macOS)** | AVAudioEngine implementation, with spatialisation and mixer buses. |
 | `SilentAudioBackend` | No-op backend for headless runs and tests. It tracks state so that logic can still be tested. |
+| `AudioMemoryPolicy` | Decoded-size arithmetic and the rule that streams a clip when decoding it would exceed `memoryBudgetBytes`. |
 | `AudioBus`, `BusSettings` | Fixed mixer buses routed into the master bus, and each bus's volume, mute and attenuation. |
 | `PlaybackOptions` | Parameters for starting a sound. |
 | `VoiceHandle` | Handle to a playing voice. It becomes invalid when the voice finishes or is stolen. |
@@ -263,7 +265,9 @@ The renderer. Only the CPU-side types are available everywhere. The Metal render
 | `DynamicResolutionController` | Chooses the render scale from measured GPU frame times. |
 | `PostUniformsBuilder`, `RenderDebugView` | Translates post-processing settings into shader constants, and the full-screen debug views. |
 | `FrameUniformsBuilder` | Builds the camera- and environment-dependent constants for a frame. |
-| `RenderMath` | Pure rendering maths, shared by the Metal backend and the unit tests. |
+| `RenderMath` | Pure rendering maths, shared by the Metal backend and the unit tests. Includes `probeFaceSize` and `viewportPixels`. |
+| `PixelRect` | A camera viewport in output pixels. |
+| `LocalShadowPlanner`, `LocalShadowSlice` | Assigns point- and spot-light shadow slices within `ShadowSettings.localShadowSlices`, and builds their matrices. |
 
 ## 12. Ferox (umbrella)
 

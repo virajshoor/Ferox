@@ -28,7 +28,7 @@ Frame timing is driven by the engine loop described in [05-Engine-Lifecycle.md](
 | `Profiler` (CPU scopes, GPU samples, counters, history, Chrome trace export) | Implemented: `Sources/FeroxCore/Profiler.swift`. Not run. |
 | Renderer counters (`RenderCounters`) | Implemented in the Metal path. **Not run on hardware.** |
 | Frame and render statistics | Implemented: `FrameStatistics`, `RenderFrameStatistics`. |
-| `MemoryTracker` and `MemoryBudget` | Implemented. Texture budget enforced by the asset manager. Audio budget not enforced. |
+| `MemoryTracker` and `MemoryBudget` | Implemented. Texture budget enforced by the asset manager; audio budget enforced by streaming over-budget clips. Mesh budget not enforced. |
 | `FeroxBenchmarks` | Implemented: `Sources/FeroxBenchmarks/FeroxBenchmarks.swift`. **Never run.** |
 | `FeroxDiag` | Implemented: `Sources/FeroxDiag/FeroxDiag.swift`. **Never run.** |
 | CI benchmark workflow | Implemented: `.github/workflows/benchmarks.yml`, manual trigger only. **Never run.** |
@@ -88,7 +88,7 @@ These are counts. They describe what the renderer asked the GPU to do, which is 
 
 `MemoryBudget` holds three limits in bytes: textures, meshes and audio. `MemoryBudget.recommended(workingSetBytes:)` derives a budget from the GPU's recommended working-set size, giving textures half, meshes an eighth and audio the smaller of a thirty-second and 512 MB. `AssetManager` is created with a default budget of 1 GB of textures, 256 MB of meshes and 128 MB of audio.
 
-Enforcement is partial. The asset manager's `update` compares texture memory with `budget.textureBytes` and evicts unreferenced textures in least-recently-used order, logging a warning if the budget is still exceeded. Mesh memory is stored in the budget but no eviction for it was found in the source reviewed. Audio memory is recorded, but nothing reads `audioBytes`. See [16-Audio.md](16-Audio.md).
+Enforcement is partial. The asset manager's `update` compares texture memory with `budget.textureBytes` and evicts unreferenced textures in least-recently-used order, logging a warning if the budget is still exceeded. Mesh memory is stored in the budget but no eviction for it was found in the source reviewed. `Engine` copies `audioBytes` into the audio backend, which streams a clip instead of decoding it when decoding would exceed the budget. See [16-Audio.md](16-Audio.md#3-loading-clips).
 
 ## 5. FeroxBenchmarks
 
@@ -211,7 +211,6 @@ swift run -c release FeroxBenchmarks --filter ecs --output BenchmarkResults/loca
 - **Benchmark names can mislead.** Physics benchmark names include the full body count even in quick runs, which use fewer bodies.
 - **The benchmark tool has no statistical tests.** It reports a mean, median, minimum and maximum, but does not check for noise or thermal throttling.
 - **Hosted runners are not representative.** The CI benchmark runs on virtualised hardware and is only a trend indicator.
-- **Audio budget not enforced.** The `audioBytes` limit is declared but unused. See [16-Audio.md](16-Audio.md).
 - **Mesh budget not enforced.** The mesh limit is stored, but no mesh eviction was found in the source reviewed.
 - **Counters are unlabelled.** Counter names are plain strings with no registry, so a misspelled name silently creates a new counter.
 - **Device-dependent paths are unverified.** Ray tracing, MetalFX and the dynamic-resolution controller have not been exercised on hardware.
@@ -227,7 +226,7 @@ The `Tests/` directory contains no tests for `Profiler`, `MemoryTracker` or the 
 - [05-Engine-Lifecycle.md](05-Engine-Lifecycle.md) for the frame whose scopes the profiler records.
 - [07-Rendering-2D.md](07-Rendering-2D.md) and [08-Rendering-3D.md](08-Rendering-3D.md) for the passes behind the render counters.
 - [10-Post-Processing-and-Anti-Aliasing.md](10-Post-Processing-and-Anti-Aliasing.md) and [12-Upscaling-and-Dynamic-Resolution.md](12-Upscaling-and-Dynamic-Resolution.md) for the quality settings the benchmarks compare.
-- [16-Audio.md](16-Audio.md) for the audio budget that is declared but not enforced.
+- [16-Audio.md](16-Audio.md) for the audio memory budget.
 - [18-Assets.md](18-Assets.md) for the asset budgets and texture eviction.
 - [24-Graphics-Settings-and-Presets.md](24-Graphics-Settings-and-Presets.md) for the presets used by the GPU benchmarks.
 - [27-Troubleshooting.md](27-Troubleshooting.md) for using `FeroxDiag` in a bug report.

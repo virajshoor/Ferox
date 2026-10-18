@@ -33,8 +33,8 @@ Engine integration (the frame order that calls `audio.update` and the listener u
 | Spatial audio, distance attenuation | Implemented via `AVAudioEnvironmentNode` for mono clips. **Not verified.** |
 | Per-bus volume, mute, attenuation and reverb send | Implemented through the bus environment nodes. |
 | Effects other than reverb send (EQ, filters, compression) | **Not implemented.** No effect units are created. |
-| Memory budget for audio | **Not enforced.** `MemoryBudget.audioBytes` is stored and never read by the audio backend. |
-| Automated tests | None in `Tests/` exercise `FeroxAudio`. |
+| Memory budget for audio | Implemented: `memoryBudgetBytes`, set from `MemoryBudget.audioBytes` at engine start. A clip that would exceed it is streamed instead of decoded. |
+| Automated tests | `Tests/FeroxSubsystemTests/AudioTests.swift` covers attenuation, decibels, voice allocation, the memory policy and the silent backend. |
 
 ## 2. Architecture
 
@@ -62,6 +62,14 @@ Clips are loaded from data or a URL. The result is an `AudioClipID`, and `clipIn
 
 With `stream: false` the whole clip is decoded into an `AVAudioPCMBuffer`. A fixed cap rejects files longer than `48_000 * 60 * 10` frames (ten minutes at 48 kHz, slightly longer at lower sample rates). Longer clips must be streamed. With `stream: true` the file is kept open and read in segments.
 
+**Memory budget.** `memoryBudgetBytes` caps the memory held by decoded clips, and `decodedBytes` reports what they hold now. A decoded clip costs frames × channels × 4 bytes (`AudioMemoryPolicy.decodedBytes`). When decoding a clip would push the total over the budget, the backend streams it instead and logs a warning; the clip still plays. A budget of zero or less streams every clip. Streamed clips are not counted. `unloadClip` returns a clip's bytes. `Engine` copies `assets.budget.audioBytes` into the backend once, at start-up; a later change to the asset budget must be copied by hand. Lowering the budget does not affect clips already decoded.
+
+```swift
+engine.audio.memoryBudgetBytes = 64 << 20
+let ambience = try engine.audio.loadClip(url: ambienceURL, stream: false)
+if engine.audio.clipInfo(ambience)?.isStreamed == true { print("over budget: streamed") }
+```
+
 `AudioClipInfo` reports the name, duration, sample rate, channel count and whether the clip is streamed. `canSpatialize` is `true` only for mono clips. A stereo clip played with a position is played as 2D.
 
 Supported formats are whatever `AVAudioFile` reads on macOS: WAV, AIFF, CAF, MP3, AAC/M4A, ALAC and FLAC, according to the backend's header comment. Channel counts from 1 to 8 are accepted.
@@ -86,6 +94,7 @@ Supported formats are whatever `AVAudioFile` reads on macOS: WAV, AIFF, CAF, MP3
 Once playing, the handle accepts:
 
 - `stop(_:fadeOut:)`. With a non-zero fade the voice ramps to silence and then stops.
+- `stopAll(fadeOut:)` stops every voice, with the same fade rules. `Engine.shutdown()` calls it with no fade.
 - `pause` and `resume`, which keep the playback position.
 - `seek(_:to:)`, which reschedules the clip from a new time.
 - `setVolume`, `setPosition` and `setRate`.
@@ -143,7 +152,7 @@ When the output device changes, the backend receives `AVAudioEngineConfiguration
 
 ## 10. The silent backend
 
-`SilentAudioBackend` keeps clips, voices and buses in dictionaries. Clips report a fixed duration of one second, a sample rate of 48 kHz and one channel. Voices advance their playback time in `update` and finish when they reach the duration, unless they loop. `setVolume`, `setPosition`, `setRate` and `setListener` do nothing. It is deterministic, so game logic that depends on `isPlaying` or `activeVoiceCount` can be tested without sound.
+`SilentAudioBackend` keeps clips, voices and buses in dictionaries. Clips report a fixed duration of one second, a sample rate of 48 kHz and one channel. Each clip is charged its data size against `memoryBudgetBytes`, using the same policy as the AVFoundation backend. Voices advance their playback time in `update` and finish when they reach the duration, unless they loop. `setVolume`, `setPosition`, `setRate` and `setListener` do nothing. It is deterministic, so game logic that depends on `isPlaying` or `activeVoiceCount` can be tested without sound.
 
 ## 11. Code examples
 
@@ -199,10 +208,9 @@ let index = VoiceAllocator.choose(slots, priority: 1)   // 0: the lowest-priorit
 - **No effects chain.** The backend creates no equaliser, filter or compressor units. The reverb send is the only per-voice effect.
 - **Stereo clips cannot be positioned.** A stereo clip with a position plays 2D.
 - **Streamed loops are not sample-accurate.** Looping is rescheduled on the main queue.
-- **Audio budget not enforced.** `MemoryBudget.audioBytes` is set by `AssetManager` but no audio code reads it. The backend records decoded bytes with `MemoryTracker` under the category `audio`, and nothing evicts clips.
+- **The budget streams, it does not evict.** Over-budget clips are streamed rather than decoded, and no decoded clip is ever evicted, because that would invalidate its `AudioClipID`. The budget is copied from `MemoryBudget.audioBytes` only at engine start.
 - **The decode cap is a frame count.** The ten-minute limit is a fixed 28.8 million frames, which is ten minutes at 48 kHz and a little longer at lower rates.
 - **Bus reverb send is read at start.** Changing `reverbBlend` does not affect voices already playing.
-- **`Engine.shutdown()` does not stop voices.** It gives the backend a final `update(dt: 0)`. Voices stop when the backend is deinitialised. There is no stop-all call yet.
 - **Main thread only.** The backend is marked `@unchecked Sendable` and is not safe to call from other threads.
 - **Device-change recovery is untested.** Voices in flight are lost on a restart.
 - **Silent backend ignores volume and position.** Logic that depends on those values cannot be checked with it.
@@ -211,7 +219,7 @@ let index = VoiceAllocator.choose(slots, priority: 1)   // 0: the lowest-priorit
 
 This document was written from the source. No macOS machine or Swift toolchain was available while the engine was written, so nothing in the audio path has been compiled, run or listened to. No latency, CPU cost or voice-count figures are reported.
 
-`Tests/` contains no tests for `FeroxAudio`, `AVAudioBackend`, `SilentAudioBackend` or `VoiceAllocator`. The `FeroxSubsystemTests` target is declared to depend on `FeroxAudio`, but the test files present cover input, animation and assets only. The HRTF rendering, bus routing and device-change restart have not been verified on hardware.
+`Tests/FeroxSubsystemTests/AudioTests.swift` tests `Attenuation`, `Decibels`, `VoiceAllocator`, `AudioMemoryPolicy` and `SilentAudioBackend`, including its budget accounting and `stopAll`. `AVAudioBackend` needs AVFoundation and audio hardware and has no automated tests. None of the tests have been run yet. The HRTF rendering, bus routing and device-change restart have not been verified on hardware.
 
 ## 14. Related documents
 

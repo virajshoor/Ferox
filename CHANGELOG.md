@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Shadows for point and spot lights with `castsShadows`. They are budgeted by the new `ShadowSettings.localShadowSlices` (default 12; a spot light takes one slice, a point light six) and `localResolution` (default 512), nearest lights first, and planned by `LocalShadowPlanner`.
+- `TransportSecurity.preSharedKey(identity:passphrase:)`: DTLS 1.2 with a pre-shared key for `UDPTransport`. Untested on hardware.
+- `AudioBackend.stopAll(fadeOut:)`, `memoryBudgetBytes` and `decodedBytes`, and `AudioMemoryPolicy`.
+- `castsShadows` and `receivesShadows` on `SkinnedMeshRenderer`.
+- Tests for local shadow planning, the shadow-receive flag, probe face sizes, viewports, the audio budget, `stopAll` and transport security.
+
+### Changed
+
+- **Breaking:** `UDPTransport(listenOn:dtls:)` and `UDPTransport(connectingTo:dtls:)` are replaced by `init(listenOn:security:)` and `init(connectingTo:security:)`. Both throw on an invalid security configuration.
+
+### Fixed
+
+- `ShadowSoftness.hard` rendered the same as `.pcf`. It now takes a single comparison.
+- The audio memory budget (`MemoryBudget.audioBytes`) was not enforced. A clip that would exceed it is now streamed instead of decoded.
+- `Engine.shutdown()` left voices playing until the backend was released. It now stops them all.
+- `MeshRenderer.receivesShadows` was ignored. It now turns off sun, local and ray-traced shadows for that object.
+- `Camera.viewport` was ignored. The scene is now presented into the viewport rectangle.
+- `ReflectionProbe.resolution` was ignored. Probes now share a face size taken from the largest request (32–256 px).
+
 ## [0.1.0] - Unreleased
 
 This version has not been released yet.

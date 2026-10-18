@@ -213,6 +213,7 @@ Offscreen rendering is used by `FeroxDiag` and `FeroxBenchmarks`. See [04-Buildi
 | Shadow map resolution | 1024 | 2048 | 2048 | 4096 |
 | Cascades | 2 | 3 | 4 | 4 |
 | Shadow softness | hard | PCF | PCF | PCSS |
+| Local shadow slices, resolution | 0, 256 | 6, 512 | 12, 512 | 24, 1024 |
 | Bloom | off | on | on | on |
 | Ambient occlusion | off | on, low | on, medium | on, high |
 | Ray tracing | off | off | performance | quality |
@@ -259,10 +260,9 @@ GPU time is measured from the command buffers' start and end times. The scene an
 ## 14. Limitations
 
 - **Limitation: one camera per frame.** The renderer draws the highest-priority enabled camera. `Renderer`'s documentation states this.
-- **Limitation: `Camera.viewport` is not read.** Split-screen and picture-in-picture are not supported. `Camera.renderTarget` is also not used for normal rendering: `RenderSceneExtractor` skips cameras that have one set.
+- **Limitation: `Camera.renderTarget` is not used.** `RenderSceneExtractor` skips cameras that have one set. The active camera's `viewport` is honoured: the scene is presented into that normalised rectangle of the drawable (`RenderMath.viewportPixels`), the rest is cleared to black, and UI still covers the whole drawable. With one camera per frame, split-screen is not yet possible.
 - **Limitation: the sky is drawn only for perspective cameras.** An orthographic camera shows `clearColor`.
 - **Limitation: Hi-Z uses the previous frame.** Objects revealed by fast motion can be culled for one frame.
-- **Limitation: `MeshRenderer.receivesShadows` is not read.** No code in the renderer consults it.
 - **Limitation: `MeshRenderer.isStatic` is not read by the renderer.** The value is copied onto ray-traced instances, where nothing reads it. The component's comment says it enables batched submission and BLAS reuse, which the source does not show.
 - **Limitation: skinned meshes are not ray-traced.** See [11-Ray-Tracing.md](11-Ray-Tracing.md).
 - **Limitation: no offline capture or validation tool.** `FeroxDiag --render` checks that a frame is produced. It does not compare the image to a reference.

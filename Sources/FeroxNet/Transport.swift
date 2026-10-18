@@ -2,7 +2,9 @@ import FeroxCore
 import Foundation
 
 #if canImport(Network)
+import CryptoKit
 import Network
+import Security
 #endif
 
 /// Opaque address of a remote peer.
@@ -126,6 +128,41 @@ public final class LoopbackTransport: NetTransport, @unchecked Sendable {
     public func close() { network?.unregister(localEndpoint) }
 }
 
+/// Encryption for `UDPTransport`.
+///
+/// `.none` sends plain UDP: unencrypted and unauthenticated. `.preSharedKey` wraps every
+/// datagram in DTLS 1.2 with a TLS-PSK cipher suite (`TLS_PSK_WITH_AES_128_GCM_SHA256`):
+/// server and clients derive the same key from a shared passphrase, so no certificate or
+/// private key ships with the game. Only peers that know the passphrase can complete the
+/// handshake, read traffic or inject packets. This is the pattern of Apple's TLS-PSK
+/// sample code ("Building a custom peer-to-peer protocol"), applied to DTLS.
+///
+/// A passphrase compiled into every client is not a secret from players: PSK protects
+/// against eavesdroppers and spoofed packets on the network path, not against a modified
+/// client. Keep validating client messages against game rules either way.
+public enum TransportSecurity: Sendable, Hashable {
+    case none
+    /// DTLS-PSK. `identity` names the key (sent in clear during the handshake) and must
+    /// match on both ends; `passphrase` must be at least `minimumPassphraseLength` bytes.
+    case preSharedKey(identity: String, passphrase: String)
+
+    public static let minimumPassphraseLength = 16
+    public static let maximumIdentityLength = 128
+
+    /// Checks the configuration before any socket is opened.
+    public func validate() throws {
+        guard case let .preSharedKey(identity, passphrase) = self else { return }
+        guard !identity.isEmpty, identity.utf8.count <= Self.maximumIdentityLength else {
+            throw NetDecodeError.invalidValue("PSK identity must be 1–\(Self.maximumIdentityLength) bytes")
+        }
+        guard passphrase.utf8.count >= Self.minimumPassphraseLength else {
+            throw NetDecodeError.invalidValue("PSK passphrase must be at least \(Self.minimumPassphraseLength) bytes")
+        }
+    }
+
+    public var isEncrypted: Bool { self != .none }
+}
+
 #if canImport(Network)
 /// UDP transport using Network.framework.
 ///
@@ -133,9 +170,9 @@ public final class LoopbackTransport: NetTransport, @unchecked Sendable {
 /// mode connects to one server. Received datagrams are queued and drained on the game
 /// thread by `receive()`. Datagrams larger than `maxDatagramSize` are dropped.
 ///
-/// Transport security: plain UDP is unencrypted and unauthenticated. For production use,
-/// pass `dtls: true` to wrap traffic in DTLS (Network.framework `NWProtocolTLS`), and keep
-/// game-level validation regardless (see Docs/23-Networking.md).
+/// Transport security: `TransportSecurity.none` is plain UDP, unencrypted and
+/// unauthenticated. For real deployments pass `.preSharedKey`, which wraps traffic in
+/// DTLS-PSK, and keep game-level validation regardless (see Docs/23-Networking.md).
 public final class UDPTransport: NetTransport, @unchecked Sendable {
     public private(set) var localEndpoint: NetEndpoint
     public static let maxDatagramSize = 1400
@@ -146,9 +183,30 @@ public final class UDPTransport: NetTransport, @unchecked Sendable {
     private let lock = NSLock()
     private let parameters: NWParameters
 
+    /// Builds the Network.framework parameters for `security`.
+    static func makeParameters(_ security: TransportSecurity) throws -> NWParameters {
+        try security.validate()
+        guard case let .preSharedKey(identity, passphrase) = security else { return .udp }
+        let tls = NWProtocolTLS.Options()
+        let sec = tls.securityProtocolOptions
+        // The key is HMAC-SHA256(passphrase, identity): 32 raw bytes, identical on both ends.
+        let key = SymmetricKey(data: Data(passphrase.utf8))
+        let code = HMAC<SHA256>.authenticationCode(for: Data(identity.utf8), using: key)
+        let psk = code.withUnsafeBytes { DispatchData(bytes: $0) }
+        let id = Data(identity.utf8).withUnsafeBytes { DispatchData(bytes: $0) }
+        sec_protocol_options_add_pre_shared_key(sec, psk as __DispatchData, id as __DispatchData)
+        if let suite = tls_ciphersuite_t(rawValue: UInt16(TLS_PSK_WITH_AES_128_GCM_SHA256)) {
+            sec_protocol_options_append_tls_ciphersuite(sec, suite)
+        }
+        // TLS-PSK suites are TLS 1.2 suites, so pin DTLS 1.2.
+        sec_protocol_options_set_min_tls_protocol_version(sec, .DTLSv12)
+        sec_protocol_options_set_max_tls_protocol_version(sec, .DTLSv12)
+        return NWParameters(dtls: tls, udp: NWProtocolUDP.Options())
+    }
+
     /// Creates a server transport listening on `port` (0 = ephemeral).
-    public init(listenOn port: UInt16, dtls: Bool = false) throws {
-        parameters = dtls ? NWParameters(dtls: NWProtocolTLS.Options(), udp: NWProtocolUDP.Options()) : .udp
+    public init(listenOn port: UInt16, security: TransportSecurity = .none) throws {
+        parameters = try Self.makeParameters(security)
         parameters.allowLocalEndpointReuse = true
         guard let p = NWEndpoint.Port(rawValue: port) else { throw NetDecodeError.invalidValue("port \(port)") }
         let l = try NWListener(using: parameters, on: p)
@@ -162,9 +220,10 @@ public final class UDPTransport: NetTransport, @unchecked Sendable {
         l.start(queue: queue)
     }
 
-    /// Creates a client transport connected to `server`.
-    public init(connectingTo server: NetEndpoint, dtls: Bool = false) {
-        parameters = dtls ? NWParameters(dtls: NWProtocolTLS.Options(), udp: NWProtocolUDP.Options()) : .udp
+    /// Creates a client transport connected to `server`. Throws only for an invalid
+    /// `security` configuration; connection failures are logged when they happen.
+    public init(connectingTo server: NetEndpoint, security: TransportSecurity = .none) throws {
+        parameters = try Self.makeParameters(security)
         localEndpoint = NetEndpoint(host: "client", port: 0)
         let c = NWConnection(host: NWEndpoint.Host(server.host), port: NWEndpoint.Port(rawValue: server.port) ?? 0, using: parameters)
         connections[server] = c

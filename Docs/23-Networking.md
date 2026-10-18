@@ -50,9 +50,25 @@ For the frame in which a game would poll the network, see [05-Engine-Lifecycle.m
 Two implementations exist:
 
 - **`LoopbackTransport`** is created by `LoopbackNetwork.makeTransport(port:host:)`. Transports on the same `LoopbackNetwork` address each other by endpoint. Time is supplied by the caller through `advance(to:)` or `advance(by:)`, so tests are deterministic. The network applies a `NetworkConditioner` to every datagram: a base latency, a random jitter, a loss probability and a duplication probability, all driven by a seeded PRNG. `NetworkConditioner.poorWiFi` is a preset of 60 ms latency, 15 ms jitter, 3 % loss and 0.5 % duplication. Its doc comment in the source describes the link as about 120 ms ± 30 ms, which does not match the values, and the values are what the code uses. The preset is a configuration, not a measurement of any real link.
-- **`UDPTransport`** is built on `NWListener` and `NWConnection`. A server listens on a port, with `init(listenOn:dtls:)`, and creates one connection per remote endpoint. A client connects to one server, with `init(connectingTo:dtls:)`. Datagrams over 1400 bytes are dropped on both send and receive, and `maxDatagramSize` holds that value.
+- **`UDPTransport`** is built on `NWListener` and `NWConnection`. A server listens on a port, with `init(listenOn:security:)`, and creates one connection per remote endpoint. A client connects to one server, with `init(connectingTo:security:)`. Both initialisers throw when the security configuration is invalid. Datagrams over 1400 bytes are dropped on both send and receive, and `maxDatagramSize` holds that value.
 
-The `dtls` flag builds the Network.framework parameters with DTLS, using default TLS options. The source does not set a local identity on the server, does not pin certificates and does not verify peers. Whether a DTLS session forms in this configuration has not been tested. Do not rely on `dtls: true` for confidentiality without first checking it on hardware.
+`TransportSecurity` chooses the encryption:
+
+- **`.none`**, the default, is plain UDP. It is unencrypted and unauthenticated.
+- **`.preSharedKey(identity:passphrase:)`** wraps every datagram in DTLS 1.2 with the TLS-PSK cipher suite `TLS_PSK_WITH_AES_128_GCM_SHA256`. Both ends derive a 32-byte key as HMAC-SHA256(passphrase, identity), so no certificate or private key ships with the game. Only peers that know the passphrase can complete the handshake, read traffic or inject packets.
+
+`validate()` runs before any socket opens. It rejects an empty identity, an identity over `maximumIdentityLength` (128) bytes, and a passphrase under `minimumPassphraseLength` (16) bytes, by throwing `NetDecodeError.invalidValue`.
+
+```swift
+let security = TransportSecurity.preSharedKey(identity: "my-game-v1", passphrase: passphraseFromConfig)
+let server = NetServer(transport: try UDPTransport(listenOn: 7777, security: security), registry: registry)
+```
+
+Keep these limits in mind:
+
+- A passphrase compiled into every client is not a secret from players. PSK protects against eavesdroppers and spoofed packets on the network path, not against a modified client. Keep validating client messages against game rules.
+- The setup follows Apple's TLS-PSK pattern, applied to DTLS. It has **not been tested on Apple hardware**. Developer-forum reports describe "bad record mac" handshake failures when the key bytes differ between peers. Check a handshake between two machines before relying on it.
+- Do not commit the passphrase to the repository. Load it from configuration that is kept out of source control.
 
 ## 3. Connections and channels
 
@@ -207,7 +223,7 @@ A client that connects and sends a message:
 
 ```swift
 let serverEndpoint = NetEndpoint(host: "203.0.113.5", port: 7777)
-let client = NetClient(transport: UDPTransport(connectingTo: serverEndpoint), registry: registry)
+let client = NetClient(transport: try UDPTransport(connectingTo: serverEndpoint), registry: registry)
 client.connect(to: serverEndpoint, now: now)
 
 for event in client.update(now: now) {

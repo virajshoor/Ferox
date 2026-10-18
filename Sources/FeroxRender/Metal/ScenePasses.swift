@@ -34,7 +34,7 @@ struct SceneResources {
     let frameIndex: UInt64
 }
 
-/// Textures read by the forward lighting shader (slots 5…12).
+/// Textures read by the forward lighting shader (slots 5…13).
 struct LightingTextures {
     var prefiltered: any MTLTexture
     var brdfLUT: any MTLTexture
@@ -44,6 +44,8 @@ struct LightingTextures {
     var ambientOcclusion: any MTLTexture
     var irradiance: any MTLTexture
     var probes: any MTLTexture
+    /// Point/spot shadow slices (`ScenePasses.encodeLocalShadows`).
+    var localShadows: any MTLTexture
 }
 
 /// The frame's GPU-side scene data, uploaded once and shared by every pass.
@@ -66,6 +68,10 @@ struct SceneFrameState {
     var clusterIndices: BufferSlice?
     /// Light view-projection per active cascade (empty when shadows are off).
     var cascadeMatrices: [Mat4] = []
+    /// Point/spot shadow slices planned this frame (empty when none are shadowed).
+    var localSlices: [LocalShadowSlice] = []
+    /// One view-projection per local slice (identity when there are none).
+    var localMatrices: BufferSlice?
     var useClusters = true
     var gpuCulling: Bool { culledIndices != nil }
     /// MSAA sample count of the main targets.
@@ -93,6 +99,11 @@ final class ScenePasses {
     private var shadowMapKey: (resolution: Int, cascades: Int)?
     private var shadowBytes = 0
 
+    /// Point/spot shadow slices (depth32Float 2D array, `ShadowSettings.localShadowSlices`).
+    private(set) var localShadowMap: (any MTLTexture)?
+    private var localShadowKey: (resolution: Int, slices: Int)?
+    private var localShadowBytes = 0
+
     /// True once the Hi-Z pyramid holds a depth buffer of the current size.
     private(set) var hizValid = false
     /// The unjittered view-projection that produced the Hi-Z pyramid.
@@ -110,7 +121,10 @@ final class ScenePasses {
         self.capabilities = capabilities
     }
 
-    deinit { MemoryTracker.shared.free("GPU.ShadowMap", bytes: shadowBytes) }
+    deinit {
+        MemoryTracker.shared.free("GPU.ShadowMap", bytes: shadowBytes)
+        MemoryTracker.shared.free("GPU.LocalShadowMap", bytes: localShadowBytes)
+    }
 
     /// Discards the Hi-Z pyramid (resize, camera cut, scene load). The next frame culls by
     /// frustum only.
@@ -241,13 +255,23 @@ final class ScenePasses {
         state.instances = a.upload(frame.instances.isEmpty ? [InstanceData()] : frame.instances)
         state.staticIndices = a.upload(frame.instanceIndices.isEmpty ? [UInt32(0)] : frame.instanceIndices)
         state.joints = a.upload(frame.joints.isEmpty ? [Mat4.identity] : frame.joints)
-        state.lights = a.upload(frame.lights.isEmpty ? [LightData()] : frame.lights)
+        // Point/spot shadows write their slice indices into the lights, so plan them first.
+        var lights = frame.lights
+        let shadows = graphics.settings.shadows
+        if shadows.enabled, !frame.shadowCasters.isEmpty, !frame.shadowedLights.isEmpty {
+            state.localSlices = LocalShadowPlanner.plan(
+                lights: &lights, candidates: frame.shadowedLights, budget: shadows.localShadowSlices,
+                resolution: shadows.localResolution, normalBias: shadows.normalBias)
+        }
+        state.lights = a.upload(lights.isEmpty ? [LightData()] : lights)
+        state.localMatrices = a.upload(state.localSlices.isEmpty ? [Mat4.identity] : state.localSlices.map(\.viewProjection))
         state.probes = a.upload(probes.isEmpty ? [ProbeData()] : probes)
 
         // Lights and probes.
         var flags = FrameFlags.reverseZ
         if state.useClusters { flags |= FrameFlags.clustered }
-        if graphics.settings.shadows.softness == .pcss { flags |= FrameFlags.pcss }
+        if shadows.softness == .pcss { flags |= FrameFlags.pcss }
+        if shadows.softness == .hard { flags |= FrameFlags.hardShadows }
         u.clusterDims = Self.clusterDims
         if let cam = frame.camera {
             u.clusterParams = RenderMath.clusterParams(near: cam.camera.near, far: cam.camera.far,
@@ -428,21 +452,104 @@ final class ScenePasses {
             enc.setVertexSlice(state.staticIndices, index: BufferIndex.instanceIndices)
             enc.setVertexSlice(state.joints, index: BufferIndex.joints)
             enc.setFragmentSampler(r.samplers.anisotropicRepeat, index: 0)
-            for b in frame.shadowCasters {
-                guard let mesh = r.meshes.mesh(b.mesh, assets: r.assets, frame: r.frameIndex) else { continue }
-                let skinned = b.skinned && mesh.skinBuffer != nil
-                let variant = Self.variant(for: b, skinned: skinned, clusters: false)
-                guard let pso = try? meshPipeline(.shadow, variant: variant, samples: 1) else { continue }
-                enc.setRenderPipelineState(pso)
-                enc.setCullMode(b.doubleSided ? .none : .back)
-                if b.alphaTest {
-                    let m = r.materials.material(b.material, assets: r.assets, textures: r.textures,
-                                                 fallback: r.fallback, frame: r.frameIndex)
-                    enc.setFragmentValue(m.uniforms, index: BufferIndex.material, allocator: r.allocator)
-                    enc.setFragmentTexture(m.textures[0], index: 0)
-                }
-                draw(enc, batch: b, mesh: mesh, skinned: skinned, indirect: nil)
+            encodeCasters(enc, frame: frame, state: state, resources: r, include: nil)
+            enc.endEncoding()
+            Profiler.shared.updateRenderCounters { $0.renderPasses += 1 }
+        }
+        return map
+    }
+
+    /// Draws the shadow casters into the bound depth target. `include` filters batches
+    /// (local lights draw only casters that reach them); nil draws every caster.
+    private func encodeCasters(_ enc: any MTLRenderCommandEncoder, frame: RenderFrameData, state: SceneFrameState,
+                               resources r: SceneResources, include: ((DrawBatch) -> Bool)?) {
+        for b in frame.shadowCasters where include?(b) ?? true {
+            guard let mesh = r.meshes.mesh(b.mesh, assets: r.assets, frame: r.frameIndex) else { continue }
+            let skinned = b.skinned && mesh.skinBuffer != nil
+            let variant = Self.variant(for: b, skinned: skinned, clusters: false)
+            guard let pso = try? meshPipeline(.shadow, variant: variant, samples: 1) else { continue }
+            enc.setRenderPipelineState(pso)
+            enc.setCullMode(b.doubleSided ? .none : .back)
+            if b.alphaTest {
+                let m = r.materials.material(b.material, assets: r.assets, textures: r.textures,
+                                             fallback: r.fallback, frame: r.frameIndex)
+                enc.setFragmentValue(m.uniforms, index: BufferIndex.material, allocator: r.allocator)
+                enc.setFragmentTexture(m.textures[0], index: 0)
             }
+            draw(enc, batch: b, mesh: mesh, skinned: skinned, indirect: nil)
+        }
+    }
+
+    /// Ensures the point/spot shadow array matches the settings. Its capacity is the whole
+    /// budget, so it is not reallocated as lights come and go.
+    private func ensureLocalShadowMap(resolution: Int, slices: Int) -> (any MTLTexture)? {
+        if let k = localShadowKey, k.resolution == resolution, k.slices == slices, let t = localShadowMap { return t }
+        MemoryTracker.shared.free("GPU.LocalShadowMap", bytes: localShadowBytes)
+        localShadowBytes = 0
+        localShadowMap = nil
+        localShadowKey = nil
+        let d = MTLTextureDescriptor()
+        d.textureType = .type2DArray
+        d.pixelFormat = .depth32Float
+        d.width = resolution
+        d.height = resolution
+        d.arrayLength = slices
+        d.usage = [.renderTarget, .shaderRead]
+        d.storageMode = .private
+        guard let t = device.makeTexture(descriptor: d) else {
+            Log.error("Render", "Could not allocate a \(resolution)² × \(slices) local shadow map; local shadows disabled")
+            return nil
+        }
+        t.label = "Ferox.LocalShadowMap"
+        localShadowMap = t
+        localShadowKey = (resolution, slices)
+        localShadowBytes = t.allocatedSize
+        MemoryTracker.shared.allocate("GPU.LocalShadowMap", bytes: localShadowBytes)
+        return t
+    }
+
+    /// Renders every planned point/spot slice. Returns the texture to bind at
+    /// `TextureIndex.localShadows`: the 1-slice fallback when no light is shadowed (the
+    /// shader then never samples it, because every light's `extra.y` is negative).
+    func encodeLocalShadows(_ cb: any MTLCommandBuffer, frame: RenderFrameData, state: SceneFrameState,
+                            settings: ShadowSettings, resources r: SceneResources) -> any MTLTexture {
+        let budget = min(max(settings.localShadowSlices, 1), LocalShadowPlanner.maxSlices)
+        guard !state.localSlices.isEmpty,
+              let map = ensureLocalShadowMap(resolution: min(max(settings.localResolution, 64), 4096), slices: budget)
+        else { return r.fallback.shadowArray }
+
+        // Instance bounds per caster batch, for culling batches against each light's sphere.
+        func reaches(_ b: DrawBatch, _ slice: LocalShadowSlice) -> Bool {
+            for k in b.firstInstance..<(b.firstInstance + b.instanceCount) where k < frame.instanceIndices.count {
+                let i = Int(frame.instanceIndices[k])
+                guard i < frame.instances.count else { continue }
+                let bounds = frame.instances[i].bounds
+                let reach = slice.range + bounds.w
+                if (bounds.xyz - slice.position).lengthSquared <= reach * reach { return true }
+            }
+            return false
+        }
+
+        cb.pushDebugGroup("Ferox.LocalShadows")
+        defer { cb.popDebugGroup() }
+        for (index, slice) in state.localSlices.enumerated() where index < budget {
+            let pass = MTLRenderPassDescriptor()
+            pass.depthAttachment.texture = map
+            pass.depthAttachment.slice = index
+            pass.depthAttachment.loadAction = .clear
+            pass.depthAttachment.storeAction = .store
+            pass.depthAttachment.clearDepth = 1  // standard Z
+            guard let enc = cb.makeRenderCommandEncoder(descriptor: pass) else { continue }
+            enc.label = "Ferox.Shadow.Light\(slice.light).Face\(slice.face)"
+            enc.setDepthStencilState(depthState(.less, write: true))
+            enc.setFrontFacing(frontFacing)
+            enc.setDepthBias(0, slopeScale: 1.5, clamp: 0.01)
+            enc.setVertexValue(slice.viewProjection, index: BufferIndex.cascade, allocator: r.allocator)
+            enc.setVertexSlice(state.instances, index: BufferIndex.instances)
+            enc.setVertexSlice(state.staticIndices, index: BufferIndex.instanceIndices)
+            enc.setVertexSlice(state.joints, index: BufferIndex.joints)
+            enc.setFragmentSampler(r.samplers.anisotropicRepeat, index: 0)
+            encodeCasters(enc, frame: frame, state: state, resources: r, include: { reaches($0, slice) })
             enc.endEncoding()
             Profiler.shared.updateRenderCounters { $0.renderPasses += 1 }
         }
@@ -699,6 +806,8 @@ final class ScenePasses {
         enc.setFragmentTexture(l.ambientOcclusion, index: TextureIndex.ambientOcclusion)
         enc.setFragmentTexture(l.irradiance, index: TextureIndex.irradiance)
         enc.setFragmentTexture(l.probes, index: TextureIndex.probes)
+        enc.setFragmentTexture(l.localShadows, index: TextureIndex.localShadows)
+        enc.setFragmentSlice(state.localMatrices, index: BufferIndex.localShadowMatrices)
         enc.setFragmentSampler(r.samplers.shadowCompare, index: 1)
     }
 

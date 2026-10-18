@@ -95,6 +95,9 @@ public struct RenderFrameData {
     public var lights: [LightData] = []
     public var directionalCount = 0
     public var punctualCount = 0
+    /// Indices into `lights` of the point and spot lights that request shadows, nearest to
+    /// the camera first. The renderer gives slices to as many as its budget allows.
+    public var shadowedLights: [Int] = []
     public var sun: SunLight?
     public var environment = Environment()
     public var probes: [RenderProbe] = []
@@ -175,7 +178,7 @@ public enum RenderSceneExtractor {
 
         var items: [Item] = []
         func addRenderer(_ e: Entity, mesh meshID: AssetID, materials: [AssetID], castsShadows: Bool,
-                         isStatic: Bool, skinned: SkinnedMeshRenderer?) {
+                         receivesShadows: Bool, isStatic: Bool, skinned: SkinnedMeshRenderer?) {
             guard world.isActiveInHierarchy(e), cam.cullingMask.contains(layerMask(world, e)) else { return }
             let wt = world.get(WorldTransform.self, e)
             let model = wt?.matrix ?? world.worldMatrix(of: e)
@@ -219,6 +222,8 @@ public enum RenderSceneExtractor {
                 if let m = o.metallic { inst.params.x = min(max(m, 0), 1) }
                 if let r = o.roughness { inst.params.y = min(max(r, 0), 1) }
             }
+            // Read by the forward shader, which then skips every shadow lookup.
+            inst.emissiveAdd.w = receivesShadows ? 0 : 1
             var isSkinned = false
             if let s = skinned, mesh.isSkinned, let skeleton = animations?.skeletons[s.skin],
                s.joints.count == skeleton.inverseBindMatrices.count, !s.joints.isEmpty {
@@ -259,10 +264,11 @@ public enum RenderSceneExtractor {
 
         world.read(MeshRenderer.self) { e, r in
             addRenderer(e, mesh: r.mesh, materials: r.materials, castsShadows: r.castsShadows,
-                        isStatic: r.isStatic, skinned: nil)
+                        receivesShadows: r.receivesShadows, isStatic: r.isStatic, skinned: nil)
         }
         world.read(SkinnedMeshRenderer.self) { e, r in
-            addRenderer(e, mesh: r.mesh, materials: r.materials, castsShadows: true, isStatic: false, skinned: r)
+            addRenderer(e, mesh: r.mesh, materials: r.materials, castsShadows: r.castsShadows,
+                        receivesShadows: r.receivesShadows, isStatic: false, skinned: r)
         }
 
         buildBatches(items, into: &frame)
@@ -355,7 +361,8 @@ public enum RenderSceneExtractor {
     static func extractLights(world: World, camera: RenderCamera, frustum: Frustum, options: ExtractionOptions,
                               into frame: inout RenderFrameData) {
         var directional: [(Light, Vec3)] = []
-        var punctual: [LightData] = []
+        // Punctual lights with whether each requests a shadow.
+        var punctual: [(data: LightData, shadowed: Bool)] = []
         world.read(Light.self) { e, l in
             guard !l.is2D, l.intensity > 0, world.isActiveInHierarchy(e),
                   camera.camera.cullingMask.contains(layerMask(world, e)) else { return }
@@ -373,8 +380,8 @@ public enum RenderSceneExtractor {
                 let outer = min(max(l.outerConeAngle, 0.001), .pi / 2 - 0.001)
                 let inner = min(max(l.innerConeAngle, 0), outer - 0.0005)
                 d.direction = Vec4(forward, cos(outer))
-                d.extra = Vec4(cos(inner), 0, 0, 0)
-                punctual.append(d)
+                d.extra = Vec4(cos(inner), -1, 0, 0)  // shadow slice assigned by the renderer
+                punctual.append((d, l.castsShadows))
             }
         }
         // The sun: the first shadow-casting directional light, else the brightest one.
@@ -391,12 +398,17 @@ public enum RenderSceneExtractor {
             frame.lights.append(d)
         }
         frame.directionalCount = directional.count
+        func distance2(_ d: LightData) -> Float { (d.positionRange.xyz - camera.position).lengthSquared }
         if punctual.count > options.maxPunctualLights {
             // Keep the nearest lights; the rest are dropped this frame.
-            punctual.sort { ($0.positionRange.xyz - camera.position).lengthSquared < ($1.positionRange.xyz - camera.position).lengthSquared }
+            punctual.sort { distance2($0.data) < distance2($1.data) }
             punctual.removeLast(punctual.count - options.maxPunctualLights)
         }
-        frame.lights.append(contentsOf: punctual)
+        let first = frame.lights.count
+        frame.lights.append(contentsOf: punctual.map(\.data))
         frame.punctualCount = punctual.count
+        frame.shadowedLights = punctual.indices.filter { punctual[$0].shadowed }
+            .sorted { distance2(punctual[$0].data) < distance2(punctual[$1].data) }
+            .map { first + $0 }
     }
 }

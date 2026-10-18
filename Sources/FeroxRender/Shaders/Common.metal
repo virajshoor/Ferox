@@ -41,6 +41,8 @@ struct FrameUniforms {
 #define FRAME_FLAG_CLUSTERED 1u
 #define FRAME_FLAG_SHADOWS 2u
 #define FRAME_FLAG_PCSS 4u
+#define FRAME_FLAG_REVERSE_Z 8u
+#define FRAME_FLAG_HARD 16u
 
 struct InstanceData {
     float4x4 model;
@@ -94,6 +96,7 @@ struct ProbeData {
 #define BUF_INSTANCE_INDICES 9
 #define BUF_PROBES 10
 #define BUF_CASCADE 11
+#define BUF_LOCAL_SHADOW_MATRICES 12
 
 // Function constants select shader variants (see ShaderVariant in ShaderLibrary.swift).
 constant bool HAS_SKINNING [[function_constant(0)]];

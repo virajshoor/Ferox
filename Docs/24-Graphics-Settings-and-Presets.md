@@ -62,6 +62,7 @@ A game sets its starting configuration on `EngineConfiguration.graphics`. At run
 | Anti-aliasing mode | `fxaa` | `taa` | `taa` | `taa` |
 | Upscaling (mode, quality) | `automaticSpatial`, `performance` | `automaticTemporal`, `balanced` | `automaticTemporal`, `quality` | `native`, `native` |
 | Shadows (resolution, cascades, softness) | 1024, 2, `hard` | 2048, 3, `pcf` | 2048, 4, `pcf` | 4096, 4, `pcss` |
+| Local shadows (slices, resolution) | 0, 256 | 6, 512 | 12, 512 | 24, 1024 |
 | Bloom | off | on | on | on |
 | Ambient occlusion (enabled, quality) | off | on, `low` | on, `medium` | on, `high` |
 | Depth of field | off | unchanged | unchanged | unchanged |
@@ -170,10 +171,14 @@ The resolver handles ray tracing as follows:
 | `enabled` | true | Turns shadows on. |
 | `resolution` | 2048 | Shadow map size in pixels. The resolver clamps it to 256–8192. |
 | `cascades` | 4 | Cascade count. The resolver clamps it to 1–4. |
-| `softness` | `.pcf` | `hard`, `pcf` or `pcss`. |
+| `softness` | `.pcf` | `hard` (one comparison), `pcf` (3 × 3) or `pcss` (sun only). |
 | `maxDistance` | 120 | Distance over which shadows are drawn, in world units. |
 | `depthBias` | 0.0015 | Depth bias. |
 | `normalBias` | 0.02 | Normal-offset bias. |
+| `localShadowSlices` | 12 | Slices for point and spot shadows: one per spot light, six per point light. 0 disables them; at most 64. |
+| `localResolution` | 512 | Size of each local shadow slice. Clamped to 64–4096. |
+
+Settings files written before the two local-shadow fields existed still decode; the missing fields take their defaults.
 
 If the renderer cannot allocate the shadow map, it logs an error and disables shadows (see [27-Troubleshooting.md](27-Troubleshooting.md)).
 

@@ -129,10 +129,25 @@ public struct SkinnedMeshRenderer: Component, Codable, Hashable, Sendable {
     public var skin: AssetID
     /// Joint entities in skin order (resolved at instantiation).
     public var joints: [Entity] = []
+    public var castsShadows = true
+    public var receivesShadows = true
     public init(mesh: AssetID, materials: [AssetID], skin: AssetID) {
         self.mesh = mesh
         self.materials = materials
         self.skin = skin
+    }
+
+    private enum CodingKeys: String, CodingKey { case mesh, materials, skin, joints, castsShadows, receivesShadows }
+
+    /// The shadow flags were added later; files without them load with both set to true.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        mesh = try c.decode(AssetID.self, forKey: .mesh)
+        materials = try c.decode([AssetID].self, forKey: .materials)
+        skin = try c.decode(AssetID.self, forKey: .skin)
+        joints = try c.decodeIfPresent([Entity].self, forKey: .joints) ?? []
+        castsShadows = try c.decodeIfPresent(Bool.self, forKey: .castsShadows) ?? true
+        receivesShadows = try c.decodeIfPresent(Bool.self, forKey: .receivesShadows) ?? true
     }
 }
 

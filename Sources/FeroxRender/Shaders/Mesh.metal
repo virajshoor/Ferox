@@ -188,7 +188,14 @@ fragment PrepassOut prepassFragment(MeshOut in [[stage_in]], bool frontFacing [[
 
 // MARK: - Forward PBR
 
-inline float sampleShadowPCF(depth2d_array<float> shadowMap, sampler cmp, float3 uvz, uint cascade, float texel, bool pcss) {
+/// Shadow-map visibility at `uvz` in slice `slice`: one unfiltered comparison when `hard`,
+/// otherwise a 3 × 3 PCF kernel, widened by a blocker search when `pcss`.
+inline float sampleShadow(depth2d_array<float> shadowMap, sampler cmp, float3 uvz, uint slice, float texel,
+                          bool hard, bool pcss) {
+    if (hard) {
+        constexpr sampler hardCmp(filter::nearest, address::clamp_to_edge, compare_func::less);
+        return shadowMap.sample_compare(hardCmp, uvz.xy, slice, uvz.z);
+    }
     float radius = 1.0f;
     if (pcss) {
         // Blocker search (simplified PCSS): estimate penumbra from average occluder depth.
@@ -196,7 +203,7 @@ inline float sampleShadowPCF(depth2d_array<float> shadowMap, sampler cmp, float3
         float blockers = 0.0f, count = 0.0f;
         for (int y = -2; y <= 2; y++) {
             for (int x = -2; x <= 2; x++) {
-                float d = shadowMap.sample(pointSampler, uvz.xy + float2(x, y) * texel * 2.0f, cascade);
+                float d = shadowMap.sample(pointSampler, uvz.xy + float2(x, y) * texel * 2.0f, slice);
                 if (d < uvz.z) { blockers += d; count += 1.0f; }
             }
         }
@@ -207,7 +214,7 @@ inline float sampleShadowPCF(depth2d_array<float> shadowMap, sampler cmp, float3
     float sum = 0.0f;
     for (int y = -1; y <= 1; y++) {
         for (int x = -1; x <= 1; x++) {
-            sum += shadowMap.sample_compare(cmp, uvz.xy + float2(x, y) * texel * radius, cascade, uvz.z);
+            sum += shadowMap.sample_compare(cmp, uvz.xy + float2(x, y) * texel * radius, slice, uvz.z);
         }
     }
     return sum / 9.0f;
@@ -225,17 +232,47 @@ inline float sunShadow(SurfaceData sd, constant FrameUniforms &frame, depth2d_ar
     if (any(uvz.xy < 0.0f) || any(uvz.xy > 1.0f) || uvz.z > 1.0f) { return 1.0f; }
     float slope = 1.0f - saturate(dot(sd.normal, L));
     uvz.z -= frame.shadowParams.x * (1.0f + slope * 2.0f);
+    bool hard = (frame.lightCounts.w & FRAME_FLAG_HARD) != 0u;
     bool pcss = (frame.lightCounts.w & FRAME_FLAG_PCSS) != 0u;
-    return sampleShadowPCF(shadowMap, cmp, uvz, c, frame.shadowParams.z, pcss);
+    return sampleShadow(shadowMap, cmp, uvz, c, frame.shadowParams.z, hard, pcss);
 }
 
-inline float3 evaluatePunctual(SurfaceData sd, LightData l) {
+/// Point/spot shadow visibility. `l.extra.y` is the light's first slice in `localShadows`
+/// (< 0: unshadowed); a point light owns six slices, one per cube face, chosen by the
+/// dominant axis of the light-to-surface vector exactly as `LocalShadowPlanner.pointFace`.
+/// The normal offset `l.extra.w` scales with distance because texels grow with it.
+inline float localShadow(SurfaceData sd, LightData l, constant FrameUniforms &frame,
+                         const device float4x4 *matrices, depth2d_array<float> localShadows, sampler cmp) {
+    if (l.extra.y < 0.0f) { return 1.0f; }
+    uint slice = uint(l.extra.y);
+    float3 offset = sd.position - l.positionRange.xyz;
+    if (l.color.w < 1.5f) {
+        float3 a = abs(offset);
+        uint face = (a.x >= a.y && a.x >= a.z) ? (offset.x >= 0.0f ? 0u : 1u)
+                  : (a.y >= a.z) ? (offset.y >= 0.0f ? 2u : 3u)
+                  : (offset.z >= 0.0f ? 4u : 5u);
+        slice += face;
+    }
+    float3 p = sd.position + sd.normal * (l.extra.w * length(offset));
+    float4 lp = matrices[slice] * float4(p, 1.0f);
+    if (lp.w <= 0.0f) { return 1.0f; }
+    float3 uvz = float3(lp.xy / lp.w * float2(0.5f, -0.5f) + 0.5f, lp.z / lp.w);
+    if (any(uvz.xy < 0.0f) || any(uvz.xy > 1.0f) || uvz.z > 1.0f || uvz.z < 0.0f) { return 1.0f; }
+    bool hard = (frame.lightCounts.w & FRAME_FLAG_HARD) != 0u;
+    // PCSS is a sun-only effect; local lights fall back to PCF.
+    return sampleShadow(localShadows, cmp, uvz, slice, l.extra.z, hard, false);
+}
+
+inline float3 evaluatePunctual(SurfaceData sd, LightData l, bool receives, constant FrameUniforms &frame,
+                               const device float4x4 *matrices, depth2d_array<float> localShadows, sampler cmp) {
     float3 toLight = l.positionRange.xyz - sd.position;
     float d2 = dot(toLight, toLight);
     if (d2 > l.positionRange.w * l.positionRange.w) { return float3(0.0f); }
     float3 L = toLight * rsqrt(max(d2, 1e-8f));
     float att = distanceAttenuation(d2, l.positionRange.w);
     if (l.color.w > 1.5f) { att *= spotAttenuation(L, l.direction.xyz, l.direction.w, l.extra.x); }
+    if (att <= 0.0f) { return float3(0.0f); }
+    if (receives) { att *= localShadow(sd, l, frame, matrices, localShadows, cmp); }
     return shadeDirect(sd, L, l.color.rgb * att);
 }
 
@@ -268,6 +305,7 @@ fragment float4 forwardFragment(MeshOut in [[stage_in]], bool frontFacing [[fron
                                 const device uint *clusterCounts [[buffer(BUF_CLUSTER_COUNTS)]],
                                 const device ushort *clusterIndices [[buffer(BUF_CLUSTER_INDICES)]],
                                 const device ProbeData *probes [[buffer(BUF_PROBES)]],
+                                const device float4x4 *localMatrices [[buffer(BUF_LOCAL_SHADOW_MATRICES)]],
                                 texture2d<float> baseColorTex [[texture(0)]],
                                 texture2d<float> normalTex [[texture(1)]],
                                 texture2d<float> metalRoughTex [[texture(2)]],
@@ -281,6 +319,7 @@ fragment float4 forwardFragment(MeshOut in [[stage_in]], bool frontFacing [[fron
                                 texture2d<float> aoTex [[texture(10)]],
                                 texturecube<float> irradiance [[texture(11)]],
                                 texturecube_array<float> probeTex [[texture(12)]],
+                                depth2d_array<float> localShadows [[texture(13)]],
                                 sampler s [[sampler(0)]],
                                 sampler shadowCmp [[sampler(1)]]) {
     constexpr sampler linearClamp(filter::linear, mip_filter::linear, address::clamp_to_edge);
@@ -297,9 +336,13 @@ fragment float4 forwardFragment(MeshOut in [[stage_in]], bool frontFacing [[fron
     float viewDepth = -(frame.view * float4(in.worldPosition, 1.0f)).z;
     float3 color = float3(0.0f);
 
+    // MeshRenderer.receivesShadows == false sets emissiveAdd.w (see RenderSceneExtractor).
+    bool receives = instances[in.instance].emissiveAdd.w < 0.5f;
+
     // Sun (directional light 0) with CSM or ray-traced visibility.
     if (frame.sunDirection.w > 0.0f) {
-        float shadow = frame.effectFlags.x > 0.5f ? rtShadow.sample(linearClamp, screenUV).r
+        float shadow = !receives ? 1.0f
+                     : frame.effectFlags.x > 0.5f ? rtShadow.sample(linearClamp, screenUV).r
                                                   : sunShadow(sd, frame, shadowMap, shadowCmp, viewDepth);
         color += shadeDirect(sd, normalize(frame.sunDirection.xyz), frame.sunColor.rgb * frame.sunDirection.w) * shadow;
     }
@@ -313,11 +356,14 @@ fragment float4 forwardFragment(MeshOut in [[stage_in]], bool frontFacing [[fron
         uint ci = clusterIndex(in.position.xy, viewDepth, frame);
         uint n = min(clusterCounts[ci], frame.clusterDims.w);
         for (uint k = 0u; k < n; k++) {
-            color += evaluatePunctual(sd, lights[clusterIndices[ci * frame.clusterDims.w + k]]);
+            color += evaluatePunctual(sd, lights[clusterIndices[ci * frame.clusterDims.w + k]], receives, frame,
+                                      localMatrices, localShadows, shadowCmp);
         }
     } else {
         uint total = dirCount + frame.lightCounts.x;
-        for (uint i = dirCount; i < total; i++) { color += evaluatePunctual(sd, lights[i]); }
+        for (uint i = dirCount; i < total; i++) {
+            color += evaluatePunctual(sd, lights[i], receives, frame, localMatrices, localShadows, shadowCmp);
+        }
     }
 
     // Image-based lighting (split-sum) with optional probe / ray-traced reflections.

@@ -205,3 +205,30 @@ final class SceneDocumentValidationTests: XCTestCase {
         XCTAssertNoThrow(try SceneDocument.load(from: try doc.jsonData()))
     }
 }
+
+final class RenderComponentDecodingTests: XCTestCase {
+    /// Skinned renderers saved before the shadow flags existed load with both flags on.
+    func testSkinnedMeshRendererDecodesWithoutShadowFlags() throws {
+        var renderer = SkinnedMeshRenderer(mesh: AssetID("m"), materials: [AssetID("mat")], skin: AssetID("s"))
+        renderer.castsShadows = false
+        renderer.receivesShadows = false
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(renderer)) as? [String: Any])
+        json.removeValue(forKey: "castsShadows")
+        json.removeValue(forKey: "receivesShadows")
+        json.removeValue(forKey: "joints")
+        let decoded = try JSONDecoder().decode(SkinnedMeshRenderer.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(decoded.mesh, AssetID("m"))
+        XCTAssertEqual(decoded.skin, AssetID("s"))
+        XCTAssertTrue(decoded.joints.isEmpty)
+        XCTAssertTrue(decoded.castsShadows)
+        XCTAssertTrue(decoded.receivesShadows)
+    }
+
+    /// The shadow flags survive a round trip when present.
+    func testSkinnedMeshRendererRoundTripKeepsShadowFlags() throws {
+        var renderer = SkinnedMeshRenderer(mesh: AssetID("m"), materials: [], skin: AssetID("s"))
+        renderer.receivesShadows = false
+        let decoded = try JSONDecoder().decode(SkinnedMeshRenderer.self, from: JSONEncoder().encode(renderer))
+        XCTAssertEqual(decoded, renderer)
+    }
+}

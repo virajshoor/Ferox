@@ -35,7 +35,7 @@ The fields and their defaults are:
 | `range` | `10` | The distance beyond which a point or spot light contributes nothing. |
 | `innerConeAngle` | `0.3` rad | The angle inside which a spot light is at full strength. |
 | `outerConeAngle` | `0.5` rad | The angle beyond which a spot light contributes nothing. |
-| `castsShadows` | `false` | Requests a shadow map. Only the sun uses it. See section 4. |
+| `castsShadows` | `false` | Requests a shadow map: cascades for the sun (section 4), budgeted slices for point and spot lights (section 5). |
 | `is2D` | `false` | Makes the light a 2D light. See [07-Rendering-2D.md](07-Rendering-2D.md). |
 
 The constructors are `Light(type:color:intensity:range:)`, which creates a point light by default, and `Light.directional(_:intensity:shadows:)`. The directional constructor defaults to an intensity of 3 and to shadows on. The `HelloFerox` example uses it as `Light.directional(intensity: 4, shadows: true)`.
@@ -72,7 +72,7 @@ Directional lights are kept, and their direction is the entity's forward vector.
 
 **The sun.** One directional light is singled out as the sun. It is the first directional light with `castsShadows` set. If none has shadows, the brightest directional light is the sun. The sun drives the sky, the shadow maps and the sun term in the shading. All directional lights are added to the light list, but only the sun is shadowed.
 
-**Point and spot lights are never shadowed.** The shadow code handles only the sun. `castsShadows` on a point or spot light is stored and not used.
+**Shadowed point and spot lights.** Point and spot lights with `castsShadows` are listed in `RenderFrameData.shadowedLights`, nearest to the camera first. The renderer gives them shadow-map slices until the budget runs out; see section 5.
 
 **Limit.** At most 1024 punctual lights are passed to the frame, which is `ExtractionOptions.maxPunctualLights`. If there are more, the nearest to the camera are kept.
 
@@ -99,6 +99,8 @@ Settings are in `ShadowSettings`.
 | `maxDistance` | `120` | The distance at which shadows end, in world units. |
 | `depthBias` | `0.0015` | A depth offset applied to the shadow comparison, scaled by the surface's slope. |
 | `normalBias` | `0.02` | An offset along the surface normal, which grows with the cascade index. |
+| `localShadowSlices` | `12` | Slices for point and spot shadows. A spot light takes one, a point light six. 0 turns local shadows off. At most 64. |
+| `localResolution` | `512` | The side length of each local shadow slice, in texels. Clamped to 64 through 4096. |
 
 The cascades are built as follows:
 
@@ -125,17 +127,27 @@ settings.shadows = shadows
 
 ## 5. Shadow filtering
 
-The shading of a sun-lit surface calls `sunShadow`, which calls `sampleShadowPCF`. The filter depends on `softness`.
+Every shadow lookup goes through `sampleShadow` in `Mesh.metal`. The filter depends on `softness`.
 
 | `softness` | Samples | Behaviour |
 | --- | --- | --- |
-| `.hard` | Nine comparisons, the same as `.pcf`. | See the note below the table. |
+| `.hard` | One comparison, with a nearest-filtered sampler. | Sharp, aliased edges. The cheapest mode. |
 | `.pcf` | Nine comparisons, in a 3 by 3 grid of one-texel spacing. | Soft edges with a fixed width. |
 | `.pcss` | A 5 by 5 blocker search, then nine comparisons whose spacing depends on the penumbra estimate. | The penumbra widens with the distance between the occluder and the receiver. The radius is clamped to between 1 and 6 texels. |
 
-`.hard` and `.pcf` produce the same shading in the code as read. `ScenePasses` sets the PCSS flag only for `.pcss`, and the shader has no other path that distinguishes `.hard`. The two settings therefore give identical results unless the code changes. This has not been confirmed on a device.
+`ScenePasses` sets the frame flag `hardShadows` for `.hard` and `pcss` for `.pcss`. PCSS applies to the sun only; point and spot shadows use the hard or PCF filter.
 
 The source describes the PCSS path as simplified: it estimates the penumbra from an average of occluder depths, with a fixed scale. It is not the full algorithm from the original paper.
+
+**Point and spot shadows.** `LocalShadowPlanner` (in `LocalShadows.swift`, which has no Metal code and is unit-tested) assigns slices of one `depth32Float` 2D array:
+
+- Candidates are taken nearest first. A spot light takes one slice, projected through its cone with a small margin. A point light takes six, one per cube face, each with a field of view slightly wider than 90° so the filter kernel stays inside the face.
+- A point light that does not fit in the remaining slices is skipped, and a later spot light may still fit. Lights that get no slice are lit without shadows.
+- Each served light records its first slice, the texel size and a normal-offset factor in `LightData.extra`. The shader picks a point light's face from the dominant axis of the light-to-surface vector.
+
+Each slice is rendered like a cascade: standard depth, cleared to 1, the `less` comparison and a slope bias of 1.5. Casters are culled against the light's sphere. Shadow maps are skipped during reflection-probe capture.
+
+**Receivers.** `MeshRenderer.receivesShadows` and `SkinnedMeshRenderer.receivesShadows` default to `true`. When `false`, the instance ignores the sun, local and ray-traced shadows. It still casts shadows if `castsShadows` is set.
 
 ## 6. Sky and image-based lighting
 
@@ -187,13 +199,13 @@ A `ReflectionProbe` captures the surroundings of its position into a prefiltered
 
 | Field | Default | Effect |
 | --- | --- | --- |
-| `resolution` | `128` | Declared as the capture resolution. **Not used**: see below. |
+| `resolution` | `128` | The requested face size in texels. All probes share one size; see below. |
 | `extents` | (10, 10, 10) | The half-size of the influence box, in world units. |
 | `boxProjection` | `true` | Box projection, intended to correct the reflection direction for the probe's box. The field comment calls the extents the influence volume for box projection. |
 | `realtime` | `false` | Captures the probe every frame, one probe at a time, instead of once. |
 | `revision` | `0` | Increment to request a new capture. |
 
-The renderer holds at most 16 probes, `ReflectionProbes.maxProbes`. A probe beyond that is ignored, and a warning is logged. Each probe has a face size of 128 texels, `ReflectionProbes.faceSize`, which is fixed. The `resolution` field is therefore not read. The source comment says so.
+The renderer holds at most 16 probes, `ReflectionProbes.maxProbes`. A probe beyond that is ignored, and a warning is logged. All probes live in one cube-map array, so they share one face size, `ReflectionProbes.faceSize`. It is the largest `resolution` among the probes, rounded up to a power of two and clamped to 32 through 256 (`RenderMath.probeFaceSize`). With no probes, the size stays where it was, 128 at start. When the size changes, the array is reallocated and every probe is re-captured. If the allocation fails, the renderer keeps the previous size and does not retry that size.
 
 The capture scheduler runs at most one capture per frame. It takes the first probe that has never been captured, or whose `revision` has changed. If none needs a capture, it takes the next probe with `realtime` set, in turn.
 
@@ -217,14 +229,15 @@ world.modify(ReflectionProbe.self, room) { $0.revision &+= 1 }
 - The light selection, the cascade construction, the shadow filters and the probe limits were read from the Swift and Metal sources. They have not been run.
 - The numeric values in this document are those in the source (defaults, clamps, sizes). They are not measurements.
 - The examples' intensities are illustrative, as stated in section 1.
-- Image quality, shadow acne, and the visual behaviour of PCSS and box projection have not been observed on hardware.
+- Image quality, shadow acne, and the visual behaviour of PCSS, point and spot shadows and box projection have not been observed on hardware.
 
 ## 10. Limitations
 
-- **Limitation: only the sun is shadowed.** Point and spot lights cast no shadows, whatever `castsShadows` says.
+- **Limitation: local shadows are budgeted.** Only as many point and spot lights as `localShadowSlices` allows are shadowed, nearest first. The rest are lit without shadows, so a light's shadow can switch off as the camera moves away from it.
+- **Limitation: no PCSS for local lights.** `.pcss` softens only the sun; point and spot shadows use PCF.
 - **Limitation: one set of cascades.** Only one directional light gets shadow maps, so a scene with two suns shadows one of them.
 - **Limitation: PCSS is simplified.** The blocker search uses a fixed 5 by 5 pattern, and the penumbra scale is a constant.
-- **Limitation: `ReflectionProbe.resolution` is ignored.** Every probe is captured at 128 texels per face.
+- **Limitation: probes share one face size.** The face size is the largest `ReflectionProbe.resolution` among the probes, rounded up to a power of two and clamped to 32–256. Changing it re-captures every probe.
 - **Limitation: at most 16 reflection probes.** Further probes are not captured or drawn.
 - **Limitation: no blending between probes.** The innermost probe wins, so the chosen probe changes abruptly at a boundary.
 - **Limitation: at most 64 lights per cluster.** Lights beyond the cluster's limit are dropped for the pixels in that cluster.

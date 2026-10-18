@@ -132,4 +132,63 @@ final class AudioTests: XCTestCase {
         XCTAssertEqual(backend.bus(.sfx).volume, 1, accuracy: 1e-6)
         XCTAssertFalse(backend.bus(.sfx).muted)
     }
+
+    /// Decoded size is frames × channels × 4 bytes, clamps negatives and saturates on overflow.
+    func testMemoryPolicyDecodedBytes() {
+        XCTAssertEqual(AudioMemoryPolicy.decodedBytes(frames: 48_000, channels: 2), 384_000)
+        XCTAssertEqual(AudioMemoryPolicy.decodedBytes(frames: -5, channels: 2), 0)
+        XCTAssertEqual(AudioMemoryPolicy.decodedBytes(frames: 10, channels: -1), 0)
+        XCTAssertEqual(AudioMemoryPolicy.decodedBytes(frames: .max, channels: 8), Int.max)
+    }
+
+    /// A clip streams when asked to, when the budget is not positive, or when decoding would exceed it.
+    func testMemoryPolicyShouldStream() {
+        XCTAssertTrue(AudioMemoryPolicy.shouldStream(requested: true, bytes: 1, resident: 0, budget: 100))
+        XCTAssertFalse(AudioMemoryPolicy.shouldStream(requested: false, bytes: 40, resident: 60, budget: 100))
+        XCTAssertTrue(AudioMemoryPolicy.shouldStream(requested: false, bytes: 41, resident: 60, budget: 100))
+        XCTAssertTrue(AudioMemoryPolicy.shouldStream(requested: false, bytes: 1, resident: 0, budget: 0))
+        XCTAssertTrue(AudioMemoryPolicy.shouldStream(requested: false, bytes: .max, resident: 1, budget: .max))
+    }
+
+    /// The silent backend charges decoded clips against its budget, streams the overflow and refunds on unload.
+    func testSilentBackendEnforcesMemoryBudget() throws {
+        let backend = SilentAudioBackend()
+        XCTAssertEqual(backend.memoryBudgetBytes, defaultAudioMemoryBudget)
+        backend.memoryBudgetBytes = 100
+
+        let first = try backend.loadClip(Data(count: 60), name: "a", stream: false)
+        XCTAssertEqual(backend.decodedBytes, 60)
+        XCTAssertFalse(try XCTUnwrap(backend.clipInfo(first)).isStreamed)
+
+        let second = try backend.loadClip(Data(count: 60), name: "b", stream: false)
+        XCTAssertTrue(try XCTUnwrap(backend.clipInfo(second)).isStreamed, "over budget, so streamed")
+        XCTAssertEqual(backend.decodedBytes, 60, "streamed clips are not counted")
+
+        backend.unloadClip(first)
+        XCTAssertEqual(backend.decodedBytes, 0)
+        backend.unloadClip(second)
+        XCTAssertEqual(backend.decodedBytes, 0)
+
+        let third = try backend.loadClip(Data(count: 60), name: "c", stream: false)
+        XCTAssertFalse(try XCTUnwrap(backend.clipInfo(third)).isStreamed, "unloading returned the budget")
+    }
+
+    /// stopAll ends every voice; unloading a clip ends only that clip's voices.
+    func testStopAllAndUnloadStopVoices() throws {
+        let backend = SilentAudioBackend()
+        let a = try backend.loadClip(Data(), name: "a", stream: false)
+        let b = try backend.loadClip(Data(), name: "b", stream: false)
+        let va = backend.play(a, options: PlaybackOptions(loops: true))
+        let vb = backend.play(b, options: PlaybackOptions(loops: true))
+        XCTAssertEqual(backend.activeVoiceCount, 2)
+
+        backend.unloadClip(a)
+        XCTAssertFalse(backend.isPlaying(va))
+        XCTAssertTrue(backend.isPlaying(vb))
+
+        _ = backend.play(b, options: PlaybackOptions())
+        backend.stopAll(fadeOut: 0)
+        XCTAssertEqual(backend.activeVoiceCount, 0)
+        XCTAssertNil(backend.playbackTime(vb))
+    }
 }

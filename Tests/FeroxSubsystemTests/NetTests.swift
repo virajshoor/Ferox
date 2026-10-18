@@ -293,4 +293,23 @@ final class NetTests: XCTestCase {
         }
         XCTAssertEqual(texts, ["hi"])
     }
+
+    /// Plain UDP needs no validation; a PSK needs a 1–128 byte identity and a passphrase of at least 16 bytes.
+    func testTransportSecurityValidation() throws {
+        XCTAssertNoThrow(try TransportSecurity.none.validate())
+        XCTAssertFalse(TransportSecurity.none.isEncrypted)
+
+        let good = TransportSecurity.preSharedKey(identity: "game-v1", passphrase: String(repeating: "k", count: 16))
+        XCTAssertNoThrow(try good.validate())
+        XCTAssertTrue(good.isEncrypted)
+
+        let short = TransportSecurity.preSharedKey(identity: "game-v1", passphrase: String(repeating: "k", count: 15))
+        XCTAssertThrowsError(try short.validate())
+        let noIdentity = TransportSecurity.preSharedKey(identity: "", passphrase: String(repeating: "k", count: 32))
+        XCTAssertThrowsError(try noIdentity.validate())
+        let longIdentity = TransportSecurity.preSharedKey(
+            identity: String(repeating: "i", count: TransportSecurity.maximumIdentityLength + 1),
+            passphrase: String(repeating: "k", count: 32))
+        XCTAssertThrowsError(try longIdentity.validate())
+    }
 }

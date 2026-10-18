@@ -47,11 +47,11 @@ jobs:
       - name: Show Swift version
         run: swift --version
 
-      - name: Build platform-independent targets
-        run: swift build --target FeroxMath --target FeroxCore
+      - name: Build the engine without Metal
+        run: swift build --target Ferox
 
       - name: Test platform-independent modules
-        run: swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests"
+        run: swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests|FeroxSubsystemTests|FeroxIntegrationTests"
 
   docs:
     name: Markdown links

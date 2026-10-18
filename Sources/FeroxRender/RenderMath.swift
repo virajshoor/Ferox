@@ -190,6 +190,10 @@ public enum RenderMath {
         return n
     }
 
-    /// Dispatch size helper: ceil(n / group).
-    public static func groups(_ n: Int, _ group: Int) -> Int { (max(n, 0) + group - 1) / max(group, 1) }
+    /// Dispatch size helper: ceil(n / group). Negative counts give 0; a group size below
+    /// one is treated as one.
+    public static func groups(_ n: Int, _ group: Int) -> Int {
+        let g = max(group, 1)
+        return (max(n, 0) + g - 1) / g
+    }
 }

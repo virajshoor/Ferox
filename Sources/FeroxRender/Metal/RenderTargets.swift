@@ -127,7 +127,8 @@ final class RenderTargets {
             }
         }
         ldr = try (0..<2).map { i in
-            try make("Ferox.LDR\(i)", TargetFormat.ldr, ow, oh, [.renderTarget, .shaderRead, .pixelFormatView])
+            // shaderWrite: MetalFX spatial writes its output with compute.
+            try make("Ferox.LDR\(i)", TargetFormat.ldr, ow, oh, [.renderTarget, .shaderRead, .shaderWrite, .pixelFormatView])
         }
         config = c
         historyValid = false

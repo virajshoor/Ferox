@@ -1,7 +1,8 @@
 // Ferox — mesh passes: shadow depth, depth/normal/motion prepass, and clustered forward PBR.
 
 struct MeshOut {
-    float4 position [[position]];
+    // `invariant` + `preserveInvariance` keep prepass and forward depths bit-identical.
+    float4 position [[position, invariant]];
     float3 worldPosition;
     float3 normal;
     float4 tangent;

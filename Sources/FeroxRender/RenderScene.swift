@@ -106,7 +106,8 @@ public struct RenderFrameData {
 
 /// Options controlling extraction.
 public struct ExtractionOptions: Sendable {
-    /// CPU frustum culling of opaque instances. Disable when GPU culling runs instead.
+    /// CPU frustum culling. Disable when GPU culling runs instead, or to extract every
+    /// renderer regardless of the main camera (reflection-probe capture).
     public var frustumCull = true
     public var lodBias: Float = 1
     /// Shadow casters further than this from the camera are skipped.
@@ -192,7 +193,10 @@ public enum RenderSceneExtractor {
 
             let inFrustum = frustum.contains(sphere)
             let shadowRelevant = castsShadows && distance - sphere.radius < options.shadowDistance
-            if !inFrustum && !shadowRelevant && !options.collectRayTracingInstances {
+            // With CPU frustum culling disabled (GPU culling, probe capture) every instance
+            // is kept; otherwise off-screen objects survive only to cast shadows or to be
+            // ray traced.
+            if options.frustumCull && !inFrustum && !shadowRelevant && !options.collectRayTracingInstances {
                 frame.culledObjects += 1
                 return
             }

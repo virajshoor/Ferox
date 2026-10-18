@@ -188,8 +188,10 @@ extension MTLComputeCommandEncoder {
         if let s { setBuffer(s.buffer, offset: s.offset, index: index) }
     }
 
-    /// Dispatches enough threadgroups to cover `width`×`height` threads.
+    /// Binds `pipeline` and dispatches enough threadgroups to cover `width`×`height` threads.
     func dispatch2D(_ pipeline: any MTLComputePipelineState, width: Int, height: Int) {
+        guard width > 0, height > 0 else { return }
+        setComputePipelineState(pipeline)
         let w = pipeline.threadExecutionWidth
         let h = max(pipeline.maxTotalThreadsPerThreadgroup / w, 1)
         let group = MTLSize(width: w, height: min(h, 8), depth: 1)
@@ -198,9 +200,11 @@ extension MTLComputeCommandEncoder {
         dispatchThreadgroups(grid, threadsPerThreadgroup: group)
     }
 
-    /// Dispatches enough threadgroups to cover `count` threads in one dimension.
+    /// Binds `pipeline` and dispatches enough threadgroups to cover `count` threads in one
+    /// dimension.
     func dispatch1D(_ pipeline: any MTLComputePipelineState, count: Int, groupSize: Int? = nil) {
         guard count > 0 else { return }
+        setComputePipelineState(pipeline)
         let g = min(groupSize ?? pipeline.threadExecutionWidth * 2, pipeline.maxTotalThreadsPerThreadgroup)
         dispatchThreadgroups(MTLSize(width: RenderMath.groups(count, g), height: 1, depth: 1),
                              threadsPerThreadgroup: MTLSize(width: g, height: 1, depth: 1))

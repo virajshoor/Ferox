@@ -239,6 +239,41 @@ public final class ParticleSystem: System {
         }
     }
 
+    /// Initial state of one particle spawned on the GPU.
+    public struct Spawn: Sendable, Hashable {
+        public var position: Vec3
+        public var velocity: Vec3
+        public var lifetime: Float
+        public var size: Float
+        public var rotation: Float
+        public var angularVelocity: Float
+    }
+
+    /// Generates the particles a GPU emitter requested this frame (`pendingGPUSpawn`) and
+    /// clears the request. Shapes and random ranges match the CPU path exactly; the
+    /// renderer uploads the result and the GPU integrates it.
+    public static func takeGPUSpawns(_ em: ParticleEmitter, _ st: inout ParticleState) -> [Spawn] {
+        let n = min(st.pendingGPUSpawn, max(em.maxParticles, 0))
+        st.pendingGPUSpawn = 0
+        guard n > 0 else { return [] }
+        let m = st.emitterMatrix
+        var out: [Spawn] = []
+        out.reserveCapacity(n)
+        for _ in 0..<n {
+            let (lp, ldir) = sampleShape(em.shape, &st.rng)
+            var pos = lp, vel = ldir * st.rng.nextFloat(in: em.startSpeed)
+            if em.space == .world {
+                pos = m.transformAffine(lp)
+                vel = m.transformDirection(vel)
+            }
+            out.append(Spawn(
+                position: pos, velocity: vel, lifetime: st.rng.nextFloat(in: em.lifetime),
+                size: st.rng.nextFloat(in: em.startSize), rotation: st.rng.nextFloat(in: em.startRotation),
+                angularVelocity: st.rng.nextFloat(in: em.angularVelocity)))
+        }
+        return out
+    }
+
     static func sampleShape(_ s: ParticleEmitter.Shape, _ rng: inout PCG32) -> (Vec3, Vec3) {
         switch s {
         case .point:

@@ -467,8 +467,9 @@ final class OverlayPasses {
         // grow (glyphs are added, never moved), so a frame in flight that still samples the
         // texture sees either the old or the new coverage of untouched glyphs — identical.
         page.pixels.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { return }
             texture.replace(region: MTLRegionMake2D(0, 0, page.width, page.height), mipmapLevel: 0,
-                            withBytes: raw.baseAddress!, bytesPerRow: page.width)
+                            withBytes: base, bytesPerRow: page.width)
         }
         glyphTextures[index] = GlyphTexture(texture: texture, revision: page.revision)
         return texture
@@ -476,11 +477,18 @@ final class OverlayPasses {
 }
 
 /// A platform-neutral snapshot of one glyph atlas page (`GlyphAtlasPage` exists only
-/// where Core Text does), handed to the UI pass.
-struct GlyphAtlasPageData {
-    var width: Int
-    var height: Int
-    var pixels: [UInt8]
-    var revision: UInt64
+/// where Core Text does), handed to the UI pass. `pixels` is row-major 8-bit coverage,
+/// `width × height` bytes; bump `revision` whenever the pixels change.
+public struct GlyphAtlasPageData: Sendable {
+    public var width: Int
+    public var height: Int
+    public var pixels: [UInt8]
+    public var revision: UInt64
+    public init(width: Int, height: Int, pixels: [UInt8], revision: UInt64) {
+        self.width = width
+        self.height = height
+        self.pixels = pixels
+        self.revision = revision
+    }
 }
 #endif

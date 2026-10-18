@@ -1,0 +1,36 @@
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Quick benchmark run
+    # Note: hosted macOS runners use virtualised GPUs. Numbers produced by this
+    # job are useful for spotting large regressions and trends only. They are not
+    # representative of Apple Silicon hardware. Use local release runs for
+    # performance claims.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 15.4
+        run: |
+          if [ -d /Applications/Xcode_15.4.app ]; then
+            sudo xcode-select -s /Applications/Xcode_15.4.app
+          fi
+
+      - name: Run quick benchmarks
+        run: |
+          mkdir -p BenchmarkResults
+          swift run -c release FeroxBenchmarks --quick --output BenchmarkResults/ci.json
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ferox-benchmarks-ci
+          path: BenchmarkResults/ci.json
+          if-no-files-found: error

@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: macOS build and test
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 15.4
+        run: |
+          if [ -d /Applications/Xcode_15.4.app ]; then
+            sudo xcode-select -s /Applications/Xcode_15.4.app
+          fi
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build (debug)
+        run: swift build -c debug
+
+      - name: Test
+        run: swift test --parallel
+
+      - name: Build (release)
+        run: swift build -c release
+
+  linux-portable:
+    name: Linux portable modules
+    runs-on: ubuntu-latest
+    container: swift:5.10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build platform-independent targets
+        run: swift build --target FeroxMath --target FeroxCore
+
+      - name: Test platform-independent modules
+        run: swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests"
+
+  docs:
+    name: Markdown links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check relative links
+        uses: lycheeverse/lychee-action@v1
+        with:
+          args: --offline --no-progress README.md "Docs/**/*.md"
+          fail: true

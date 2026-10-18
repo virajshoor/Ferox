@@ -1,0 +1,59 @@
+name: Feature request
+description: Suggest a new capability or an improvement to Ferox
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a feature. Please search existing issues first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behaviour or API you would like to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: dropdown
+    id: subsystems
+    attributes:
+      label: Subsystems affected
+      multiple: true
+      options:
+        - Math
+        - ECS and scene
+        - Renderer
+        - Physics
+        - Input
+        - UI
+        - Audio
+        - Animation
+        - Particles
+        - Asset pipeline
+        - Editor
+        - Networking
+        - Benchmarks
+        - Other
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to open a pull request for this feature.
+          required: false

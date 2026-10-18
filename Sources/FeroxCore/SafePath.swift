@@ -1,0 +1,90 @@
+import Foundation
+
+/// Errors raised when validating external paths.
+public enum PathError: Error, Equatable, CustomStringConvertible {
+    case empty
+    case absoluteNotAllowed(String)
+    case escapesRoot(String)
+    case invalidCharacters(String)
+    case tooLong(Int)
+
+    public var description: String {
+        switch self {
+        case .empty: return "Path is empty"
+        case .absoluteNotAllowed(let p): return "Absolute paths are not allowed here: \(p)"
+        case .escapesRoot(let p): return "Path escapes the project root: \(p)"
+        case .invalidCharacters(let p): return "Path contains control or NUL characters: \(p)"
+        case .tooLong(let n): return "Path is too long (\(n) bytes)"
+        }
+    }
+}
+
+/// Validates paths that come from untrusted data (scene files, glTF `uri` fields,
+/// network messages, mod content) so they cannot read outside an allowed root.
+///
+/// Validation is lexical and also resolves symbolic links when the target exists, so a
+/// symlink inside the project pointing elsewhere is rejected as well.
+public struct SafePath: Sendable {
+    public let root: URL
+    public static let maxLength = 4096
+
+    public init(root: URL) { self.root = root.standardizedFileURL.resolvingSymlinksInPath() }
+
+    /// Resolves `relative` against the root, rejecting traversal, absolute paths and
+    /// control characters. Returns the resolved file URL.
+    public func resolve(_ relative: String) throws -> URL {
+        guard !relative.isEmpty else { throw PathError.empty }
+        guard relative.utf8.count <= SafePath.maxLength else { throw PathError.tooLong(relative.utf8.count) }
+        if relative.unicodeScalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }) {
+            throw PathError.invalidCharacters(relative)
+        }
+        if relative.hasPrefix("/") || relative.hasPrefix("~") || relative.contains("://") {
+            throw PathError.absoluteNotAllowed(relative)
+        }
+        // Lexical normalisation: reject any component that would climb above the root.
+        var depth = 0
+        for comp in relative.split(separator: "/", omittingEmptySubsequences: true) {
+            if comp == "." { continue }
+            if comp == ".." {
+                depth -= 1
+                if depth < 0 { throw PathError.escapesRoot(relative) }
+            } else {
+                depth += 1
+            }
+        }
+        let url = root.appendingPathComponent(relative).standardizedFileURL
+        let resolved = FileManager.default.fileExists(atPath: url.path) ? url.resolvingSymlinksInPath() : url
+        let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        guard resolved.path == root.path || resolved.path.hasPrefix(rootPath) else {
+            throw PathError.escapesRoot(relative)
+        }
+        return resolved
+    }
+
+    /// Makes `url` relative to the root, if it lies inside it.
+    public func relativePath(for url: URL) -> String? {
+        let p = url.standardizedFileURL.resolvingSymlinksInPath().path
+        let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        guard p.hasPrefix(rootPath) else { return nil }
+        return String(p.dropFirst(rootPath.count))
+    }
+}
+
+/// Bounds applied when decoding untrusted binary or JSON data.
+public struct DecodeLimits: Sendable, Hashable {
+    public var maxFileBytes: Int
+    public var maxElementCount: Int
+    public var maxTextureDimension: Int
+    public var maxNestingDepth: Int
+
+    public init(
+        maxFileBytes: Int = 512 << 20, maxElementCount: Int = 50_000_000, maxTextureDimension: Int = 16384,
+        maxNestingDepth: Int = 128
+    ) {
+        self.maxFileBytes = maxFileBytes
+        self.maxElementCount = maxElementCount
+        self.maxTextureDimension = maxTextureDimension
+        self.maxNestingDepth = maxNestingDepth
+    }
+    public static let `default` = DecodeLimits()
+}

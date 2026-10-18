@@ -59,7 +59,7 @@ if let drawable = view.currentDrawable {               // acquired as late as po
 if engine.quitRequested { window.performClose(nil) }
 ```
 
-Two details matter. The drawable is requested after the simulation, so it is not held while game code runs. The renderer receives `time.elapsed`, which is scaled game time, for shader animation, and `time.unscaledDelta` for GPU effects such as particles and exposure. Game code therefore affects the picture only through the world, and the renderer never calls game code.
+Two details matter. The drawable is requested after the simulation, so it is not held while game code runs. The renderer receives `time.elapsed`, which is scaled game time, for shader animation, and `time.unscaledDelta` for GPU effects such as particles and exposure. Game code therefore affects the picture through the world. The renderer calls game code only through the render hooks that the game registers, described in [08-Rendering-3D.md](08-Rendering-3D.md).
 
 `Engine` does not hold a renderer, and `GameHost` does not run game code except through `engine.tick()`. A different host, such as an editor, can drive the same `Engine` with its own renderer, as long as it calls `tick()` once per frame.
 
@@ -115,7 +115,7 @@ The rules below are stated in the source documentation and follow from the code.
 - **The simulation runs on one thread.** `Engine` is documented as not thread-safe. Create it and call `tick` on one thread, normally the main thread.
 - **`GameHost` and the input backend are main-actor types.** `GameHost` and `MacInputBackend` are annotated `@MainActor`. `GameHost` runs the frame from the `MTKView` delegate method, which AppKit calls on the main thread.
 - **Game hooks run on the main thread.** The `Game` protocol documentation states this.
-- **`World` has no locks.** It is mutated from one thread at a time. Parallelism is allowed only inside `World.withDenseStorage`, through `Jobs.parallelFor`, and only on indices a worker owns. See [06-Scene-and-Entities.md](06-Scene-and-Entities.md), section 18.
+- **`World` has no locks.** It is mutated from one thread at a time. The engine's own parallel work is `Jobs.parallelFor` in the transform pass, which processes flat roots in chunks. Game code may use `Jobs.parallelFor` inside `World.withDenseStorage`, on indices that a worker owns, and nowhere else. See [06-Scene-and-Entities.md](06-Scene-and-Entities.md), section 18.
 - **`EventBus` is main-thread only.** Use `ThreadSafeQueue` to pass work from another thread to the main thread.
 - **The renderer is not thread-safe.** It is created and driven on the main thread.
 - **GPU completion runs on other threads.** The renderer's completion handlers run on Metal's threads. They update the GPU timing values under `gpuLock`, and they signal the in-flight semaphore last, so a frame slot is reused only after the GPU has finished with it.

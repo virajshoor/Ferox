@@ -38,7 +38,7 @@ swift build --target FeroxMath --target FeroxCore    # the portable modules only
 swift run HelloFerox --headless --frames 120
 ```
 
-The last two forms are the ones the Linux job uses. `--target` restricts the build to the named targets and their dependencies. Benchmarks need a release build, because the tool warns that a debug build's numbers are not representative. See section 7.
+The third form is the one the Linux job runs. `--target` restricts the build to the named targets and their dependencies. The last form is a smoke test that CI does not run. Benchmarks need a release build, because the tool warns that a debug build's numbers are not representative. See section 7.
 
 The package has no external dependencies, so there is no resolution step. Metal sources are not compiled by the build. See section 8.
 
@@ -89,7 +89,7 @@ The workflow runs on pushes to `main` and on every pull request. Concurrent runs
 
 Three points follow from the file as written:
 
-- **The Linux job tests two directories that are empty** in this snapshot. `FeroxMathTests` and `FeroxCoreTests` have no source directory at all. The filter names them, but there is nothing to run.
+- **The Linux job names test targets that have no sources.** `FeroxMathTests`, `FeroxCoreTests` and `FeroxSceneTests` have no directory at all, and `FeroxPhysicsTests` is empty. The filter therefore runs nothing.
 - **The `docs` job names `README.md`, which is absent from this snapshot.** Lychee is given a path that does not exist, so the job cannot pass until the file is added.
 - **The `docs` job checks local links only.** With `--offline`, lychee does not check remote URLs, but it does check relative paths. Each relative link in `Docs/` must therefore point to a file that exists. Links to documents of this series that have not been written yet will fail the job until they exist.
 

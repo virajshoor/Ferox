@@ -100,7 +100,7 @@ final class Platformer: Game {
 
 ## 4. Frame phases
 
-`SystemPhase` has five cases: `earlyUpdate`, `fixedUpdate`, `update`, `lateUpdate` and `preRender`. Hooks and systems in the same phase run in the order given by their `order` value, then their insertion order. See [06-Scene-and-Entities.md](06-Scene-and-Entities.md), section 14.
+`SystemPhase` has five cases: `earlyUpdate`, `fixedUpdate`, `update`, `lateUpdate` and `preRender`. Systems in the same phase run in the order given by their `order` value, then in insertion order. Game hooks are not ordered by this mechanism, but run at the points shown in the table below. See [06-Scene-and-Entities.md](06-Scene-and-Entities.md), section 14.
 
 One frame of `Engine.tick`, with the phase or hook at each step:
 
@@ -112,7 +112,7 @@ One frame of `Engine.tick`, with the phase or hook at each step:
 | 4 | For each of the `n` steps: `game.fixedUpdate`, then `flushDeferred`, then `fixedUpdate` systems, then `events.flush()` | The physics systems run in the `fixedUpdate` phase. |
 | 5 | Interpolation of physics poses | Uses `alpha`. See section 5. |
 | 6 | `game.update`, then `flushDeferred`, then `update` systems | |
-| 7 | `lateUpdate` systems, then `game.lateUpdate`, then `flushDeferred` | Animation, tweens, timelines and CPU particles are `lateUpdate` systems. |
+| 7 | `lateUpdate` systems, then `game.lateUpdate`, then `flushDeferred` | Animation, tweens and timelines are the `lateUpdate` systems that the engine adds. |
 | 8 | `scenes.update(dt:)`, then `TransformSystem.update` | Scene transitions advance, then transforms are propagated. |
 | 9 | `preRender` systems, then `events.flush()` | Render-data extraction belongs here. |
 | 10 | `assets.update()`, the audio listener, `audio.update`, and `ui.update` | |
@@ -200,7 +200,7 @@ With `isPaused`, no fixed steps run and `delta` is zero. `unscaledDelta` keeps r
 
 ## 7. Frame statistics
 
-`Engine.frameStatistics` keeps the last 240 unscaled frame durations in a ring buffer. It is the source of the profiler overlay and of `FeroxDiag`.
+`Engine.frameStatistics` keeps the last 240 unscaled frame durations in a ring buffer. Its source comment names the profiler overlay and `FeroxDiag` as users. In this snapshot, `FeroxDiag` does not read it.
 
 | Member | Result |
 | --- | --- |
@@ -247,7 +247,7 @@ The flag can be changed at any time from the thread that drives the engine.
 2. Calls `Game.shutdown(engine:)`.
 3. Releases the game.
 4. Calls `scenes.unloadAll()`.
-5. Calls `audio.update(dt: 0)`, which stops the output.
+5. Calls `audio.update(dt: 0)`.
 
 In a window, closing the window calls `GameHost.shutdown()`. That method pauses the view, calls `engine.shutdown()`, waits for the GPU to go idle with `renderer.waitUntilIdle()`, and purges the renderer's caches. The application then terminates. Quitting from the menu also reaches `GameHost.shutdown()` through the application delegate. Both paths are idempotent.
 

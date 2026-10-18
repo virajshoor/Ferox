@@ -187,7 +187,8 @@ public final class ParticleSystem: System {
                 }
             }
             if em.simulation == .gpu {
-                st.pendingGPUSpawn = spawn
+                // Accumulate until the renderer consumes them (it may run less often).
+                st.pendingGPUSpawn = min(st.pendingGPUSpawn + spawn, em.maxParticles)
                 return
             }
             ParticleSystem.simulate(em, &st, spawn: spawn, dt: dt, emitterMatrix: m)

@@ -155,11 +155,20 @@ public struct UIVertex {
     public var position: SIMD2<Float>
     public var uv: SIMD2<Float>
     public var color: SIMD4<Float>
-    /// Rect centre (xy) and half size (zw) in pixels, for rounded-rect SDF.
+    /// Rect centre (xy) and half size (zw) in points, for rounded-rect SDF.
     public var rect: SIMD4<Float>
     /// x corner radius, y border width, z mode (0 solid, 1 texture, 2 glyph), w unused.
     public var params: SIMD4<Float>
     public var borderColor: SIMD4<Float>
+    public init(position: SIMD2<Float>, uv: SIMD2<Float>, color: SIMD4<Float>, rect: SIMD4<Float>,
+                params: SIMD4<Float>, borderColor: SIMD4<Float>) {
+        self.position = position
+        self.uv = uv
+        self.color = color
+        self.rect = rect
+        self.params = params
+        self.borderColor = borderColor
+    }
 }
 
 /// Debug line vertex (32 bytes).
@@ -168,7 +177,7 @@ public struct LineVertex {
     public var color: SIMD4<Float>
     public init(_ p: Vec3, _ c: Color) {
         position = Vec4(p, 1)
-        color = c.vector
+        color = c.premultiplied
     }
 }
 

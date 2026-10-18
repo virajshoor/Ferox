@@ -73,8 +73,9 @@ vertex ParticleOut particleVertex(const device GPUParticle *particles [[buffer(3
     float3 world = p.posLife.xyz + right * r.x + up * r.y;
     o.position = frame.viewProjection * float4(world, 1.0f);
     o.uv = c * 0.5f + 0.5f;
-    float fadeStart = 1.0f - saturate(u.params.y);
-    float fade = 1.0f - smoothstep(fadeStart, 1.0f, t);
+    // params.y = 0 disables the fade (CPU particles bake colour over lifetime).
+    float fadeFraction = saturate(u.params.y);
+    float fade = fadeFraction > 0.0f ? 1.0f - smoothstep(1.0f - fadeFraction, 1.0f, t) : 1.0f;
     o.color = p.color * fade;
     return o;
 }

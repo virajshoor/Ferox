@@ -7,10 +7,10 @@
 // Clipping uses the render encoder's scissor rectangle.
 
 struct UIVertex {
-    float2 position;  // pixels, origin top-left
+    float2 position;  // points, origin top-left
     float2 uv;
     float4 color;     // premultiplied
-    float4 rect;      // xy centre, zw half size (pixels)
+    float4 rect;      // xy centre, zw half size (points)
     float4 params;    // x corner radius, y border width, z mode, w unused
     float4 borderColor;
 };

@@ -12,6 +12,14 @@ final class FixedTimestepTests: XCTestCase {
         XCTAssertEqual(ts.alpha, 0.5, accuracy: 1e-9)
     }
 
+    // Frame deltas that are exact multiples of the step must not lose steps to rounding.
+    func testExactMultipleDeltasDoNotLoseSteps() {
+        var ts = FixedTimestep(hz: 60)
+        var steps = 0
+        for _ in 0..<30 { steps += ts.advance(by: 1.0 / 30) }
+        XCTAssertEqual(steps, 60)
+    }
+
     // Time carries over between calls until a whole step has accumulated.
     func testTimeAccumulatesAcrossCalls() {
         var ts = FixedTimestep(hz: 10)

@@ -451,7 +451,7 @@ final class ScenePasses {
             enc.setVertexSlice(state.instances, index: BufferIndex.instances)
             enc.setVertexSlice(state.staticIndices, index: BufferIndex.instanceIndices)
             enc.setVertexSlice(state.joints, index: BufferIndex.joints)
-            enc.setFragmentSampler(r.samplers.anisotropicRepeat, index: 0)
+            enc.setFragmentSamplerState(r.samplers.anisotropicRepeat, index: 0)
             encodeCasters(enc, frame: frame, state: state, resources: r, include: nil)
             enc.endEncoding()
             Profiler.shared.updateRenderCounters { $0.renderPasses += 1 }
@@ -548,7 +548,7 @@ final class ScenePasses {
             enc.setVertexSlice(state.instances, index: BufferIndex.instances)
             enc.setVertexSlice(state.staticIndices, index: BufferIndex.instanceIndices)
             enc.setVertexSlice(state.joints, index: BufferIndex.joints)
-            enc.setFragmentSampler(r.samplers.anisotropicRepeat, index: 0)
+            enc.setFragmentSamplerState(r.samplers.anisotropicRepeat, index: 0)
             encodeCasters(enc, frame: frame, state: state, resources: r, include: { reaches($0, slice) })
             enc.endEncoding()
             Profiler.shared.updateRenderCounters { $0.renderPasses += 1 }
@@ -787,7 +787,7 @@ final class ScenePasses {
         enc.setVertexSlice(state.instances, index: BufferIndex.instances)
         enc.setFragmentSlice(state.instances, index: BufferIndex.instances)
         enc.setVertexSlice(state.joints, index: BufferIndex.joints)
-        enc.setFragmentSampler(r.samplers.anisotropicRepeat, index: 0)
+        enc.setFragmentSamplerState(r.samplers.anisotropicRepeat, index: 0)
     }
 
     /// Lights, clusters, probes and the IBL / shadow / RT / AO textures for forward shading.
@@ -808,7 +808,7 @@ final class ScenePasses {
         enc.setFragmentTexture(l.probes, index: TextureIndex.probes)
         enc.setFragmentTexture(l.localShadows, index: TextureIndex.localShadows)
         enc.setFragmentSlice(state.localMatrices, index: BufferIndex.localShadowMatrices)
-        enc.setFragmentSampler(r.samplers.shadowCompare, index: 1)
+        enc.setFragmentSamplerState(r.samplers.shadowCompare, index: 1)
     }
 
     private func bindMaterial(_ enc: any MTLRenderCommandEncoder, _ id: AssetID?, resources r: SceneResources) {

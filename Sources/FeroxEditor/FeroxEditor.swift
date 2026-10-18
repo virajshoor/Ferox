@@ -319,7 +319,7 @@ final class EditorController: Game {
         }
         let dirty = session.isDirty ? " (edited)" : ""
         status.text = "\(session.sceneName)\(dirty) · \(String(describing: session.state)) · \(session.sceneEntities.count) entities · "
-            + String(format: "%.1f ms CPU, %.1f ms GPU", host.renderer.statistics.cpuMilliseconds, host.renderer.statistics.gpuMilliseconds)
+            + String(format: "%.1f ms CPU, %.1f ms GPU", host.renderer.statistics.cpuMilliseconds, host.renderer.statistics.gpuMilliseconds ?? 0)
     }
 
     private func updateOrbitCamera(_ input: InputState, dt: Float, overPanel: Bool, typing: Bool) {
@@ -369,7 +369,7 @@ final class EditorController: Game {
         debug.arrow(from: p, to: p + m.transformDirection(Vec3(1, 0, 0)).normalized, Color(1, 0.2, 0.2, 1))
         debug.arrow(from: p, to: p + m.transformDirection(Vec3(0, 1, 0)).normalized, Color(0.2, 1, 0.2, 1))
         debug.arrow(from: p, to: p + m.transformDirection(Vec3(0, 0, 1)).normalized, Color(0.3, 0.5, 1, 1))
-        if let mesh = world.get(MeshRenderer.self, e)?.mesh, let bounds = session.engine.assets.mesh(mesh)?.value.bounds,
+        if let mesh = world.get(MeshRenderer.self, e)?.mesh, let bounds = session.engine.assets.mesh(mesh)?.value?.bounds,
            !bounds.isEmpty {
             debug.box(bounds, transform: m, Color(1, 0.6, 0.1, 1))
         }

@@ -56,7 +56,7 @@ public final class AVAudioBackend: AudioBackend, @unchecked Sendable {
     private var environments: [AudioBus: AVAudioEnvironmentNode] = [:]
     private var busSettings: [AudioBus: BusSettings] = [:]
     private let lock = NSLock()
-    private var observer: NSObjectProtocol?
+    private var observer: (any NSObjectProtocol)?
     private var clock: Double = 0
     public var memoryBudgetBytes = defaultAudioMemoryBudget
     public private(set) var decodedBytes = 0

@@ -148,6 +148,7 @@ public final class AssetDatabase: @unchecked Sendable {
             options: [.skipsHiddenFiles, .skipsPackageDescendants])
         else { return changes }
         var seen = Set<String>()
+        var materials: [(url: URL, id: AssetID)] = []
         for case let url as URL in enumerator {
             let rel = safePath.relativePath(for: url) ?? url.lastPathComponent
             if rel.hasPrefix(".ferox-cache") || rel.hasPrefix(".build") { enumerator.skipDescendants(); continue }
@@ -184,6 +185,21 @@ public final class AssetDatabase: @unchecked Sendable {
                 byPath[rel] = meta.id
             }
             if existing == nil { changes.added.append(meta.id) } else if contentChanged { changes.modified.append(meta.id) }
+            if kind == .material { materials.append((url, meta.id)) }
+        }
+        // Materials reference textures by id, which may only have been indexed later in this scan.
+        for m in materials {
+            guard var e = entry(m.id) else { continue }
+            let deps = discoverDependencies(url: m.url, kind: .material, relative: e.path)
+            if deps == e.meta.dependencies { continue }
+            e.meta.dependencies = deps
+            let updated = e
+            lock.locked { entries[m.id] = updated }
+            if writesMetaFiles {
+                let enc = JSONEncoder()
+                enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+                if let d = try? enc.encode(updated.meta) { try? d.write(to: m.url.appendingPathExtension("meta"), options: .atomic) }
+            }
         }
         lock.locked {
             for (path, id) in byPath where !seen.contains(path) {

@@ -20,7 +20,7 @@ public final class MacInputBackend: NSObject, HapticsProvider {
     private var lastAxes: [Int: [GamepadAxis: Float]] = [:]
     private var hapticEngines: [Int: CHHapticEngine] = [:]
     private var nextID = 1
-    private var observers: [NSObjectProtocol] = []
+    private var observers: [any NSObjectProtocol] = []
 
     public init(input: InputSystem) {
         self.input = input

@@ -134,7 +134,7 @@ final class ReflectionProbes {
             Log.error("Render", "Could not resize reflection probes to \(size)²: \(error)")
             failedFaceSize = size  // do not retry the same size every frame
             // Keep the face targets matching the textures still in use.
-            try? targets.ensure(RenderTargets.Config(renderWidth: faceSize, renderHeight: faceSize,
+            _ = try? targets.ensure(RenderTargets.Config(renderWidth: faceSize, renderHeight: faceSize,
                                                      outputWidth: faceSize, outputHeight: faceSize,
                                                      msaaSamples: 1, temporalHistory: false, hiz: false))
         }

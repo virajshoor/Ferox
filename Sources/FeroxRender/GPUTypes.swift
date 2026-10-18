@@ -309,7 +309,7 @@ public struct RTUniforms {
 }
 
 /// Constant material values for reflection-ray hits, indexed by acceleration-structure instance.
-public struct RTInstanceMaterial {
+public struct RTInstanceMaterial: Sendable {
     public var albedoRoughness = Vec4(1, 1, 1, 0.5)
     public var emissiveMetallic = Vec4.zero
     public init() {}

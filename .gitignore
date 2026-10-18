@@ -43,3 +43,4 @@ BenchmarkResults/*.local.json
 
 # Node.js
 node_modules/
+dist.zip

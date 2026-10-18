@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Swift Engine Ferox — Open-Source Metal Game Engine for macOS & Apple Silicon</title>
+  <meta name="description" content="Swift Engine Ferox is an open-source, Metal-native game engine for macOS and Apple Silicon, written in Swift. 2D and 3D, ray tracing, physics and an editor.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://swengine.net/">
+  <meta name="theme-color" content="#0B0A0F">
+  <meta name="color-scheme" content="dark">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Swift Engine Ferox">
+  <meta property="og:title" content="Swift Engine Ferox — Open-Source Metal Game Engine for macOS & Apple Silicon">
+  <meta property="og:description" content="Swift Engine Ferox is an open-source, Metal-native game engine for macOS and Apple Silicon, written in Swift. 2D and 3D, ray tracing, physics and an editor.">
+  <meta property="og:url" content="https://swengine.net/">
+  <meta property="og:image" content="https://swengine.net/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Swift Engine Ferox logo and tagline: Forged in Swift. Fired by Metal.">
+  <meta property="og:locale" content="en_GB">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Swift Engine Ferox — Open-Source Metal Game Engine for macOS & Apple Silicon">
+  <meta name="twitter:description" content="Swift Engine Ferox is an open-source, Metal-native game engine for macOS and Apple Silicon, written in Swift. 2D and 3D, ray tracing, physics and an editor.">
+  <meta name="twitter:image" content="https://swengine.net/assets/og-image.png">
+  <meta name="twitter:image:alt" content="Swift Engine Ferox logo and tagline: Forged in Swift. Fired by Metal.">
+
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+  <link rel="manifest" href="/assets/site.webmanifest">
+  <link rel="preload" href="/assets/css/style.css" as="style">
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://swengine.net/#software",
+        "name": "Swift Engine Ferox",
+        "alternateName": "Ferox",
+        "description": "Swift Engine Ferox is an open-source, Metal-native game engine for macOS and Apple Silicon, written in Swift. 2D and 3D, ray tracing, physics and an editor.",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS 14+",
+        "license": "https://www.apache.org/licenses/LICENSE-2.0",
+        "isAccessibleForFree": true,
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "url": "https://swengine.net/",
+        "sameAs": [
+          "https://github.com/virajshoor/Ferox"
+        ],
+        "codeRepository": "https://github.com/virajshoor/Ferox",
+        "programmingLanguage": [
+          "Swift",
+          "Metal Shading Language"
+        ]
+      },
+      {
+        "@type": "SoftwareSourceCode",
+        "@id": "https://swengine.net/#source",
+        "name": "Swift Engine Ferox",
+        "alternateName": "Ferox",
+        "description": "Swift Engine Ferox is an open-source, Metal-native game engine for macOS and Apple Silicon, written in Swift. 2D and 3D, ray tracing, physics and an editor.",
+        "codeRepository": "https://github.com/virajshoor/Ferox",
+        "programmingLanguage": [
+          "Swift",
+          "Metal Shading Language"
+        ],
+        "license": "https://www.apache.org/licenses/LICENSE-2.0",
+        "url": "https://swengine.net/"
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://swengine.net/#website",
+        "name": "Swift Engine Ferox",
+        "alternateName": "Ferox",
+        "url": "https://swengine.net/",
+        "inLanguage": "en-GB",
+        "description": "Swift Engine Ferox is an open-source, Metal-native game engine for macOS and Apple Silicon, written in Swift. 2D and 3D, ray tracing, physics and an editor."
+      }
+    ]
+  }
+  </script>
+  <script>document.documentElement.classList.add('js');</script>
+  <noscript><style>.loader{display:none!important}.js .reveal{opacity:1;transform:none}</style></noscript>
+</head>
+<body>
+
+<!-- Shared logo symbol. Kept off-screen (not display:none) so the gradient renders. -->
+<svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="fx-ember" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF8A3D"/>
+      <stop offset="0.5" stop-color="#F05138"/>
+      <stop offset="1" stop-color="#B4235A"/>
+    </linearGradient>
+  </defs>
+  <symbol id="fx-mark" viewBox="0 0 120 120">
+    <path fill="url(#fx-ember)" fill-rule="evenodd" d="M60 8L104 34V86L60 112L16 86V34Z M40 36H80V48H52V60H74V71H52V86H40Z"/>
+    <path fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="2" stroke-linejoin="round" d="M16 34L60 8L104 34"/>
+  </symbol>
+</svg>
+
+<!-- Loading screen: hidden by main.js on load or after 2.5 s -->
+<div class="loader" id="loader" role="status" aria-label="Loading Swift Engine Ferox">
+  <svg class="loader-logo" viewBox="0 0 120 120" aria-hidden="true" focusable="false">
+    <path class="loader-stroke" pathLength="1" d="M60 8L104 34V86L60 112L16 86V34Z" fill="none" stroke="url(#fx-ember)" stroke-width="2.5" stroke-linejoin="round"/>
+    <path class="loader-fill" fill="url(#fx-ember)" fill-rule="evenodd" d="M60 8L104 34V86L60 112L16 86V34Z M40 36H80V48H52V60H74V71H52V86H40Z"/>
+  </svg>
+  <p class="loader-label">Forging Ferox</p>
+</div>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <nav class="nav" aria-label="Primary">
+    <a class="brand" href="/" aria-label="Swift Engine Ferox home">
+      <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><use href="#fx-mark"/></svg>
+      <span class="brand-name">Ferox</span>
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu">
+      <span class="nav-toggle-bars" aria-hidden="true"></span>
+    </button>
+    <ul class="nav-menu" id="nav-menu">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#apple-silicon">Apple Silicon</a></li>
+      <li><a href="#quick-start">Quick start</a></li>
+      <li><a href="#tools">Tools</a></li>
+      <li><a href="#modules">Modules</a></li>
+      <li><a class="nav-cta" href="https://github.com/virajshoor/Ferox">GitHub</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main">
+
+  <!-- Hero -->
+  <section class="hero" aria-labelledby="hero-title">
+    <canvas class="hero-canvas" aria-hidden="true"></canvas>
+    <div class="container hero-inner">
+      <p class="badges">
+        <span class="badge badge-open"><span class="badge-dot" aria-hidden="true"></span>Open source · Apache 2.0</span>
+        <span class="badge">Pre-release 0.1.0</span>
+      </p>
+      <h1 id="hero-title" class="hero-title">
+        <span class="hero-title-line">Swift Engine</span>
+        <span class="shimmer">Ferox</span>
+      </h1>
+      <p class="hero-tagline">Forged in Swift. Fired by Metal.</p>
+      <p class="hero-sub">The open-source game engine for Apple Silicon.</p>
+      <p class="hero-copy">Ferox is a Metal-native game engine for macOS, written in Swift. 2D and 3D, physically based rendering, hybrid ray tracing, MetalFX upscaling, physics and an editor, all in small Swift modules you can read.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/virajshoor/Ferox">View on GitHub</a>
+        <a class="btn btn-ghost" href="#quick-start">Quick start</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section" id="features" aria-labelledby="features-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow">Features</p>
+        <h2 id="features-title">Open source, and everything a small or medium game needs.</h2>
+        <p class="lead">Ferox provides the parts a small or medium 2D or 3D game normally needs, and every part is open source under the Apache License 2.0.</p>
+      </div>
+      <ul class="feature-grid">
+        <li class="feature reveal">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M13 7h8M7 13v8"/></svg></div>
+            <h3>2D rendering</h3>
+            <p>Batched sprites, shapes and chunk-cached tilemaps, 2D lights with normal maps, sprite masks, parallax and pixel-perfect cameras.</p>
+          </article>
+        </li>
+        <li class="feature reveal">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg></div>
+            <h3>Physically based 3D</h3>
+            <p>Clustered PBR with metallic-roughness materials (glTF compatible), skinned meshes, LOD, cascaded shadows and image-based lighting.</p>
+          </article>
+        </li>
+        <li class="feature reveal">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></div>
+            <h3>Hybrid ray tracing</h3>
+            <p>Ray-traced shadows, reflections and ambient occlusion where the GPU supports them, with raster fallbacks.</p>
+          </article>
+        </li>
+        <li class="feature reveal">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M4 20L20 4M14 4h6v6M10 20H4v-6"/></svg></div>
+            <h3>MetalFX upscaling</h3>
+            <p>The Ferox temporal upscaler, MetalFX spatial and temporal upscaling, dynamic resolution and quality presets.</p>
+          </article>
+        </li>
+        <li class="feature reveal">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 7.5L11 16M16 7.5L13 16M8.5 6h7"/></svg></div>
+            <h3>Entity-component-system</h3>
+            <p>A sparse-set ECS with hierarchy, a fixed-timestep loop with interpolation, events and a job system.</p>
+          </article>
+        </li>
+        <li class="feature reveal">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M4 20C8 4 16 4 20 20"/><circle cx="12" cy="6" r="2"/></svg></div>
+            <h3>Physics in 2D and 3D</h3>
+            <p>Rigid bodies with sequential impulses, joints, triggers, queries and a character controller.</p>
+          </article>
+        </li>
+        <li class="feature reveal">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"/></svg></div>
+            <h3>Audio, UI and animation</h3>
+            <p>Spatial audio, retained-mode UI, animation clips and state machines, and CPU and GPU particles.</p>
+          </article>
+        </li>
+        <li class="feature reveal">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg></div>
+            <h3>Editor</h3>
+            <p>FeroxEditor offers a hierarchy, inspector, Play, Pause, Step and Stop, snapshot undo and redo, and scene files.</p>
+          </article>
+        </li>
+        <li class="feature reveal">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5v4M12 11.5L5.5 17M12 11.5l6.5 5.5"/></svg></div>
+            <h3>Networking foundations</h3>
+            <p>Transport, reliable channels and snapshot replication. Scoped as foundations, not a finished multiplayer stack.</p>
+          </article>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Apple Silicon -->
+  <section class="section section-alt" id="apple-silicon" aria-labelledby="silicon-title">
+    <div class="container split">
+      <div class="reveal">
+        <p class="eyebrow">Apple Silicon</p>
+        <h2 id="silicon-title">Built for Apple Silicon</h2>
+        <p class="lead">Ferox renders only through Metal and avoids cross-platform abstraction layers, so the renderer can use what the hardware offers.</p>
+        <ul class="check-list">
+          <li>Unified memory</li>
+          <li>Tile memory for transient attachments</li>
+          <li>Argument buffers</li>
+          <li>Metal ray tracing</li>
+          <li>MetalFX</li>
+        </ul>
+        <p class="muted">When a feature is unavailable, Ferox checks for it at run time and falls back cleanly.</p>
+      </div>
+      <div class="platform-card reveal">
+        <div class="table-wrap">
+          <table>
+            <caption class="sr-only">Platform support</caption>
+            <thead>
+              <tr><th scope="col">Platform</th><th scope="col">Status</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">macOS 14+, Apple Silicon</th><td>Primary target: full renderer, ray tracing and MetalFX where the GPU supports them.</td></tr>
+              <tr><th scope="row">macOS 14+, Intel with a Metal GPU</th><td>Intended to work, with features chosen by run-time capability checks.</td></tr>
+              <tr><th scope="row">Linux</th><td>The platform-independent modules build and are tested in CI. No renderer, window or audio. Headless mode works.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="notice"><strong>Pre-release.</strong> The Swift sources and Metal shaders have been syntax-checked but not yet compiled, run or profiled on Apple hardware. Expect compile errors on the first build, and please report them. This site publishes no benchmark figures, because none have been recorded.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick start -->
+  <section class="section" id="quick-start" aria-labelledby="qs-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow">Quick start</p>
+        <h2 id="qs-title">Clone, build and run.</h2>
+        <p class="lead">You need macOS 14 or later and Xcode 15.3 or later, which provides Swift 5.10. Apple Silicon is recommended.</p>
+      </div>
+      <div class="code-panel reveal">
+        <div class="code-bar">
+          <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="code-title">Terminal</span>
+          <button class="copy-btn" id="copy-btn" type="button">Copy</button>
+        </div>
+        <pre class="code"><code id="qs-code"><span class="k">git</span> clone https://github.com/virajshoor/Ferox.git
+cd Ferox
+<span class="k">swift</span> build
+<span class="k">swift</span> test
+<span class="k">swift</span> run HelloFerox</code></pre>
+      </div>
+      <p class="sr-only" role="status" id="copy-status" aria-live="polite"></p>
+      <p class="muted note">Every example also runs headless, without a window. This mode works on Linux too: <code>swift run HelloFerox --headless --frames 120</code></p>
+    </div>
+  </section>
+
+  <!-- Tools -->
+  <section class="section section-alt" id="tools" aria-labelledby="tools-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow">Tools</p>
+        <h2 id="tools-title">Editor, diagnostics and benchmarks.</h2>
+      </div>
+      <ul class="feature-grid">
+        <li class="feature reveal">
+          <article class="card">
+            <h3>FeroxEditor</h3>
+            <p>Hierarchy, inspector, gizmos, Play and Stop, undo, and opening and saving <code>.fxscene</code> files. It is still a basic editor, with no viewport picking and a fixed toolbar layout.</p>
+            <p class="cmd"><code>swift run FeroxEditor</code></p>
+          </article>
+        </li>
+        <li class="feature reveal">
+          <article class="card">
+            <h3>FeroxDiag</h3>
+            <p>Reports the GPU's capabilities and which features each quality preset enables, with an optional offscreen render smoke test.</p>
+            <p class="cmd"><code>swift run FeroxDiag --render</code></p>
+          </article>
+        </li>
+        <li class="feature reveal">
+          <article class="card">
+            <h3>FeroxBenchmarks</h3>
+            <p>Repeatable CPU and offscreen GPU benchmarks with JSON output. Run them in release mode on your own machine. No results are published here.</p>
+            <p class="cmd"><code>swift run -c release FeroxBenchmarks --quick</code></p>
+          </article>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Modules -->
+  <section class="section" id="modules" aria-labelledby="modules-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow">Modules</p>
+        <h2 id="modules-title">Small Swift modules you can use on their own.</h2>
+        <p class="lead">Importing <code>Ferox</code> gives you every module. The individual modules can also be used on their own. Most of them do not need a GPU.</p>
+      </div>
+      <ul class="module-list">
+        <li class="reveal"><code>FeroxMath</code><span>Vectors, matrices, quaternions, colour, geometry, transforms and random numbers.</span></li>
+        <li class="reveal"><code>FeroxCore</code><span>Time, events, jobs, logging, profiler, JSON values, handles and safe paths.</span></li>
+        <li class="reveal"><code>FeroxScene</code><span>ECS world, hierarchy, system scheduler and scene serialisation.</span></li>
+        <li class="reveal"><code>FeroxPhysics</code><span>2D and 3D rigid bodies, joints, queries and a character controller.</span></li>
+        <li class="reveal"><code>FeroxAnimation</code><span>Animation clips and animator, tweens, timelines, and CPU and GPU particles.</span></li>
+        <li class="reveal"><code>FeroxInput</code><span>Keys, gamepads, action maps and contexts, and input recording and playback.</span></li>
+        <li class="reveal"><code>FeroxAssets</code><span>Asset manager and database, glTF 2.0 import, and PNG and JPEG decoding.</span></li>
+        <li class="reveal"><code>FeroxRender</code><span>Metal renderer: frame graph, passes, lighting, post-processing, ray tracing and 2D batching.</span></li>
+        <li class="reveal"><code>FeroxUI</code><span>Controls, layout anchors, draw lists, text and fonts.</span></li>
+        <li class="reveal"><code>FeroxAudio</code><span>Audio model and the AVFoundation backend.</span></li>
+        <li class="reveal"><code>FeroxNet</code><span>Transport, connections, peers, replication and message coding.</span></li>
+        <li class="reveal"><code>Ferox</code><span>Umbrella module: Engine, Game, GameLauncher and the editor core. Re-exports every module.</span></li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div>
+      <a class="brand" href="/" aria-label="Swift Engine Ferox home">
+        <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><use href="#fx-mark"/></svg>
+        <span class="brand-name">Swift Engine Ferox</span>
+      </a>
+      <p class="muted small">An open-source, Metal-native game engine for macOS, written in Swift. Pre-release 0.1.0.</p>
+    </div>
+    <nav aria-label="Footer">
+      <ul class="footer-links">
+        <li><a href="https://github.com/virajshoor/Ferox">GitHub repository</a></li>
+        <li><a href="#quick-start">Quick start</a></li>
+        <li><a href="#modules">Modules</a></li>
+      </ul>
+    </nav>
+    <div class="small">
+      <p>Open source under the <a href="https://github.com/virajshoor/Ferox">Apache License 2.0</a>.</p>
+      <p><a href="https://swengine.net/">swengine.net</a></p>
+      <p class="muted">Ferox collects no telemetry and sends no data anywhere.</p>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/main.js" defer></script>
+</body>
+</html>

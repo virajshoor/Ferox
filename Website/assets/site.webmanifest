@@ -1,0 +1,23 @@
+{
+  "name": "Swift Engine Ferox",
+  "short_name": "Ferox",
+  "description": "An open-source, Metal-native game engine for macOS, written in Swift.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "browser",
+  "background_color": "#0B0A0F",
+  "theme_color": "#0B0A0F",
+  "icons": [
+    {
+      "src": "/assets/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

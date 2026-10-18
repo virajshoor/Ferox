@@ -18,7 +18,7 @@ The most important limitation is the first one: nothing in Ferox has been verifi
 
 ## 1. Verification status
 
-- **Limitation: no hardware verification yet.** No macOS or Swift toolchain was available while these documents were written. The Metal renderer, the macOS CI job and every rendering result have not been checked on a Mac. The Linux job covers only the portable modules, as [25-Platform-Support.md](25-Platform-Support.md) describes.
+- **Limitation: no hardware verification yet.** The package has been built, and all 491 tests run and passed, with Swift 6.1.3 on Linux. No Mac was available. The Metal renderer, the macOS CI job and every rendering result have not been checked on a Mac. The Linux job covers only the portable modules, as [25-Platform-Support.md](25-Platform-Support.md) describes.
 - **Limitation: MetalFX upscaling is unverified on hardware.** Its code paths and the fallbacks in [24-Graphics-Settings-and-Presets.md](24-Graphics-Settings-and-Presets.md) follow the resolver's rules. How they behave on a real device is not known.
 - No benchmark numbers, frame rates or timings are quoted anywhere in these documents, because none have been measured. The method is in [21-Performance.md](21-Performance.md).
 

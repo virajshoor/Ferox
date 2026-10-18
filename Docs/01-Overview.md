@@ -131,11 +131,11 @@ Hardware requirements and build instructions are in [02-Getting-Started.md](02-G
 
 ## 7. What is and is not verified
 
-This documentation was written from the source code of this repository snapshot. The environment used to write it had no Swift toolchain and no Mac with a Metal device. The following statements therefore hold:
+This documentation was written from the source code of this repository snapshot. The package was later built and tested with Swift 6.1.3 on Linux. No Mac with a Metal device was available. The following statements therefore hold:
 
-- **Not built.** No build of the package was run against this snapshot, so compile errors, manifest errors and link errors are not ruled out.
-- **Not run.** No example was run, in a window or headless. No frame was rendered.
-- **Not tested.** The test targets exist (see [04-Building-and-Testing.md](04-Building-and-Testing.md)) but have never been run. No test result is cited.
+- **Built on Linux only.** Every target builds with Swift 6.1.3 on Linux. Code behind `#if canImport(Metal)`, AppKit or AVFoundation is compiled out there, so the macOS build may still show errors.
+- **Run headless only.** `HelloFerox --headless --frames 120` runs on Linux. No window was opened and no frame was rendered.
+- **Tested on Linux.** All 491 tests in the test targets (see [04-Building-and-Testing.md](04-Building-and-Testing.md)) pass on Linux. Tests that need Metal have not run.
 - **Not measured.** No benchmark result, frame time or memory figure is given in any document of this series. The benchmark tool exists, but its output has not been recorded here. See [21-Performance.md](21-Performance.md).
 - **Not checked on hardware.** Every rendering, lighting, upscaling and ray-tracing behaviour described in sections 07 to 12 is derived from the Swift and Metal source. None has been observed on a Mac. Statements about hardware tiers repeat what the source comments say, and are marked as such where they appear.
 - **Source-level only.** Where a document describes an algorithm, it describes what the code does. It does not claim that the output is correct or that it is efficient.

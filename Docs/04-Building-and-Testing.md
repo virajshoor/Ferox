@@ -56,7 +56,7 @@ The package has no external dependencies, so there is no resolution step. Metal 
 | `FeroxRenderTests` | `FeroxRender`, `Ferox` | The CPU side of the renderer: render maths, uniforms, dynamic resolution, tessellation, debug drawing, sprite batching, scene extraction |
 | `FeroxIntegrationTests` | `Ferox` | Engine lifecycle, editor session (undo, Play/Stop, save and load), launcher |
 
-None of these tests needs a GPU, so all seven can run on Linux. **No test has yet been run:** no Swift toolchain was available while they were written, so they have been syntax-checked and checked against the source only. Expect some to need fixing on the first run.
+None of these tests needs a GPU, so all seven can run on Linux. All 491 tests pass with Swift 6.1.3 on Linux. They have not yet been run on a Mac.
 
 ## 4. Running tests
 

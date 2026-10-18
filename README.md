@@ -2,7 +2,11 @@
 
 # Ferox
 
-**Swift Engine Ferox: a Metal-native game engine for macOS, written in Swift.**
+**Swift Engine Ferox: forged in Swift, fired by Metal.**
+
+The open-source game engine for macOS and Apple Silicon.
+
+**[swengine.net](https://swengine.net)** · [Documentation](Docs/01-Overview.md) · [Quick start](#quick-start)
 
 2D and 3D · physically based rendering · hybrid ray tracing · temporal upscaling · physics · editor
 
@@ -16,11 +20,11 @@
 ---
 
 > [!IMPORTANT]
-> **Project status: pre-release (0.1.0, unreleased).** Ferox was written without access to a Mac
-> or a Swift toolchain. The Swift sources and Metal shaders have been syntax-checked, but **they
-> have not yet been compiled, run or profiled on Apple hardware**. There are no screenshots and
-> no performance figures here, because none have been measured. The CI badge above shows the
-> real state of the latest build. Expect compile errors on the first build. Please report them.
+> **Project status: pre-release (0.1.0, unreleased).** With Swift 6.1.3 on Linux, every target
+> builds and all 491 tests pass, and `HelloFerox --headless` runs. The Metal renderer and the
+> macOS-only code (AppKit, AVFoundation, MetalFX) are compiled out on Linux, so they have **not yet
+> been compiled or run on a Mac**. There are no render screenshots and no performance figures
+> here, because none have been measured on Apple hardware. Please report any build errors.
 
 ## Contents
 
@@ -37,7 +41,7 @@
 
 ## Why Ferox
 
-Swift Engine Ferox, or Ferox for short, is built for Apple Silicon. It renders only through Metal and avoids cross-platform abstraction layers, so the renderer can use what the hardware offers:
+Swift Engine Ferox, or Ferox for short, is an open-source engine (Apache 2.0) built for Apple Silicon. It renders only through Metal and avoids cross-platform abstraction layers, so the renderer can use what the hardware offers:
 
 - unified memory;
 - tile memory for transient attachments;

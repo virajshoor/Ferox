@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `Website/`: the static site for swengine.net, with a landing page, a 404 page, Open Graph and JSON-LD metadata, a sitemap and a web manifest. Package it with `cd Website && zip -r ../dist.zip . -x README.md`.
 - The project's full name, Swift Engine Ferox, now appears in the README, the overview, CONTRIBUTING, SECURITY, NOTICE and `Package.swift`. Code names (package, modules, tools) are unchanged.
 - Shadows for point and spot lights with `castsShadows`. They are budgeted by the new `ShadowSettings.localShadowSlices` (default 12; a spot light takes one slice, a point light six) and `localResolution` (default 512), nearest lights first, and planned by `LocalShadowPlanner`.
 - `TransportSecurity.preSharedKey(identity:passphrase:)`: DTLS 1.2 with a pre-shared key for `UDPTransport`. Untested on hardware.
@@ -22,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- First build with a real Swift compiler (6.1.3, Linux): fixed compile errors in `SceneManager`, `Collision3D`, `AssetDatabase`, `RenderScene`, the examples and `EngineTests`. All 491 tests pass on Linux.
+- `FrameClock.tick(delta:)` dropped the first frame's delta, and rounding error could drop a fixed step. Fixed steps are now frame-rate independent.
 - `ShadowSoftness.hard` rendered the same as `.pcf`. It now takes a single comparison.
 - The audio memory budget (`MemoryBudget.audioBytes`) was not enforced. A clip that would exceed it is now streamed instead of decoded.
 - `Engine.shutdown()` left voices playing until the backend was released. It now stops them all.

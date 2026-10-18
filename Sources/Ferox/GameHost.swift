@@ -25,6 +25,9 @@ public final class GameHost: NSObject {
     public let view: GameView
     private let inputBackend: MacInputBackend
     private var appDelegate: AppDelegate?
+    /// Called every frame after `Engine.tick()` and before rendering — the place for
+    /// host-level drawing such as editor gizmos (`renderer.debugDraw`).
+    public var onFrame: ((FrameTime) -> Void)?
 
     /// Creates a host without starting the application loop (embedding, the editor).
     public init(engine: Engine, frame: NSRect? = nil) throws {
@@ -68,16 +71,20 @@ public final class GameHost: NSObject {
         }
     }
 
-    /// Creates the application, runs `game` and returns when the window closes. Fatal
+    /// Creates the application, runs `game` and returns when the window closes.
+    /// `configure` runs after the host exists and before `Game.setup` (the editor uses it
+    /// to install its panels and gizmo hook). Fatal
     /// startup errors (no Metal device, broken asset folder, `Game.setup` throwing) are
     /// logged and shown in an alert, and the process exits with status 1.
-    public static func run(_ game: any Game, configuration: EngineConfiguration = EngineConfiguration()) {
+    public static func run(_ game: any Game, configuration: EngineConfiguration = EngineConfiguration(),
+                           configure: ((GameHost) throws -> Void)? = nil) {
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
         let host: GameHost
         do {
             let engine = try Engine(configuration: configuration)
             host = try GameHost(engine: engine)
+            try configure?(host)
             try engine.start(game)
         } catch {
             Log.error("Engine", "Startup failed: \(error)")
@@ -143,6 +150,7 @@ extension GameHost: MTKViewDelegate {
         engine.viewportPoints = Vec2(Float(view.bounds.width), Float(view.bounds.height))
         engine.ui.backingScale = Float(window.backingScaleFactor)
         let time = engine.tick()
+        onFrame?(time)
         // The drawable is acquired as late as possible: after simulation, before encoding.
         if let drawable = view.currentDrawable {
             renderer.render(world: engine.world, to: RenderOutput(texture: drawable.texture, drawable: drawable),

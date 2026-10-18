@@ -103,11 +103,16 @@ public final class Engine {
     /// Set by `requestQuit()`; the host closes the window at the end of the frame.
     public private(set) var quitRequested = false
     public private(set) var isShutDown = false
+    /// Edit mode: game hooks and systems that do not opt in with `runsInEditMode` are
+    /// skipped, so the scene can be edited without simulating it. Starts from
+    /// `configuration.isEditMode`; the editor toggles it for Play and Stop.
+    public var isEditMode: Bool
 
     /// Creates the engine and its subsystems. Throws if the asset root is unusable.
     public init(configuration: EngineConfiguration = EngineConfiguration()) throws {
         self.configuration = configuration
         graphics = configuration.graphics
+        isEditMode = configuration.isEditMode
         Engine.registerBuiltinComponents()
 
         world = World()
@@ -211,7 +216,7 @@ public final class Engine {
         let (ft, steps) = delta.map { clock.tick(delta: $0) } ?? clock.tick()
         time = ft
         frameStatistics.add(ft.unscaledDelta)
-        let edit = configuration.isEditMode
+        let edit = isEditMode
 
         Profiler.shared.beginFrame()
         Profiler.shared.scope("Engine.Frame") {

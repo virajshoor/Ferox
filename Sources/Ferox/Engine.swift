@@ -90,6 +90,14 @@ public final class Engine {
     public private(set) var time = FrameTime()
     /// Rolling frame-time history (unscaled seconds) for the profiler overlay and FeroxDiag.
     public private(set) var frameStatistics = FrameStatistics()
+    /// Live graphics settings. Changing them (a quality menu, a benchmark sweep) notifies
+    /// the host through `onGraphicsChanged`, which applies them to the renderer before the
+    /// next frame. Headless engines simply store the value.
+    public var graphics: GraphicsSettings {
+        didSet { if graphics != oldValue { onGraphicsChanged?(graphics) } }
+    }
+    /// Set by the host (`GameHost`) to apply `graphics` changes.
+    public var onGraphicsChanged: ((GraphicsSettings) -> Void)?
     /// Viewport size in points, set by the host before each tick (UI layout).
     public var viewportPoints = Vec2(1280, 720)
     /// Set by `requestQuit()`; the host closes the window at the end of the frame.
@@ -99,6 +107,7 @@ public final class Engine {
     /// Creates the engine and its subsystems. Throws if the asset root is unusable.
     public init(configuration: EngineConfiguration = EngineConfiguration()) throws {
         self.configuration = configuration
+        graphics = configuration.graphics
         Engine.registerBuiltinComponents()
 
         world = World()

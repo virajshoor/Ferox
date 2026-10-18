@@ -31,7 +31,7 @@ public final class GameHost: NSObject {
         self.engine = engine
         let config = engine.configuration
         do {
-            renderer = try Renderer(settings: config.graphics, assets: engine.assets,
+            renderer = try Renderer(settings: engine.graphics, assets: engine.assets,
                                     shaderDirectory: config.shaderDirectory)
         } catch {
             throw EngineError.rendererUnavailable("\(error)")
@@ -59,6 +59,13 @@ public final class GameHost: NSObject {
         applyFramePacing()
         window.contentView = view
         window.delegate = self
+        engine.onGraphicsChanged = { [weak self] settings in
+            guard let self else { return }
+            MainActor.assumeIsolated {
+                self.renderer.settings = settings
+                self.applyFramePacing()
+            }
+        }
     }
 
     /// Creates the application, runs `game` and returns when the window closes. Fatal

@@ -17,7 +17,7 @@ jobs:
     name: macOS build and test
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Select Xcode 15.4
         run: |
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:5.10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Show Swift version
         run: swift --version
@@ -57,7 +57,7 @@ jobs:
     name: Markdown links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check relative links
         uses: lycheeverse/lychee-action@v1

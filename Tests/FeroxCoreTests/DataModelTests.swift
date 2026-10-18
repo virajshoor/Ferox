@@ -122,6 +122,25 @@ final class SafePathTests: XCTestCase {
         let safe = SafePath(root: base)
         XCTAssertNil(safe.relativePath(for: URL(fileURLWithPath: "/usr/bin")))
     }
+
+    // readFile rejects a file over the byte limit before reading it, and reads one within it.
+    func testReadFileEnforcesSizeLimit() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ferox-\(UUID().uuidString).bin")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data(repeating: 7, count: 64).write(to: url)
+        XCTAssertEqual(DecodeLimits.fileSize(at: url), 64)
+        XCTAssertEqual(try DecodeLimits(maxFileBytes: 64).readFile(at: url).count, 64)
+        XCTAssertThrowsError(try DecodeLimits(maxFileBytes: 63).readFile(at: url)) { error in
+            XCTAssertEqual(error as? DecodeLimitError, .fileTooLarge(path: url.lastPathComponent, size: 64, limit: 63))
+        }
+    }
+
+    // A missing file is reported as a read error, not as a size violation.
+    func testReadFileMissingFileThrows() {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ferox-missing-\(UUID().uuidString)")
+        XCTAssertNil(DecodeLimits.fileSize(at: url))
+        XCTAssertThrowsError(try DecodeLimits.default.readFile(at: url)) { XCTAssertNil($0 as? DecodeLimitError) }
+    }
 }
 
 final class JSONValueTests: XCTestCase {

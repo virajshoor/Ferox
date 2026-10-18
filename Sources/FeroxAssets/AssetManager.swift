@@ -174,8 +174,9 @@ public final class AssetManager: @unchecked Sendable {
     private func sourceData(_ id: AssetID) throws -> (Data, URL) {
         guard let db = database, let url = db.url(for: id) else { throw AssetError.notFound(id.rawValue) }
         let d: Data
-        do { d = try Data(contentsOf: url, options: .mappedIfSafe) } catch { throw AssetError.notFound(url.path) }
-        guard d.count <= limits.maxFileBytes else { throw AssetError.limitExceeded(url.lastPathComponent, reason: "file too large") }
+        do { d = try limits.readFile(at: url) } catch let e as DecodeLimitError {
+            throw AssetError.limitExceeded(url.lastPathComponent, reason: e.description)
+        } catch { throw AssetError.notFound(url.path) }
         return (d, url)
     }
 

@@ -182,7 +182,7 @@ enum FeroxBenchmarks {
                 return roots * 4
             }
         },
-        Benchmark(name: "physics2d.pile(500).60steps", unit: "body-steps/s") { quick in
+        Benchmark(name: "physics2d.pile.60steps", unit: "body-steps/s") { quick in
             let n = quick ? 200 : 500
             let engine = makeEngine(physics2D: true, physics3D: false)
             let ground = engine.world.createEntity(named: "Ground")
@@ -197,7 +197,7 @@ enum FeroxBenchmarks {
                 return n * 60
             }
         },
-        Benchmark(name: "physics3d.pile(500).60steps", unit: "body-steps/s") { quick in
+        Benchmark(name: "physics3d.pile.60steps", unit: "body-steps/s") { quick in
             let n = quick ? 200 : 500
             let engine = makeEngine(physics2D: false, physics3D: true)
             let ground = engine.world.createEntity(named: "Ground")

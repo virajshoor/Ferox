@@ -21,7 +21,7 @@ import Metal
 ///
 /// Limitations: a fixed face size (`faceSize`, ignoring `ReflectionProbe.resolution`),
 /// at most `maxProbes` probes, and the innermost containing probe wins (no blending
-/// between overlapping probes). See Docs/07-3D-Rendering.md.
+/// between overlapping probes). See Docs/08-Rendering-3D.md.
 final class ReflectionProbes {
     static let maxProbes = 16
     static let faceSize = 128

@@ -113,7 +113,7 @@ Each frame, when the feature is on:
 
 The scale is applied to the render size, after the upscaling render scale. The statistics record it as `RenderFrameStatistics.dynamicScale`.
 
-A second type, also called `DynamicResolutionController`, is declared in `Sources/FeroxCore/Capabilities.swift`. It uses a different algorithm, with quantisation to 1/64 steps and proportional correction. The renderer does not use that type. Its name is the same as the renderer's type, which is an ambiguity in the source. Inside `FeroxRender`, the renderer's own type is the one used.
+`FeroxRenderTests` (`UniformsTests.swift`) covers these rules, including the cool-down and the handling of invalid timings.
 
 ```swift
 var graphics = GraphicsSettings()
@@ -150,7 +150,6 @@ With `automaticTemporal`, the renderer uses MetalFX temporal where it is support
 - **Limitation: MetalFX temporal has a minimum input scale.** The source uses 0.5 per axis. A lower requested scale is raised.
 - **Limitation: temporal upscaling needs motion vectors and jitter.** Without them, the temporal modes cannot reconstruct detail correctly. The renderer produces both when a temporal mode is in use.
 - **Limitation: dynamic resolution reacts late.** It uses the previous completed frame's GPU time, and waits 30 frames after each change.
-- **Limitation: two types share one name.** `DynamicResolutionController` exists in both `FeroxCore` and `FeroxRender`. Only the `FeroxRender` type is used.
 - **Limitation: the MetalFX fallback is permanent.** Once a scaler fails, the Ferox upscaler is used until the renderer is recreated.
 - **Limitation: dynamic scale is bounded.** It cannot go below `minScale` or above `maxScale`. When dynamic resolution is on with `native` upscaling, the resolver adds a spatial upscaler, so the feature is not silently inactive.
 - **Limitation: no measured quality or cost.** See [21-Performance.md](21-Performance.md).

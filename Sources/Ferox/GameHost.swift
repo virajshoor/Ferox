@@ -71,7 +71,8 @@ public final class GameHost: NSObject {
         }
     }
 
-    /// Creates the application, runs `game` and returns when the window closes.
+    /// Creates the application and runs `game`. Closing the window quits the application
+    /// (the process ends), so code after this call does not run.
     /// `configure` runs after the host exists and before `Game.setup` (the editor uses it
     /// to install its panels and gizmo hook). Fatal
     /// startup errors (no Metal device, broken asset folder, `Game.setup` throwing) are

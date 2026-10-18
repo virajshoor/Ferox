@@ -2,7 +2,7 @@
 //
 // Ferox — a Metal-based game engine for macOS.
 //
-// Module layout (see Docs/04-Architecture.md for the full dependency graph):
+// Module layout (see Docs/03-Architecture.md for the full dependency graph):
 //
 //   FeroxMath ─┬─ FeroxCore ─┬─ FeroxScene ─┬─ FeroxPhysics
 //              │             │              ├─ FeroxAnimation

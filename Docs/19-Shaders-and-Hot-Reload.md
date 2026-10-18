@@ -180,7 +180,6 @@ let skinned = try shaders.function("meshVertex", variant: ShaderVariant(skinning
 - **No shader debugging tools.** The repository has no shader profiler or capture helper.
 - **Ray-tracing shaders need hardware.** The `RayTracing` module compiles only where the device supports ray tracing, and that path is not verified on any device.
 - **MetalFX availability is a capability check.** Support for spatial and temporal MetalFX is reported through the device capabilities (`supportsMetalFXSpatial` and `supportsMetalFXTemporal`). Those paths are unverified on hardware.
-- **A stale comment.** The comment above the function constants in `Common.metal` refers to `ShaderLibrary.VariantKey`. No such type exists. The Swift type is `ShaderVariant`.
 
 ## 11. Validation status
 

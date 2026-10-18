@@ -180,7 +180,6 @@ Each field is described in [05-Engine-Lifecycle.md](05-Engine-Lifecycle.md). Qua
 - **Limitation: nothing has been built or run in this snapshot.** The commands in this document are taken from the manifest and the sources. They have not been executed. See [01-Overview.md](01-Overview.md), section 7.
 - **Limitation: windowed mode is macOS only.** The renderer and `GameHost` need AppKit and Metal.
 - **Limitation: a shader compile error appears at run time.** The Metal sources are compiled by the renderer when it starts. See [19-Shaders-and-Hot-Reload.md](19-Shaders-and-Hot-Reload.md).
-- **Limitation: a declared target has no sources.** `FeroxEditor` is declared in `Package.swift`, but its source directory is absent from this snapshot. Commands that build every product, such as `swift build`, may therefore fail until that directory exists.
 - **Limitation: Xcode version.** The manifest requires Swift 5.10. CI selects Xcode 15.4. The two are not stated consistently across the repository.
 
 ## 9. Related documents

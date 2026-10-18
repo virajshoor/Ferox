@@ -62,7 +62,7 @@ See [11-Ray-Tracing.md](11-Ray-Tracing.md) for the budget rules, and [24-Graphic
   - **Plain UDP is unencrypted and unauthenticated.** `UDPTransport` can wrap traffic in DTLS when `dtls: true` is passed. That option is off by default. The transport's doc comment says that game-level validation is still needed when DTLS is on.
   - **The handshake is not authentication.** It deters spoofed and flooded connection requests, and nothing more. See [section 6 of 26-Security.md](26-Security.md#6-networking).
   - **Message and packet sizes are fixed.** A message payload is limited to 1024 bytes, a packet payload to 1150 bytes, and a UDP datagram to 1400 bytes. Larger data has to be split by the game.
-  - **Snapshots carry at most 128 objects.** `SnapshotMessage.maxObjects` is 128.
+  - **Snapshots carry at most 22 objects each.** `SnapshotMessage.maxObjects` is 22, so a full snapshot fits the 1024-byte message limit. `SnapshotMessage.split` divides larger sets across messages; there is no delta compression.
   - **A server holds at most 16 clients by default.** `NetConfig.maxClients` is 16.
   - **Client input is untrusted.** The server should validate each `InputMessage` before using it, for example by clamping movement vectors.
   - **Interpolation is client-side and bounded.** `SnapshotInterpolator` renders remote objects 0.1 seconds in the past by default. It extrapolates for at most 0.25 seconds when snapshots run out.
@@ -82,7 +82,6 @@ The items below are plans. They are based on gaps that the source records or tha
 - **Editor viewport picking.** Select entities by clicking them in the viewport.
 - **More glTF features.** The importer's header lists what it rejects or skips: sparse accessors, morph target rendering (weights are imported only as animation channels), non-triangle primitives, Draco and meshopt compression, and `KHR_texture_transform`. Any of these could be supported in a later version.
 - **Stronger transport security.** Make DTLS a documented option for real deployments, and consider authenticated messages on top of the handshake.
-- **Correct stale references.** Some source comments refer to documents that are not in this repository: `Docs/07-3D-Rendering.md` in `ReflectionProbes.swift`, `Docs/08-Ray-Tracing.md` in `RayTracingContext.swift`, `Docs/11-Anti-Aliasing.md` and `Docs/12-MetalFX-Upscaling.md` in `Capabilities.swift`, and `Docs/26-Networking.md` in `Transport.swift`. The matching documents here are [08-Rendering-3D.md](08-Rendering-3D.md), [11-Ray-Tracing.md](11-Ray-Tracing.md), [10-Post-Processing-and-Anti-Aliasing.md](10-Post-Processing-and-Anti-Aliasing.md), [12-Upscaling-and-Dynamic-Resolution.md](12-Upscaling-and-Dynamic-Resolution.md) and [23-Networking.md](23-Networking.md).
 - **Physics.** The gaps in [13-Physics.md](13-Physics.md), section 14, include continuous collision detection and 3D convex hulls. Those are candidates for later work as well.
 
 ## 9. Related documents

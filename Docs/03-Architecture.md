@@ -100,7 +100,7 @@ Three consequences follow from this order:
 | `World` | `Engine`, or a test | Entity slots, component storages, resources. | `SystemScheduler` holds the world weakly. |
 | `SystemScheduler` | `Engine` | Systems, sorted by phase and order. | Calls `flushDeferred()` after each system. |
 | `AssetManager` | `Engine` | Asset handles and the optional asset database. | Also stored as a world resource. |
-| `GameHost` | `GameLauncher.main`, or an embedding host | `Engine`, `Renderer`, window, view, input backend. | `@MainActor`. Lives for the duration of `GameHost.run`, which returns when the window closes. |
+| `GameHost` | `GameLauncher.main`, or an embedding host | `Engine`, `Renderer`, window, view, input backend. | `@MainActor`. Lives for the duration of `GameHost.run`, which does not return: closing the window ends the process. |
 | `Renderer` | `GameHost` | Device, queue, shader library, caches, render targets, post-processor, ray-tracing context. | Caches are released by `purgeCaches()`. |
 | `EditorSession` | The editor, not `Engine` | The engine it drives, selection, undo history. | Uses the edit-mode flag. See [22-Editor.md](22-Editor.md). |
 

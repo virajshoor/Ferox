@@ -269,7 +269,7 @@ if let cam = engine.activeCamera() {
 - **Headless output is text.** `runHeadless` prints one summary line. It does not write frames, traces or metrics.
 - **Windowed mode is macOS only.** `GameHost` and the window path are compiled only where AppKit and MetalKit exist. Other platforms run headless.
 - **The examples are unverified.** They are not built in this review, and their window behaviour has not been seen.
-- **`GameHost.run` returns through the application loop.** Its doc comment says it returns when the window closes, but the loop ends by terminating the application, so code after the call should not be relied on.
+- **`GameHost.run` does not return.** Closing the window terminates the application, so code after the call does not run. Put clean-up in `Game.shutdown(engine:)`.
 - **No render hook on `Game`.** The game hooks do not include a rendering step. `GameHost.onFrame` is the host-level hook, documented for drawing such as editor gizmos.
 - **Audio shutdown is partial.** `Engine.shutdown()` updates the audio backend but does not stop voices. See [16-Audio.md](16-Audio.md).
 - **Frame statistics are simple.** `frameStatistics` is a rolling average. Detailed timing is in [21-Performance.md](21-Performance.md).

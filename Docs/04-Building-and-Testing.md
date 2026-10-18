@@ -1,6 +1,6 @@
 # Building and Testing
 
-This document describes how to build Ferox, which test targets the package declares and which of them exist in this snapshot, what the continuous integration (CI) workflows check, how the two command-line tools `FeroxDiag` and `FeroxBenchmarks` are used, and how Metal shaders are validated. The commands are those in `Package.swift`, `.github/workflows/ci.yml`, `.github/workflows/benchmarks.yml`, `CONTRIBUTING.md` and the tool sources. None of them has been run against this snapshot. See [01-Overview.md](01-Overview.md), section 7.
+This document describes how to build Ferox, which test targets the package declares and what they cover, what the continuous integration (CI) workflows check, how the two command-line tools `FeroxDiag` and `FeroxBenchmarks` are used, and how Metal shaders are validated. The commands are those in `Package.swift`, `.github/workflows/ci.yml`, `.github/workflows/benchmarks.yml`, `CONTRIBUTING.md` and the tool sources. None of them has been run against this snapshot. See [01-Overview.md](01-Overview.md), section 7.
 
 ## Contents
 
@@ -44,34 +44,31 @@ The package has no external dependencies, so there is no resolution step. Metal 
 
 ## 3. Test targets
 
-`Package.swift` declares seven test targets. The table shows which of them have a source directory in this snapshot.
+`Package.swift` declares seven test targets. Every one has sources under `Tests/`.
 
-| Test target | Depends on | Directory in this snapshot |
+| Test target | Depends on | Covers |
 | --- | --- | --- |
-| `FeroxMathTests` | `FeroxMath` | Absent |
-| `FeroxCoreTests` | `FeroxCore` | Absent |
-| `FeroxSceneTests` | `FeroxScene` | Absent |
-| `FeroxPhysicsTests` | `FeroxPhysics` | Present, **empty** |
-| `FeroxSubsystemTests` | `FeroxInput`, `FeroxAnimation`, `FeroxAssets`, `FeroxNet`, `FeroxUI`, `FeroxAudio` | Present, **empty** |
-| `FeroxRenderTests` | `FeroxRender`, `Ferox` | Absent |
-| `FeroxIntegrationTests` | `Ferox` | Absent |
+| `FeroxMathTests` | `FeroxMath` | Vectors, quaternions, matrices, geometry, colour, random numbers |
+| `FeroxCoreTests` | `FeroxCore` | Time, events, logging, graphics settings and the feature resolver, safe paths, decode limits, handle pools |
+| `FeroxSceneTests` | `FeroxScene`, `FeroxCore` | World, hierarchy and transforms, serialisation, systems, scene manager |
+| `FeroxPhysicsTests` | `FeroxPhysics`, `FeroxScene`, `FeroxCore` | Both physics worlds and the ECS bridge |
+| `FeroxSubsystemTests` | `FeroxInput`, `FeroxAnimation`, `FeroxAssets`, `FeroxNet`, `FeroxUI`, `FeroxAudio`, `FeroxScene`, `FeroxCore` | Input, animation and CPU particles, assets, networking, UI layout, audio maths and the silent backend |
+| `FeroxRenderTests` | `FeroxRender`, `Ferox` | The CPU side of the renderer: render maths, uniforms, dynamic resolution, tessellation, debug drawing, sprite batching, scene extraction |
+| `FeroxIntegrationTests` | `Ferox` | Engine lifecycle, editor session (undo, Play/Stop, save and load), launcher |
 
-Only two directories exist, and both are empty. The source comments in `FeroxPhysics`, `FeroxRender` and `FeroxScene` describe unit tests, for example "unit-tested on Linux" for the 2D batching rules. Those tests are not in this snapshot, so the claims they would support are not checked here.
-
-Because the manifest declares targets whose directories are absent, `swift test` may fail to load the package in this state. Whether SwiftPM rejects a manifest with a missing test directory has not been checked, since no Swift toolchain was available. If it does, restore the directories or remove the declarations before running tests.
-
-`CONTRIBUTING.md` states that GPU-backed tests need a Mac with a Metal device, so they cannot run on the Linux job.
+None of these tests needs a GPU, so all seven can run on Linux. **No test has yet been run:** no Swift toolchain was available while they were written, so they have been syntax-checked and checked against the source only. Expect some to need fixing on the first run.
 
 ## 4. Running tests
 
 ```sh
 swift test                                  # every test target that exists
 swift test --parallel                       # what the macOS CI job runs
-swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests"
+swift test --filter FeroxPhysicsTests       # one target
+swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests|FeroxSubsystemTests|FeroxRenderTests|FeroxIntegrationTests"
                                             # what the Linux CI job runs
 ```
 
-`CONTRIBUTING.md` requires that a pull request includes tests for new behaviour and that `swift test` passes locally. The rule applies to a checkout with the test directories present.
+`CONTRIBUTING.md` requires that a pull request includes tests for new behaviour and that `swift test` passes locally.
 
 ## 5. Continuous integration
 
@@ -84,14 +81,12 @@ The workflow runs on pushes to `main` and on every pull request. Concurrent runs
 | Job | Runner | Steps |
 | --- | --- | --- |
 | `build-and-test` | `macos-14` | Selects Xcode 15.4 if present, prints the Swift version, builds in debug, runs `swift test --parallel`, then builds in release. |
-| `linux-portable` | `ubuntu-latest`, container `swift:5.10` | Builds `FeroxMath` and `FeroxCore`, then runs the tests of `FeroxMathTests`, `FeroxCoreTests`, `FeroxSceneTests` and `FeroxPhysicsTests` by filter. |
+| `linux-portable` | `ubuntu-latest`, container `swift:5.10` | Builds the `Ferox` target without Metal, then runs all seven test targets by filter. |
 | `docs` | `ubuntu-latest` | Runs `lycheeverse/lychee-action` with `--offline --no-progress README.md "Docs/**/*.md"` and fails on any broken link. |
 
-Three points follow from the file as written:
+One point follows from the file as written:
 
-- **The Linux job names test targets that have no sources.** `FeroxMathTests`, `FeroxCoreTests` and `FeroxSceneTests` have no directory at all, and `FeroxPhysicsTests` is empty. The filter therefore runs nothing.
-- **The `docs` job names `README.md`, which is absent from this snapshot.** Lychee is given a path that does not exist, so the job cannot pass until the file is added.
-- **The `docs` job checks local links only.** With `--offline`, lychee does not check remote URLs, but it does check relative paths. Each relative link in `Docs/` must therefore point to a file that exists. Links to documents of this series that have not been written yet will fail the job until they exist.
+- **The `docs` job checks local links only.** With `--offline`, lychee does not check remote URLs, but it does check relative paths, so each relative link in `README.md` and `Docs/` must point to a file that exists.
 
 ### 5.2 `benchmarks.yml`
 
@@ -143,8 +138,8 @@ The CPU benchmarks, by name, are:
 | `ecs.create+destroy` | entities/s |
 | `ecs.forEach(Transform)` | components/s |
 | `transform.hierarchy` | entities/s |
-| `physics2d.pile(500).60steps` | body-steps/s |
-| `physics3d.pile(500).60steps` | body-steps/s |
+| `physics2d.pile.60steps` | body-steps/s |
+| `physics3d.pile.60steps` | body-steps/s |
 | `events.enqueue+flush` | events/s |
 | `math.mat4-multiply` | products/s |
 | `engine.tick(empty scene)` | ticks/s |
@@ -165,27 +160,25 @@ There is no separate shader validator in the repository, and the build does not 
 - **Where a development copy comes from.** Setting the environment variable `FEROX_SHADER_DIR`, or passing `shaderDirectory` through `EngineConfiguration`, makes the library read from that directory and enables hot reload. Without either, the sources are read from the module bundle, and hot reload is off.
 - **What a failure looks like.** The renderer logs the compiler output, keeps running with the previous library, and bumps `generation` when a module changes. It does not stop the game.
 
-`CONTRIBUTING.md` asks for a test that compiles a new shader or builds the pipeline that uses it. Those tests would belong to `FeroxRenderTests`, which is absent from this snapshot. Because the modules are compiled when a renderer is created, any run that creates a `Renderer`, such as the `Showcase3D` example or `FeroxDiag --render`, exercises the compile step. The macOS CI job would catch a compile error only if a test or a run creates a renderer.
+`CONTRIBUTING.md` asks for a test that compiles a new shader or builds the pipeline that uses it. No such test exists yet: `FeroxRenderTests` covers only CPU-side code. Because the modules are compiled when a renderer is created, any run that creates a `Renderer`, such as the `Showcase3D` example or `FeroxDiag --render`, exercises the compile step. The macOS CI job would catch a compile error only if a test or a run creates a renderer.
 
 The steps for adding a shader are in [19-Shaders-and-Hot-Reload.md](19-Shaders-and-Hot-Reload.md).
 
 ## 9. Code style
 
-- **Formatting.** `.swift-format` at the repository root defines the style. Check with `swift format lint --recursive Sources Tests`, and apply with `swift format format --in-place --recursive Sources Tests`. The commands are given in `CONTRIBUTING.md`. In this snapshot, `Tests` contains only two empty directories.
+- **Formatting.** `.swift-format` at the repository root defines the style. Check with `swift format lint --recursive Sources Tests`, and apply with `swift format format --in-place --recursive Sources Tests`. The commands are given in `CONTRIBUTING.md`.
 - **Indentation and line endings.** Four spaces, and LF line endings, as set in `.editorconfig`.
 - **Documentation.** Every public declaration has a `///` comment, as `CONTRIBUTING.md` requires.
 
 ## 10. Validation status
 
-- No build, test run, lint run or benchmark has been performed against this snapshot. The statements above describe what the files say.
+- No build, test run, lint run or benchmark has been performed. The statements above describe what the files say.
 - The benchmark names and the diagnostic outputs are taken from the tool sources.
-- Two test directories are empty, and five declared test targets have no directory.
 
 ## 11. Limitations
 
-- **Limitation: incomplete test suite.** Most declared test targets have no source in this snapshot. No test result is cited anywhere in this series.
-- **Limitation: `README.md` is missing.** The `docs` CI job refers to it.
-- **Limitation: the Linux job runs no real tests.** The filter names targets whose directories are absent, so the job checks only that the portable modules build.
+- **Limitation: the tests have not been run.** They were written without a toolchain. No test result is cited anywhere in this series.
+- **Limitation: no GPU tests.** Shaders and render passes are exercised only by running the examples or `FeroxDiag --render` on a Mac.
 - **Limitation: shader errors are found at run time.** There is no offline shader compile step in CI.
 - **Limitation: no benchmark figures are published here.** Use the tool, in release configuration, on the machine of interest.
 - **Limitation: CI benchmarks run on virtualised GPUs.** The workflow says so itself.

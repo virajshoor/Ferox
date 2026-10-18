@@ -2,7 +2,7 @@
 
 Ferox's in-game UI is a small retained element tree in the `FeroxUI` module. Each frame, `UIContext` lays the tree out, routes input (pointer, keyboard and controller), advances animations, and produces a backend-neutral `UIDrawList`. The Metal renderer turns that list into vertices in `UIBatcher` and draws it in the present pass. Apart from the Core Text font provider, the module is platform-independent Swift.
 
-The UI works in points with the origin at the top left. Conversion to pixels happens in the renderer, using `UIContext.scaleFactor` (the display's backing scale multiplied by the user's UI scale). Nothing in this document has been compiled or run on hardware. The Metal path in particular is unverified; see [Validation status](#15-validation-status).
+The UI works in points with the origin at the top left. Conversion to pixels happens in the renderer, using `UIContext.scaleFactor` (the display's backing scale multiplied by the user's UI scale). Nothing in this document has been compiled or run on hardware. The Metal path in particular is unverified; see [Validation status](#13-validation-status).
 
 The UI is separate from the ECS. Elements are reference types with identity, which matters for focus, hover and animation. They are not entities and not sprites. For the ECS side see [06-Scene-and-Entities.md](06-Scene-and-Entities.md). For the frame order that places `ui.update` and the draw call, see [05-Engine-Lifecycle.md](05-Engine-Lifecycle.md). Input sources and actions are described in [14-Input.md](14-Input.md).
 
@@ -134,7 +134,7 @@ Unknown tags are rendered literally. Malformed markup never fails. Closing tags 
 
 ## 8. Drawing and the draw list
 
-`UIContext.draw()` walks the tree in draw order (children sorted by `zIndex`, then insertion order) and appends commands to a `UIDrawList`. The list has four command kinds, plus clip push and pop:
+`UIContext.draw()` walks the tree in draw order (children sorted by `zIndex`, then insertion order) and appends commands to a `UIDrawList`. The list has three drawing command kinds, plus clip push and pop:
 
 - `rect(frame:color:bottomColor:cornerRadius:borderWidth:borderColor:)` for rounded rectangles with an optional vertical gradient and border.
 - `image(frame:texture:uv:tint:cornerRadius:)` for a textured quad.

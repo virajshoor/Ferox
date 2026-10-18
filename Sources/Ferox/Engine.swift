@@ -192,7 +192,8 @@ public final class Engine {
     /// Asks the host to stop after the current frame (e.g. from a "Quit" button).
     public func requestQuit() { quitRequested = true }
 
-    /// Calls `Game.shutdown`, unloads scenes and stops audio. Idempotent.
+    /// Calls `Game.shutdown`, unloads scenes and gives audio a final update. The audio
+    /// backend itself stops when the engine is released. Idempotent.
     public func shutdown() {
         guard !isShutDown else { return }
         isShutDown = true

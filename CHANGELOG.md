@@ -38,6 +38,11 @@ This version has not been released yet.
 ### Fixed
 
 - `RenderMath.groups` returned a wrong dispatch size when the group size was zero or negative.
+- `EventBus.flush` could loop without bound when handlers kept queuing events. Each flush now delivers at most `maxEventsPerFlush` events, carries the rest to the next flush, and ignores nested calls.
+- Scene files, glTF documents and asset sources were read fully before their size was checked. `DecodeLimits.readFile` now checks the size before reading.
+- `SnapshotMessage.maxObjects` was 128, which could never fit the 1024-byte message limit. It is now 22, and `SnapshotMessage.split` divides larger worlds across several messages.
+- Benchmark names no longer embed a count that did not match the workload.
+- Source comments that pointed at renamed documentation pages.
 
 ### Removed
 

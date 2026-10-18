@@ -94,7 +94,7 @@ public final class SceneManager {
 
     /// Registers a scene file.
     public func register(_ name: String, file: URL) {
-        providers[name] = { try SceneDocument.load(from: Data(contentsOf: file)) }
+        providers[name] = { try SceneDocument.load(from: DecodeLimits.default.readFile(at: file)) }
     }
 
     public var registeredScenes: [String] { providers.keys.sorted() }

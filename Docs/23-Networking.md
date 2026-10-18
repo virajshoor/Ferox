@@ -49,14 +49,14 @@ For the frame in which a game would poll the network, see [05-Engine-Lifecycle.m
 
 Two implementations exist:
 
-- **`LoopbackTransport`** is created by `LoopbackNetwork.makeTransport(port:host:)`. Transports on the same `LoopbackNetwork` address each other by endpoint. Time is supplied by the caller through `advance(to:)` or `advance(by:)`, so tests are deterministic. The network applies a `NetworkConditioner` to every datagram: a base latency, a random jitter, a loss probability and a duplication probability, all driven by a seeded PRNG. `NetworkConditioner.poorWiFi` is a preset of 60 ms latency, 15 ms jitter, 3 % loss and 0.5 % duplication. It is a configuration, not a measurement of any real link.
+- **`LoopbackTransport`** is created by `LoopbackNetwork.makeTransport(port:host:)`. Transports on the same `LoopbackNetwork` address each other by endpoint. Time is supplied by the caller through `advance(to:)` or `advance(by:)`, so tests are deterministic. The network applies a `NetworkConditioner` to every datagram: a base latency, a random jitter, a loss probability and a duplication probability, all driven by a seeded PRNG. `NetworkConditioner.poorWiFi` is a preset of 60 ms latency, 15 ms jitter, 3 % loss and 0.5 % duplication. Its doc comment in the source describes the link as about 120 ms ± 30 ms, which does not match the values, and the values are what the code uses. The preset is a configuration, not a measurement of any real link.
 - **`UDPTransport`** is built on `NWListener` and `NWConnection`. A server listens on a port, with `init(listenOn:dtls:)`, and creates one connection per remote endpoint. A client connects to one server, with `init(connectingTo:dtls:)`. Datagrams over 1400 bytes are dropped on both send and receive, and `maxDatagramSize` holds that value.
 
 The `dtls` flag builds the Network.framework parameters with DTLS, using default TLS options. The source does not set a local identity on the server, does not pin certificates and does not verify peers. Whether a DTLS session forms in this configuration has not been tested. Do not rely on `dtls: true` for confidentiality without first checking it on hardware.
 
 ## 3. Connections and channels
 
-`NetConnection` is one side of an established connection. It assigns sequence numbers to packets, records which packets have been acknowledged, retransmits reliable messages, and keeps the statistics in `NetStats`. It is internal to the server and client, and is reached through their public methods.
+`NetConnection` is one side of an established connection. It assigns sequence numbers to packets, records which packets have been acknowledged, retransmits reliable messages, and keeps the statistics in `NetStats`. The type is public, but the server and client create and drive it, and applications reach it through their `stats` members.
 
 Each message is sent on one of three channels, `NetChannel`:
 
@@ -131,11 +131,11 @@ Each message's payload must be at most `NetConnection.maxMessageSize`, which is 
 | 1 | `SnapshotMessage` | Server to client, meant for unreliable-sequenced. | A tick, a server time and up to 128 `ObjectState` values. Each object has a network ID, a position, a rotation and a velocity. |
 | 2 | `SpawnMessage` | Server to client, reliable. | A network ID, a prefab name (up to 128 bytes), an owner and a despawn flag. |
 | 3 | `InputMessage` | Client to server, unreliable. | A tick, a quantised move vector in [−1, 1] on each axis, and a 32-bit button mask. |
-| 4 | `TextMessage` | Either way, reliable. | Text, sent up to 512 characters and accepted up to 2048. |
+| 4 | `TextMessage` | Either way, reliable. | Text. The encoder writes at most 512 characters, and the decoder accepts at most 2048 bytes. |
 
 `ObjectState` is transform data only. The module does not know what a prefab is, so `SpawnMessage` carries a name, and the game must map that name to something it can create.
 
-`SnapshotInterpolator` runs on the client. It keeps up to 64 snapshots, ignores any that are not newer than the last one, and returns the state of each object at `serverTime − delay`, interpolating position and velocity linearly and rotation by slerp between the two snapshots that bracket that time. The default delay is 0.1 seconds. Objects missing from the earlier snapshot appear unchanged. If the requested time is past the newest snapshot, the interpolator extrapolates with the last velocity for at most `maxExtrapolation`, which defaults to 0.25 seconds.
+`SnapshotInterpolator` runs on the client. It keeps up to 64 snapshots, ignores any that are not newer than the last one, and returns the state of each object at `serverTime − delay`, interpolating position and velocity linearly and rotation by slerp between the two snapshots that bracket that time. The default delay is 0.1 seconds. An object that is missing from the earlier snapshot takes its state from the later one, and an object missing from the later snapshot is not returned. If the requested time is past the newest snapshot, the interpolator extrapolates with the last velocity for at most `maxExtrapolation`, which defaults to 0.25 seconds.
 
 The interpolator needs a server time. The module does not estimate the difference between the client's clock and the server's, so the game must supply one.
 
@@ -149,7 +149,7 @@ These values come from the source and set the practical size of what can be sent
 | Payload per packet | 1150 bytes (`NetConnection.maxPacketPayload`) |
 | Bytes per message | 1024 bytes (`NetConnection.maxMessageSize`) |
 | Reliable messages awaiting acknowledgement | 1024 (`maxPendingReliable`) |
-| Objects per snapshot | 128 (`SnapshotMessage.maxObjects`) |
+| Objects per snapshot | 22 (`SnapshotMessage.maxObjects`); send more with `SnapshotMessage.split(tick:serverTime:objects:)` |
 | Decoded string or blob length | 4096 by default (`NetReader.maxLength`) |
 
 The per-message and per-snapshot limits interact. Each object in a snapshot takes about 41 bytes: a one-byte identifier for small IDs, 12 bytes of position, 16 of rotation and 12 of velocity. The header takes about 13 bytes. A 1024-byte message therefore holds roughly 24 objects. A snapshot with more objects than that is larger than the message limit, and `NetConnection.send` drops it with a warning. The 128-object cap in `SnapshotMessage` is not reachable with the default message size. This is worked out from the encoding, not measured.
@@ -165,7 +165,7 @@ This section says precisely what the handshake protects against, and what it doe
 - An observer on the path can read the token, inject packets that pass the token check, and disconnect either side with a forged disconnect packet.
 - The token authenticates nothing about the player. The server assigns a `ClientID` sequentially. There are no accounts, keys or signatures.
 - Packets are not encrypted. Messages, including any game state, are readable on the wire.
-- Replay protection is limited to the 32-packet acknowledgement window. Recently seen sequence numbers are rejected as duplicates, and older ones are dropped as too old. A captured packet can be replayed only once it falls outside that window, and then it is dropped as too old. Other replays are not otherwise prevented.
+- Replay protection is limited to the 32-packet window of sequence numbers. A packet whose sequence number has already been seen is dropped, and a packet older than the window is dropped. A captured packet whose sequence number was never delivered, and which still falls inside the window, is accepted. Messages carry no nonce or timestamp, so there is no other replay protection.
 - Game-level validation is entirely the game's job. The `InputMessage` documentation says the server treats input as untrusted and should clamp it. The module quantises and bounds the values it decodes, but does not check game rules.
 
 Treat the transport as unencrypted and unauthenticated. The optional DTLS wrapper on `UDPTransport` is the only confidentiality mechanism in the module, and it is unverified. Do not send secrets, and do not trust client messages without checking them against game rules.
@@ -262,13 +262,12 @@ for (netID, state) in states {
 - **No compression beyond quantisation.** Only `InputMessage` uses quantised values.
 - **UDP is Apple-only.** `UDPTransport` requires Network.framework. The loopback transport is available everywhere.
 - **Single-threaded use.** Servers and clients are driven from one thread. Only the UDP receive path runs on another queue, and it hands datagrams over through a thread-safe queue.
-- **A stale reference in the source.** The `UDPTransport` documentation points readers to `Docs/26-Networking.md` for DTLS guidance. No such file exists. This document is `23-Networking.md`, and [26-Security.md](26-Security.md) is the security document.
 
 ## 12. Validation status
 
 This document was written from the source. No macOS machine or Swift toolchain was available while the engine was written. Nothing in `FeroxNet` has been compiled, and no packet has been sent over a socket or simulated through `LoopbackNetwork` in any run that this document reports. The latency and loss values in `NetworkConditioner.poorWiFi` are design presets, not measurements.
 
-The `Tests/` directory contains no tests for `FeroxNet`, although `Package.swift` declares `FeroxSubsystemTests` as depending on it. The bounds checks in the decoder, the handshake, the retransmission logic and the snapshot size limit are all unexercised. The DTLS path has not been tried on a device.
+`Tests/FeroxSubsystemTests/NetTests.swift` covers the reader and writer, decoder bounds, snapshot limits and splitting, the message registry, sequence wrap-around, reliable delivery, duplicate and malformed packets, the loopback transport and a client–server handshake. Those tests have not yet been run on a toolchain. The UDP and DTLS paths are not tested and have not been tried on a device.
 
 ## 13. Related documents
 

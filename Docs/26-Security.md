@@ -85,7 +85,7 @@ Two limits are not part of `DecodeLimits`:
 
 `AssetManager.limits` is a public property, so a game can change the asset limits. `DecodeLimits` is also a parameter of `SceneDocument.load`, `EditorSession.load` and `ImageDecoder.decode`.
 
-Some size checks run after the data has been read. `SceneManager` and `GLTFImporter.load(url:root:)` read the file with `Data(contentsOf:)` and check the size afterwards. `AssetManager` reads with `Data(contentsOf:options: .mappedIfSafe)` and checks afterwards. The limit therefore bounds decoding, not the initial read. The editor's scene load is the exception: it reads the file's size from the file system and checks it before the file is read.
+File reads check the size first. `AssetManager`, `GLTFImporter` (the main file and every external buffer or image) and `SceneManager` read through `DecodeLimits.readFile(at:)`, which asks the file system for the size, rejects a file over `maxFileBytes` with `DecodeLimitError.fileTooLarge` before reading it, memory-maps it where safe, and checks the size again after the read in case the file grew. The editor's scene load does its own size check before reading.
 
 ## 4. Scene documents
 
@@ -138,7 +138,7 @@ The networking code is in `Sources/FeroxNet`. Its protections are these.
 | Largest UDP datagram | 1400 bytes (`UDPTransport.maxDatagramSize`) | Larger datagrams are dropped. |
 | Default length cap in `NetReader` | 4096 bytes | Used when a caller does not pass its own limit. |
 | Reliable queue and reorder buffer | 1024 messages (`maxPendingReliable`) | Sends fail when the queue is full. |
-| Objects per snapshot | 128 (`SnapshotMessage.maxObjects`) | The encoder truncates, and the decoder rejects larger counts. |
+| Objects per snapshot | 22 (`SnapshotMessage.maxObjects`) | Sized so a full snapshot fits the 1024-byte message limit. The encoder truncates, and the decoder rejects larger counts. Use `SnapshotMessage.split` for more objects. |
 
 **Connection handling.** The handshake is request, challenge, response, accept. In the server, no per-client state is created until the challenge is answered, and challenges expire after a few seconds. The server's salt comes from the system's random number generator, and the source comment says that the salts "cannot be predicted by spoofers". The response must equal the XOR of the two salts. This check deters spoofed and flooded connection requests. It is not authentication, and it is not encryption.
 
@@ -194,7 +194,6 @@ Because the package has no dependencies, it has no registry credentials to prote
 
 - No fuzzing, penetration test or third-party review has been run on this snapshot.
 - The protections in this document are the ones the source implements. Their behaviour under hostile input has not been measured.
-- The `Data(contentsOf:)` reads described in [section 3](#3-decode-limits) mean a very large file is read into memory before the size check.
 - The network handshake is not authentication. Unencrypted UDP can be read and modified by anyone on the path, unless DTLS is enabled.
 - Decoding of images, and of the formats handled by ImageIO, relies on the operating system's decoders, which Ferox does not control.
 - Ferox does not check the integrity of assets or scenes beyond the rules listed above.

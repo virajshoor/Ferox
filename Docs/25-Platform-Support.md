@@ -95,7 +95,7 @@ The workflow is `.github/workflows/ci.yml`. It has three jobs.
 **Linux portable modules** runs in the `swift:5.10` container on `ubuntu-latest`. It runs:
 
 1. `swift build --target Ferox`, which builds the engine without Metal.
-2. `swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests|FeroxSubsystemTests|FeroxIntegrationTests"`. This filter leaves out `FeroxRenderTests`.
+2. `swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests|FeroxSubsystemTests|FeroxRenderTests|FeroxIntegrationTests"`, which runs all seven test targets. None of them needs a GPU.
 
 **Markdown links** runs lychee in offline mode over `README.md` and `Docs/**/*.md`, and fails on a broken relative link.
 
@@ -116,10 +116,8 @@ The editor needs Metal. Its launcher explains that and exits.
 ## 7. Limitations
 
 - Nothing has been built or run on macOS in the writing of this document. The Metal code paths, MetalFX, and the macOS CI job are unverified.
-- `FeroxRenderTests` is not run by the Linux job, so Linux cannot show that the renderer's portable tests pass.
 - The monospace text provider is a placeholder: it renders white boxes, as recorded in [28-Limitations-and-Roadmap.md](28-Limitations-and-Roadmap.md). Only platforms without CoreText use it.
 - The `Ferox` target depends on `FeroxRender`, so the Linux build of `Ferox` depends on the Metal-guarded files compiling to nothing. Whether that build succeeds has not been confirmed in this snapshot.
-- Some source comments link to documents that are not in this repository, such as `Docs/08-Ray-Tracing.md` and `Docs/26-Networking.md`. The sibling documents with the matching content are `11-Ray-Tracing.md` and `23-Networking.md`.
 
 ## 8. Validation status
 

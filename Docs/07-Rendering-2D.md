@@ -32,7 +32,7 @@ Inside the main HDR pass, the renderer encodes these steps in order:
 6. debug lines;
 7. the `afterTransparent` render hooks.
 
-The 2D layer therefore draws over the 3D scene of the same frame, and it goes through the same tone mapping, anti-aliasing and upscaling as 3D. A 2D game does not need a separate renderer, but it does need to choose a tone mapper. See section 12.
+The 2D layer therefore draws over the 3D scene of the same frame, and it goes through the same tone mapping, anti-aliasing and upscaling as 3D. A 2D game does not need a separate renderer, but it should choose a tone mapper. See section 12.
 
 ## 2. Components
 
@@ -85,7 +85,7 @@ A batch is a contiguous range of the index array, described by a `SpriteBatch`, 
 
 The shader `spriteVertex`, `spriteFragment` and `spriteMaskFragment` in `Sprite.metal` draws every batch. The file header says one pipeline per blend mode covers the whole 2D layer. The colour values are premultiplied linear.
 
-Batching is performed on the CPU, every frame, for every visible drawable. The source does not report a cost for it. The count of batches and vertices is available in `SpriteFrameData` and in `RenderFrameStatistics.spritesDrawn`.
+Batching is performed on the CPU, every frame, for every visible drawable. The source does not report a cost for it. `SpriteFrameData` holds the batches, vertices and indices of a frame, and `RenderFrameStatistics.spritesDrawn` counts the drawables that were drawn.
 
 ## 5. Sprites and atlases
 
@@ -106,7 +106,7 @@ The blend modes are `alpha`, `additive`, `multiply`, `premultiplied` and `opaque
 
 The filter is `nearest` or `linear`. For pixel art, use `nearest`. The default is `linear`.
 
-Textures are obtained through `AssetManager`, which caches them by asset id. See [18-Assets.md](18-Assets.md).
+Textures are obtained through `AssetManager`. See [18-Assets.md](18-Assets.md).
 
 ## 6. Shapes
 
@@ -267,7 +267,7 @@ With `.none`, the tone operator is a clamp, with no curve. The rest of the gradi
 - **Limitation: the camera viewport is not honoured.** `Camera.viewport` is not read by the renderer, so split-screen and picture-in-picture are not supported. Its comment in `RenderComponents.swift` describes intended use.
 - **Limitation: one camera per frame.** The renderer draws the highest-priority camera only. See [08-Rendering-3D.md](08-Rendering-3D.md).
 - **Limitation: CPU particles only in orthographic views.** A `ParticleEmitter` with `simulation` set to `.cpu` is drawn in the 2D layer only when the active camera is orthographic. GPU particles are not drawn by the 2D layer.
-- **Limitation: a mask must be sorted before its masked sprites.** The stencil is written in draw order, so a masked sprite drawn before its mask is not clipped.
+- **Limitation: a mask must be sorted before its masked sprites.** The stencil is written in draw order. A masked sprite drawn before its mask is not drawn at all, because the stencil is still clear when it is tested.
 
 ## 15. Related documents
 

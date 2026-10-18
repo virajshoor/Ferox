@@ -110,8 +110,8 @@ The CPU benchmarks are:
 | `ecs.create+destroy` | Creates and destroys entities with a `Transform`. |
 | `ecs.forEach(Transform)` | Iterates every `Transform` and changes its position. |
 | `transform.hierarchy` | Moves every root of a forest of four-level chains, the worst case for transform propagation. |
-| `physics2d.pile(500).60steps` | Simulates a pile of boxes for 60 steps. The name says 500 bodies, but quick runs use 200. |
-| `physics3d.pile(500).60steps` | The same, in 3D. The same quick-run difference applies. |
+| `physics2d.pile.60steps` | Simulates a pile of boxes for 60 steps: 500 bodies, or 200 in quick runs. The rate is per body, so the two are comparable only roughly. |
+| `physics3d.pile.60steps` | The same, in 3D. |
 | `events.enqueue+flush` | Queues and flushes events. |
 | `math.mat4-multiply` | Multiplies matrices in a loop. |
 | `engine.tick(empty scene)` | Ticks an engine with no content. |

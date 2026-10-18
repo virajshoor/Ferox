@@ -16,9 +16,13 @@ public struct ObjectState: Sendable, Hashable {
 }
 
 /// Server → client snapshot of replicated objects for one simulation tick (sent unreliable-sequenced).
+///
+/// One message must fit in `NetConnection.maxMessageSize` (1024 bytes). The header is 13
+/// bytes and an object takes at most 45 (a 5-byte net id plus 40 bytes of state), so at most
+/// 22 objects fit. Use `split(tick:serverTime:objects:)` to send larger sets as several messages.
 public struct SnapshotMessage: NetMessage, Hashable {
     public static let messageID: UInt16 = 1
-    public static let maxObjects = 128
+    public static let maxObjects = 22
     public var tick: UInt32
     public var serverTime: Double
     public var objects: [ObjectState]
@@ -51,6 +55,16 @@ public struct SnapshotMessage: NetMessage, Hashable {
             objs.append(ObjectState(netID: UInt32(id), position: p, rotation: q, velocity: v))
         }
         objects = objs
+    }
+
+    /// Splits `objects` into as many snapshots as needed, each within `maxObjects`, all with
+    /// the same tick and server time. An empty set gives one empty snapshot.
+    public static func split(tick: UInt32, serverTime: Double, objects: [ObjectState]) -> [SnapshotMessage] {
+        guard !objects.isEmpty else { return [SnapshotMessage(tick: tick, serverTime: serverTime, objects: [])] }
+        return stride(from: 0, to: objects.count, by: maxObjects).map {
+            SnapshotMessage(tick: tick, serverTime: serverTime,
+                            objects: Array(objects[$0..<min($0 + maxObjects, objects.count)]))
+        }
     }
 }
 

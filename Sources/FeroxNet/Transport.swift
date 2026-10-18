@@ -43,7 +43,7 @@ public struct NetworkConditioner: Sendable, Hashable {
         self.duplication = duplication
     }
     public static let perfect = NetworkConditioner()
-    /// A typical poor Wi-Fi link (≈ 120 ms ± 30 ms, 3 % loss).
+    /// A typical poor Wi-Fi link: 60 ms ± 15 ms each way (≈ 120 ms round trip), 3 % loss.
     public static let poorWiFi = NetworkConditioner(latency: 0.06, jitter: 0.015, loss: 0.03, duplication: 0.005)
 }
 
@@ -135,7 +135,7 @@ public final class LoopbackTransport: NetTransport, @unchecked Sendable {
 ///
 /// Transport security: plain UDP is unencrypted and unauthenticated. For production use,
 /// pass `dtls: true` to wrap traffic in DTLS (Network.framework `NWProtocolTLS`), and keep
-/// game-level validation regardless (see Docs/26-Networking.md).
+/// game-level validation regardless (see Docs/23-Networking.md).
 public final class UDPTransport: NetTransport, @unchecked Sendable {
     public private(set) var localEndpoint: NetEndpoint
     public static let maxDatagramSize = 1400

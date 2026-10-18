@@ -4,7 +4,7 @@
 // Every kernel writes a noisy, low-sample signal at `resolutionScale`; `rtTemporal` and
 // `rtAtrous` turn it into a stable image.
 //
-// Limitations (documented in Docs/08-Ray-Tracing.md):
+// Limitations (documented in Docs/11-Ray-Tracing.md):
 //  • Geometry is treated as opaque — alpha-tested foliage casts solid shadows.
 //  • Reflection hits are shaded with per-instance constant material values (no texture
 //    lookups at the hit point) and a sun + ambient term; this is a deliberate cost trade.

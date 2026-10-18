@@ -95,7 +95,7 @@ struct ProbeData {
 #define BUF_PROBES 10
 #define BUF_CASCADE 11
 
-// Function constants select shader variants (see ShaderLibrary.VariantKey).
+// Function constants select shader variants (see ShaderVariant in ShaderLibrary.swift).
 constant bool HAS_SKINNING [[function_constant(0)]];
 constant bool HAS_ALPHA_TEST [[function_constant(1)]];
 constant bool HAS_VERTEX_COLOR [[function_constant(2)]];

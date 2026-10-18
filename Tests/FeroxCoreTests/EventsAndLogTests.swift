@@ -98,6 +98,38 @@ final class EventBusTests: XCTestCase {
         XCTAssertEqual(count, 1)
         XCTAssertEqual(bus.queuedCount, 1)
     }
+
+    // A handler that keeps re-enqueuing cannot stall a flush: the overflow waits for the next one.
+    func testFlushIsCappedAndCarriesOverflow() {
+        let bus = EventBus()
+        bus.maxEventsPerFlush = 10
+        var delivered = 0
+        bus.subscribe(TestPing.self) { [unowned bus] _ in
+            delivered += 1
+            bus.enqueue(TestPing(value: 0))
+        }
+        bus.enqueue(TestPing(value: 0))
+        bus.flush()
+        XCTAssertEqual(delivered, 10)
+        XCTAssertEqual(bus.queuedCount, 1)
+        bus.flush()
+        XCTAssertEqual(delivered, 20)
+    }
+
+    // Calling flush from inside a handler does not deliver events twice.
+    func testNestedFlushIsIgnored() {
+        let bus = EventBus()
+        var delivered = 0
+        bus.subscribe(TestPing.self) { [unowned bus] _ in
+            delivered += 1
+            bus.flush()
+        }
+        bus.enqueue(TestPing(value: 1))
+        bus.enqueue(TestPing(value: 2))
+        bus.flush()
+        XCTAssertEqual(delivered, 2)
+        XCTAssertEqual(bus.queuedCount, 0)
+    }
 }
 
 final class ThreadSafeQueueTests: XCTestCase {

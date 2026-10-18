@@ -58,15 +58,32 @@ public final class EventBus {
 
     public func enqueue<E: Event>(_ event: E) { queued.append((ObjectIdentifier(E.self), event)) }
 
-    /// Delivers all queued events. Events enqueued during the flush are delivered in the same flush.
+    /// Upper bound on events delivered by one `flush()`. A handler that enqueues an event
+    /// every time it runs would otherwise keep a flush going forever; anything past the cap
+    /// is kept for the next flush and a warning is logged.
+    public var maxEventsPerFlush = 65_536
+
+    private var isFlushing = false
+
+    /// Delivers all queued events. Events enqueued during the flush are delivered in the same
+    /// flush, up to `maxEventsPerFlush`. A nested `flush()` from inside a handler does nothing.
     public func flush() {
+        guard !isFlushing else { return }
+        isFlushing = true
+        defer { isFlushing = false }
+        let limit = max(maxEventsPerFlush, 1)
         var i = 0
-        while i < queued.count {
+        while i < queued.count && i < limit {
             let (key, e) = queued[i]
             dispatch(key, e)
             i += 1
         }
-        queued.removeAll(keepingCapacity: true)
+        if i < queued.count {
+            Log.warning("Events", "flush delivered \(i) events and deferred \(queued.count - i) to the next flush")
+            queued.removeFirst(i)
+        } else {
+            queued.removeAll(keepingCapacity: true)
+        }
     }
 
     public var queuedCount: Int { queued.count }

@@ -101,7 +101,7 @@ public struct RenderFrameStatistics: Sendable, Hashable {
 /// thread). Limitations: one camera per frame (the highest-priority enabled camera),
 /// `Camera.viewport` and `Camera.renderTarget` are not yet honoured, and the sky is drawn
 /// only for perspective cameras (orthographic cameras show `clearColor`).
-/// See Docs/07-3D-Rendering.md and Docs/08-Render-Pipeline.md.
+/// See Docs/08-Rendering-3D.md and Docs/03-Architecture.md.
 public final class Renderer {
     public let renderDevice: RenderDevice
     public var device: any MTLDevice { renderDevice.device }

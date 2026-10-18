@@ -87,4 +87,34 @@ public struct DecodeLimits: Sendable, Hashable {
         self.maxNestingDepth = maxNestingDepth
     }
     public static let `default` = DecodeLimits()
+
+    /// Size of the file at `url` in bytes, or nil if it cannot be read.
+    public static func fileSize(at url: URL) -> Int? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue
+    }
+
+    /// Reads a file after checking its size against `maxFileBytes`, so an oversized file is
+    /// rejected before any of it is loaded. The data is memory-mapped where that is safe.
+    public func readFile(at url: URL) throws -> Data {
+        if let size = Self.fileSize(at: url), size > maxFileBytes {
+            throw DecodeLimitError.fileTooLarge(path: url.lastPathComponent, size: size, limit: maxFileBytes)
+        }
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        // The file may have grown between the size check and the read.
+        guard data.count <= maxFileBytes else {
+            throw DecodeLimitError.fileTooLarge(path: url.lastPathComponent, size: data.count, limit: maxFileBytes)
+        }
+        return data
+    }
+}
+
+/// Raised by `DecodeLimits.readFile(at:)`.
+public enum DecodeLimitError: Error, Equatable, CustomStringConvertible {
+    case fileTooLarge(path: String, size: Int, limit: Int)
+
+    public var description: String {
+        switch self {
+        case let .fileTooLarge(path, size, limit): "\(path) is \(size) bytes, over the \(limit)-byte limit"
+        }
+    }
 }

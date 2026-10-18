@@ -32,7 +32,9 @@ public struct GLTFImporter {
 
     public func load(url: URL, root: SafePath) throws -> ModelData {
         let data: Data
-        do { data = try Data(contentsOf: url) } catch { throw AssetError.notFound(url.path) }
+        do { data = try limits.readFile(at: url) } catch let e as DecodeLimitError {
+            throw AssetError.limitExceeded(url.lastPathComponent, reason: e.description)
+        } catch { throw AssetError.notFound(url.path) }
         let baseDir = root.relativePath(for: url.deletingLastPathComponent()) ?? ""
         return try load(data: data, name: url.deletingPathExtension().lastPathComponent, baseDirectory: baseDir, root: root)
     }
@@ -210,8 +212,9 @@ public struct GLTFImporter {
             let rel = baseDirectory.isEmpty ? decoded : baseDirectory + "/" + decoded
             let url: URL
             do { url = try root.resolve(rel) } catch { throw AssetError.invalidPath("\(uri) in \(name): \(error)") }
-            guard let d = try? Data(contentsOf: url) else { throw AssetError.dependencyMissing(name, dependency: rel) }
-            return d
+            do { return try limits.readFile(at: url) } catch let e as DecodeLimitError {
+                throw AssetError.limitExceeded(name, reason: e.description)
+            } catch { throw AssetError.dependencyMissing(name, dependency: rel) }
         }
 
         mutating func buffer(_ i: Int) throws -> Data {

@@ -39,7 +39,7 @@ struct RTInstanceDescriptor {
 ///   three `rtAtrous` iterations (steps 1, 2, 4) remove the remaining noise.
 ///
 /// Limitations: geometry is opaque, hit shading uses constant per-instance materials,
-/// and skinned meshes are excluded (see Docs/08-Ray-Tracing.md).
+/// and skinned meshes are excluded (see Docs/11-Ray-Tracing.md).
 final class RayTracingContext {
     /// Outputs consumed by the forward pass (nil = effect inactive this frame).
     struct Outputs {

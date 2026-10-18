@@ -77,7 +77,7 @@ The header comment of `Package.swift` states that every module except `FeroxRend
 
 | Name | Kind | Source | Purpose |
 | --- | --- | --- | --- |
-| `FeroxEditor` | Executable | `Sources/FeroxEditor` | Declared as a target. Its source directory is **not present** in this snapshot. |
+| `FeroxEditor` | Executable | `Sources/FeroxEditor` | The editor application (AppKit) built on `EditorSession`. See [22-Editor.md](22-Editor.md). |
 | `FeroxDiag` | Executable | `Sources/FeroxDiag` | Prints the detected GPU and how each quality preset resolves. See [04-Building-and-Testing.md](04-Building-and-Testing.md). |
 | `FeroxBenchmarks` | Executable | `Sources/FeroxBenchmarks` | Repeatable CPU and offscreen GPU benchmarks with optional JSON output. |
 | `HelloFerox` | Executable | `Examples/HelloFerox` | A lit, spinning cube on a plane. The smallest complete program. |
@@ -122,12 +122,10 @@ Hardware requirements and build instructions are in [02-Getting-Started.md](02-G
 | `Package.swift` | The package manifest. Declares every product and target, the Swift settings, and the macOS platform. |
 | `Sources/` | One directory per module, plus `Sources/Ferox` for the umbrella. `Sources/FeroxRender/Shaders` holds the Metal sources. |
 | `Examples/` | `HelloFerox`, `Platformer2D` and `Showcase3D`. Each is declared with an explicit `path` in the manifest. |
-| `Tests/` | Test directories. Only `Tests/FeroxPhysicsTests` and `Tests/FeroxSubsystemTests` exist, and both are empty. See section 7. |
+| `Tests/` | Seven XCTest targets, one per module group plus integration tests. See [04-Building-and-Testing.md](04-Building-and-Testing.md). |
 | `Docs/` | This documentation series. |
 | `.github/workflows/` | `ci.yml` for build, test and link checks, and `benchmarks.yml` for a manual benchmark run. |
 | `CHANGELOG.md`, `CONTRIBUTING.md` | Release history and contributor rules. |
-
-The snapshot has no `README.md`, although the documentation link check in `ci.yml` refers to one.
 
 ## 7. What is and is not verified
 
@@ -135,19 +133,17 @@ This documentation was written from the source code of this repository snapshot.
 
 - **Not built.** No build of the package was run against this snapshot, so compile errors, manifest errors and link errors are not ruled out.
 - **Not run.** No example was run, in a window or headless. No frame was rendered.
-- **Not tested.** Most declared test targets have no source directory in the snapshot (see [04-Building-and-Testing.md](04-Building-and-Testing.md)). No test result is cited.
+- **Not tested.** The test targets exist (see [04-Building-and-Testing.md](04-Building-and-Testing.md)) but have never been run. No test result is cited.
 - **Not measured.** No benchmark result, frame time or memory figure is given in any document of this series. The benchmark tool exists, but its output has not been recorded here. See [21-Performance.md](21-Performance.md).
 - **Not checked on hardware.** Every rendering, lighting, upscaling and ray-tracing behaviour described in sections 07 to 12 is derived from the Swift and Metal source. None has been observed on a Mac. Statements about hardware tiers repeat what the source comments say, and are marked as such where they appear.
 - **Source-level only.** Where a document describes an algorithm, it describes what the code does. It does not claim that the output is correct or that it is efficient.
 
-Two parts of the snapshot are incomplete. The `FeroxEditor` executable target is declared without a source directory. Several declared test targets have no directory. Whether the package loads in SwiftPM in this state has not been checked.
-
 ## 8. Limitations
 
 - **Limitation: no verification in this snapshot.** Section 7 applies to every document in this series.
-- **Limitation: incomplete package.** The `FeroxEditor` source directory and most test directories are absent, so `swift build` and `swift test` may not succeed on a clean checkout of this snapshot.
+- **Limitation: never compiled.** Expect compile errors on the first `swift build` and test failures on the first `swift test`.
 - **Limitation: Linux is partial.** Only the portable modules are built in CI on Linux. The renderer and the examples require macOS.
-- **Limitation: no UI for the editor in this snapshot.** `EditorSession` is the non-visual core. Its window and panels are in the missing `FeroxEditor` target.
+- **Limitation: a basic editor.** `FeroxEditor` has no viewport picking and a fixed toolbar layout. See [22-Editor.md](22-Editor.md).
 
 ## 9. Related documents
 

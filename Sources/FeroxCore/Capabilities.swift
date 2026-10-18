@@ -144,7 +144,7 @@ public struct ResolvedGraphics: Sendable, Hashable {
 
 /// Resolves `GraphicsSettings` against `DeviceCapabilities`.
 ///
-/// Rules (documented in Docs/11-Anti-Aliasing.md and Docs/12-MetalFX-Upscaling.md):
+/// Rules (documented in Docs/10-Post-Processing-and-Anti-Aliasing.md and Docs/12-Upscaling-and-Dynamic-Resolution.md):
 /// 1. MSAA sample counts are clamped to the highest supported count ≤ the request.
 /// 2. A temporal upscaler performs anti-aliasing itself, so TAA is folded into it and
 ///    MSAA is disabled (multisampled input is not accepted by temporal reconstruction).

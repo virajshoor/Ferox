@@ -91,11 +91,32 @@ final class NetTests: XCTestCase {
         var forged = NetWriter()
         forged.write(UInt32(1))
         forged.write(Double(0))
-        forged.writeVarUInt(129)
+        let forgedCount = SnapshotMessage.maxObjects + 1
+        forged.writeVarUInt(UInt64(forgedCount))
         var forgedReader = NetReader(forged.bytes)
         XCTAssertThrowsError(try SnapshotMessage(from: &forgedReader)) {
-            XCTAssertEqual($0 as? NetDecodeError, .lengthExceeded(129, max: 128))
+            XCTAssertEqual($0 as? NetDecodeError, .lengthExceeded(forgedCount, max: SnapshotMessage.maxObjects))
         }
+    }
+
+    /// A full snapshot with worst-case net ids still fits in one message.
+    func testFullSnapshotFitsMessageSize() {
+        let objects = (0..<SnapshotMessage.maxObjects).map {
+            ObjectState(netID: UInt32.max - UInt32($0), position: Vec3(1, 2, 3), rotation: .identity, velocity: Vec3(4, 5, 6))
+        }
+        var w = NetWriter()
+        SnapshotMessage(tick: .max, serverTime: 1e9, objects: objects).encode(&w)
+        XCTAssertLessThanOrEqual(w.bytes.count, NetConnection.maxMessageSize)
+    }
+
+    /// split keeps every object, in order, across messages within the cap.
+    func testSnapshotSplitCoversAllObjects() {
+        let objects = (0..<50).map { ObjectState(netID: UInt32($0), position: .zero, rotation: .identity) }
+        let parts = SnapshotMessage.split(tick: 7, serverTime: 1, objects: objects)
+        XCTAssertEqual(parts.count, 3)
+        XCTAssertTrue(parts.allSatisfy { $0.objects.count <= SnapshotMessage.maxObjects && $0.tick == 7 })
+        XCTAssertEqual(parts.flatMap(\.objects), objects)
+        XCTAssertEqual(SnapshotMessage.split(tick: 0, serverTime: 0, objects: []).count, 1)
     }
 
     /// Text messages are truncated to 512 characters on encode, and decoding rejects text over 2048 bytes.

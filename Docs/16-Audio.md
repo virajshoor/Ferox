@@ -202,7 +202,7 @@ let index = VoiceAllocator.choose(slots, priority: 1)   // 0: the lowest-priorit
 - **Audio budget not enforced.** `MemoryBudget.audioBytes` is set by `AssetManager` but no audio code reads it. The backend records decoded bytes with `MemoryTracker` under the category `audio`, and nothing evicts clips.
 - **The decode cap is a frame count.** The ten-minute limit is a fixed 28.8 million frames, which is ten minutes at 48 kHz and a little longer at lower rates.
 - **Bus reverb send is read at start.** Changing `reverbBlend` does not affect voices already playing.
-- **`Engine.shutdown()` does not stop voices.** Its doc comment says it stops audio, but it calls `audio.update(dt: 0)`. Voices stop when the backend is deinitialised.
+- **`Engine.shutdown()` does not stop voices.** It gives the backend a final `update(dt: 0)`. Voices stop when the backend is deinitialised. There is no stop-all call yet.
 - **Main thread only.** The backend is marked `@unchecked Sendable` and is not safe to call from other threads.
 - **Device-change recovery is untested.** Voices in flight are lost on a restart.
 - **Silent backend ignores volume and position.** Logic that depends on those values cannot be checked with it.

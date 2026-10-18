@@ -29,7 +29,7 @@ jobs:
           swift run -c release FeroxBenchmarks --quick --output BenchmarkResults/ci.json
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ferox-benchmarks-ci
           path: BenchmarkResults/ci.json

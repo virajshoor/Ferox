@@ -1,6 +1,6 @@
 // swift-tools-version:5.10
 //
-// Ferox — a Metal-based game engine for macOS.
+// Swift Engine Ferox (Ferox for short) — a Metal-based game engine for macOS.
 //
 // Module layout (see Docs/03-Architecture.md for the full dependency graph):
 //

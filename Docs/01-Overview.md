@@ -1,6 +1,6 @@
 # Overview
 
-Ferox is a game engine for macOS, written in Swift. Its renderer uses Metal, and its simulation runs on the CPU. The engine is divided into small Swift modules. Most of them are platform-independent and can be built and tested without a GPU. Only the renderer and the macOS windowing and input backends depend on Metal and AppKit. This document describes what the engine provides, how its modules depend on one another, which platforms it targets, and what this repository snapshot has and has not verified. Each subsystem is described in full in the document linked from its section.
+Swift Engine Ferox, called Ferox for short, is a game engine for macOS, written in Swift. Its renderer uses Metal, and its simulation runs on the CPU. The engine is divided into small Swift modules. Most of them are platform-independent and can be built and tested without a GPU. Only the renderer and the macOS windowing and input backends depend on Metal and AppKit. This document describes what the engine provides, how its modules depend on one another, which platforms it targets, and what this repository snapshot has and has not verified. Each subsystem is described in full in the document linked from its section.
 
 ## Contents
 
@@ -15,6 +15,8 @@ Ferox is a game engine for macOS, written in Swift. Its renderer uses Metal, and
 9. [Related documents](#9-related-documents)
 
 ## 1. What Ferox is
+
+The project's full name is **Swift Engine Ferox**. The short name, Ferox, is used in the rest of the documentation and in code: the package, the modules (`Ferox`, `FeroxCore`, `FeroxRender` and so on) and the tools keep that name.
 
 Ferox provides the parts a small or medium 2D or 3D game normally needs: an entity-component-system (ECS) world, a fixed-timestep frame loop, rigid-body physics, a Metal renderer, input mapping, a UI layer, audio output, animation, an asset pipeline, and networking foundations. A game is a class that conforms to the `Game` protocol. It is started either in a macOS window through `GameLauncher`, or headless, which runs the simulation without a window or renderer.
 

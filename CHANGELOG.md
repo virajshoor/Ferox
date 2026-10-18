@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Ferox are documented in this file.
+All notable changes to Swift Engine Ferox (Ferox) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- The project's full name, Swift Engine Ferox, now appears in the README, the overview, CONTRIBUTING, SECURITY, NOTICE and `Package.swift`. Code names (package, modules, tools) are unchanged.
 - Shadows for point and spot lights with `castsShadows`. They are budgeted by the new `ShadowSettings.localShadowSlices` (default 12; a spot light takes one slice, a point light six) and `localResolution` (default 512), nearest lights first, and planned by `LocalShadowPlanner`.
 - `TransportSecurity.preSharedKey(identity:passphrase:)`: DTLS 1.2 with a pre-shared key for `UDPTransport`. Untested on hardware.
 - `AudioBackend.stopAll(fadeOut:)`, `memoryBudgetBytes` and `decodedBytes`, and `AudioMemoryPolicy`.

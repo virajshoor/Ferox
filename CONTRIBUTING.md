@@ -1,6 +1,6 @@
 # Contributing to Ferox
 
-Thank you for your interest in Ferox. This guide covers the development setup, the conventions we follow and what we expect from pull requests.
+Thank you for your interest in Swift Engine Ferox (Ferox for short). This guide covers the development setup, the conventions we follow and what we expect from pull requests.
 
 By contributing, you agree that your contributions are licensed under the Apache License, Version 2.0, as described in `LICENSE`. Participation in the project is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
 

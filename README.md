@@ -2,7 +2,7 @@
 
 # Ferox
 
-**A Metal-native game engine for macOS, written in Swift.**
+**Swift Engine Ferox: a Metal-native game engine for macOS, written in Swift.**
 
 2D and 3D · physically based rendering · hybrid ray tracing · temporal upscaling · physics · editor
 
@@ -37,7 +37,7 @@
 
 ## Why Ferox
 
-Ferox is built for Apple Silicon. It renders only through Metal and avoids cross-platform abstraction layers, so the renderer can use what the hardware offers:
+Swift Engine Ferox, or Ferox for short, is built for Apple Silicon. It renders only through Metal and avoids cross-platform abstraction layers, so the renderer can use what the hardware offers:
 
 - unified memory;
 - tile memory for transient attachments;

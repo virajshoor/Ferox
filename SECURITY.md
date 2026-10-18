@@ -34,7 +34,7 @@ These are the goals we work towards, not guaranteed service levels:
 
 ## Scope
 
-Ferox processes some untrusted input. The following areas deserve particular attention:
+Swift Engine Ferox (Ferox) processes some untrusted input. The following areas deserve particular attention:
 
 - **Asset importers** (glTF, image formats and JSON scene files). Malformed or hostile files should not cause crashes, memory exhaustion or out-of-bounds access.
 - **Networking module**. Messages from peers and servers must be validated before use.

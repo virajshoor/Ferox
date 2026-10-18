@@ -1,4 +1,5 @@
 import Ferox
+import Foundation
 
 /// A small side-scrolling platformer: 2D physics, action-mapped input, trigger pickups,
 /// a following orthographic camera and a score HUD. Every visual is a `ShapeRenderer`,

@@ -79,7 +79,9 @@ public struct FixedTimestep: Sendable, Equatable {
     /// Adds `delta` seconds and returns how many fixed steps to run this frame.
     public mutating func advance(by delta: Double) -> Int {
         accumulator += max(0, delta)
-        var steps = Int(accumulator / step)
+        // A tiny tolerance stops rounding error (e.g. 2 × 1/60 summed as 0.0333…32) from
+        // turning a whole step into a fraction and dropping it.
+        var steps = Int(accumulator / step + 1e-9)
         if steps > maxStepsPerFrame {
             droppedTime += Double(steps - maxStepsPerFrame) * step
             accumulator -= Double(steps - maxStepsPerFrame) * step
@@ -131,7 +133,9 @@ public struct FrameClock: Sendable {
 
     /// Advances by an explicit delta (deterministic tests, offline rendering, replays).
     public mutating func tick(delta: Double) -> (FrameTime, fixedSteps: Int) {
+        // The first explicit tick still counts its delta: start the clock `delta` earlier.
         let base = last ?? 0
+        if last == nil { last = base }
         return tick(now: base + delta)
     }
 

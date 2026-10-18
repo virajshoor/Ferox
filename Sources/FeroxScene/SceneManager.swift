@@ -141,7 +141,7 @@ public final class SceneManager {
         }
         // Persistent entities nested under doomed ones are detached first (destroy is recursive).
         world.read(PersistAcrossScenes.self) { e, _ in
-            if world.get(SceneMember.self, e)?.scene == handle, world.parent(of: e) != nil { world.deferStructural { world.setParent(e, .null, keepWorldTransform: true) } }
+            if world.get(SceneMember.self, e)?.scene == handle, world.parent(of: e) != nil { world.deferStructural { [world] in world.setParent(e, .null, keepWorldTransform: true) } }
         }
         world.flushDeferred()
         // Only destroy subtree roots among the doomed set (destroy is recursive).

@@ -318,7 +318,7 @@ public enum RenderSceneExtractor {
         for it in opaque {
             if let ci = currentItem, current != nil, sameBatch(ci, it) {
                 current?.instanceCount += 1
-                current?.depth = min(current?.depth ?? it.depth, it.depth)
+                if let d = current?.depth { current?.depth = min(d, it.depth) }
             } else {
                 flush()
                 current = DrawBatch(mesh: it.mesh, submesh: it.submesh, material: it.material,

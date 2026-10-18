@@ -197,7 +197,8 @@ final class EngineTests: XCTestCase {
         let engine = try makeEngine()
         var notifications = 0
         engine.onGraphicsChanged = { _ in notifications += 1 }
-        engine.graphics = engine.graphics // unchanged: no notification
+        let unchanged = engine.graphics
+        engine.graphics = unchanged // unchanged: no notification
         XCTAssertEqual(notifications, 0)
         var expected = 0
         for preset in [QualityPreset.low, .ultra, .ultra] {

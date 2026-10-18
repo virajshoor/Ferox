@@ -236,7 +236,7 @@ public final class AssetDatabase: @unchecked Sendable {
         case .material:
             guard let m = try? JSONDecoder().decode(MaterialData.self, from: data) else { return [] }
             return [m.baseColorTexture, m.normalTexture, m.metallicRoughnessTexture, m.occlusionTexture, m.emissiveTexture]
-                .compactMap { $0 }.compactMap { lock.locked { entries[$0]?.path } }
+                .compactMap { $0 }.compactMap { id in lock.locked { entries[id]?.path } }
         default:
             return []
         }

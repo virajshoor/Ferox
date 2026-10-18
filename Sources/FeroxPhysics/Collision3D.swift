@@ -640,7 +640,8 @@ enum Collide3D {
             return Manifold3D()
         }
         let lc0 = meshPose.invApply(core.0), lc1 = meshPose.invApply(core.1)
-        let qb = AABB(min: pointwiseMin(lc0, lc1) - (r + margin), max: pointwiseMax(lc0, lc1) + (r + margin))
+        let pad = Vec3(repeating: r + margin)
+        let qb = AABB(min: pointwiseMin(lc0, lc1) - pad, max: pointwiseMax(lc0, lc1) + pad)
         var best: [(ContactPoint3D, Vec3)] = []
         mesh.query(qb) { t in
             let (a, bb, c) = mesh.triangle(t)

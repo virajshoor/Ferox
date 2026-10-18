@@ -1,4 +1,5 @@
 import Ferox
+import Foundation
 
 /// A tour of the 3D renderer and physics:
 /// - a 7×7 grid of PBR spheres sweeping metallic (rows) and roughness (columns);

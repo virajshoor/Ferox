@@ -1,4 +1,5 @@
 import Ferox
+import Foundation
 
 /// The smallest complete Ferox program: a lit, spinning cube on a ground plane, a
 /// procedural sky and a frame-rate label.

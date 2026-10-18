@@ -1,6 +1,6 @@
 # Physics
 
-Ferox ships its own rigid-body physics in the `FeroxPhysics` module. It does not wrap a third-party library. There are two worlds: `PhysicsWorld2D` for the XY plane and `PhysicsWorld3D` for full 3D. They share a solver design and a `SolverSettings` type. An ECS bridge, `PhysicsSystem2D` and `PhysicsSystem3D`, maps entities with physics components onto bodies, writes poses back into `Transform`, and publishes collision events. The solver is sequential-impulse, with warm starting, Coulomb friction, speculative contacts and sleep islands. The narrowphase is deliberately limited, and several pairs are approximated. Behaviour should be checked against the test targets declared in `Package.swift` (`FeroxPhysicsTests`, `FeroxSubsystemTests`). Those directories are not in this repository snapshot, so this document cites no test results and no measurements.
+Ferox ships its own rigid-body physics in the `FeroxPhysics` module. It does not wrap a third-party library. There are two worlds: `PhysicsWorld2D` for the XY plane and `PhysicsWorld3D` for full 3D. They share a solver design and a `SolverSettings` type. An ECS bridge, `PhysicsSystem2D` and `PhysicsSystem3D`, maps entities with physics components onto bodies, writes poses back into `Transform`, and publishes collision events. The solver is sequential-impulse, with warm starting, Coulomb friction, speculative contacts and sleep islands. The narrowphase is deliberately limited, and several pairs are approximated. Behaviour is covered by `Tests/FeroxPhysicsTests` (both worlds and the ECS bridge). Those tests have not yet been run on a Swift toolchain, so this document cites no test results and no measurements.
 
 Entities and components are described in [06-Scene-and-Entities.md](06-Scene-and-Entities.md). Fixed-step timing is in [05-Engine-Lifecycle.md](05-Engine-Lifecycle.md).
 
@@ -228,7 +228,7 @@ Begin is emitted when a contact first touches. Ended is emitted when a touching 
 
 **ECS events.** `PhysicsSystem2D` and `PhysicsSystem3D` convert each event into `CollisionEvent2D` or `CollisionEvent3D`, with entities recovered from `userData`, and call `context.events.enqueue(_:)`. Each carries `phase`, `entityA`, `entityB`, `isTrigger`, `points`, `normal`, `impulse`, `involves(_:)` and `other(than:)`.
 
-Enqueued events reach subscribers only when the `EventBus` is flushed. Its documentation says the engine flushes once per frame. **That call is not in this repository snapshot**, so nothing here delivers these events.
+Enqueued events reach subscribers only when the `EventBus` is flushed. `Engine` flushes the bus after every fixed step and again before rendering (`Sources/Ferox/Engine.swift`), so subscribers see a fixed-step event in the same frame.
 
 ## 10. ECS integration
 
@@ -258,7 +258,7 @@ Each `update`:
 3. **`writeBack`**: writes each non-static body's pose into `Transform`, converting to local space under a parent.
 4. **Events** are enqueued on `context.events`.
 
-`interpolate(_:alpha:)` writes blended poses for awake bodies whose `RigidBody` has `interpolate` set. The source comment says the engine calls it before rendering with `FrameTime.alphaF`. **That call site is not in this repository snapshot.**
+`interpolate(_:alpha:)` writes blended poses for awake bodies whose `RigidBody` has `interpolate` set. `Engine` calls it once per frame after the fixed steps, with `FrameTime.interpolationAlpha`.
 
 Bodies are created once. Later changes to a collider or a `RigidBody.type` are ignored by the bridge. Use the body API instead:
 
@@ -418,7 +418,7 @@ func movePlayer(_ player: Entity, input: Vec2, jumpPressed: Bool, dt: Float) {
 
 ## 15. Validation status
 
-- `FeroxPhysicsTests` and `FeroxSubsystemTests` are declared in `Package.swift`, but their directories are absent here. No test results are cited.
+- `Tests/FeroxPhysicsTests` covers free fall, resting contacts, restitution, triggers, raycasts, filtering, sleeping, teleporting, contact events and the ECS bridge. The tests have not yet been run on a toolchain, so no results are cited.
 - The behaviour in this document was derived from the source, and should be confirmed against those tests.
 - No benchmark numbers are given. Performance should be measured, as described in [21-Performance.md](21-Performance.md).
 

@@ -24,8 +24,25 @@ This version has not been released yet.
   - Particles
   - Asset pipeline
   - Hybrid ray tracing
-  - Anti-aliasing: MSAA, FXAA and TAA
+  - Anti-aliasing: MSAA, FXAA, SMAA and TAA
   - MetalFX upscaling
   - Editor
   - Networking foundations
   - Benchmarks (`FeroxBenchmarks`)
+- Editor application (`FeroxEditor`) with hierarchy, inspector, Play/Pause/Step/Stop, snapshot undo/redo and scene files.
+- Diagnostics tool (`FeroxDiag`) reporting GPU capabilities and resolved graphics presets.
+- Examples: `HelloFerox`, `Platformer2D` and `Showcase3D`, all runnable headless.
+- Test targets for every module, plus integration tests for the engine, editor and launcher.
+- Documentation: README and 29 guides under `Docs/`.
+
+### Fixed
+
+- `RenderMath.groups` returned a wrong dispatch size when the group size was zero or negative.
+
+### Removed
+
+- The unused `DynamicResolutionController` in `FeroxCore`, which clashed with the renderer's type of the same name in `FeroxRender`.
+
+### Known issues
+
+- The code has not yet been compiled or run on Apple hardware. See [Limitations and Roadmap](Docs/28-Limitations-and-Roadmap.md).

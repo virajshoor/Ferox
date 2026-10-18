@@ -9,7 +9,7 @@ By contributing, you agree that your contributions are licensed under the Apache
 Requirements:
 
 - macOS 14 or later (Apple Silicon is the primary target)
-- Xcode 15.4 or later, which provides Swift 5.10 or later
+- Xcode 15.3 or later, which provides Swift 5.10 or later
 - Xcode command-line tools (`xcode-select --install`)
 
 Build and test from the command line:
@@ -22,6 +22,28 @@ swift test
 To work in Xcode, open `Package.swift` directly. Xcode resolves the package and makes the targets available to build and run.
 
 GPU-backed tests need a Mac with a Metal device, so they cannot run on the Linux CI job. The platform-independent modules are checked there.
+
+> **Verification status.** Ferox was written without access to a Mac or a Swift toolchain. The sources and shaders have been syntax-checked, but nothing has yet been compiled, tested or profiled. The first build on real hardware will very likely surface compile errors; fixing them is a welcome first contribution.
+
+### Test targets
+
+| Target | Covers |
+| --- | --- |
+| `FeroxMathTests` | Vectors, quaternions, matrices, geometry, colour, random numbers |
+| `FeroxCoreTests` | Time, events, logging, graphics settings and the feature resolver, data model |
+| `FeroxSceneTests` | World, hierarchy and transforms, serialisation, systems and scene manager |
+| `FeroxPhysicsTests` | 2D and 3D worlds and the ECS bridge |
+| `FeroxSubsystemTests` | Input, animation and particles, assets, networking, UI, audio |
+| `FeroxRenderTests` | The CPU side of the renderer: render maths, uniforms, dynamic resolution, sprite batching, scene extraction |
+| `FeroxIntegrationTests` | Engine lifecycle, editor session, launcher |
+
+Run one target with `swift test --filter FeroxPhysicsTests`.
+
+### Tools
+
+- `swift run FeroxDiag` prints the GPU's capabilities and how each graphics preset resolves (`--json` for machine-readable output, `--render` for an offscreen render smoke test).
+- `swift run FeroxEditor` opens the editor.
+- `swift run HelloFerox --headless --frames 120` runs an example without a window.
 
 ## Branches
 
@@ -81,7 +103,7 @@ Benchmarks must be run in release configuration, because debug timings are not m
 swift run -c release FeroxBenchmarks
 ```
 
-Results are written to `BenchmarkResults/`. Files matching `BenchmarkResults/*.local.json` are ignored by Git, so use that suffix for local runs you do not intend to commit. When you quote numbers in a pull request, state the Mac model, chip, macOS version and Ferox commit. Numbers from hosted CI runners are not representative of Apple Silicon hardware.
+Pass `--output BenchmarkResults/<name>.local.json` to write JSON results; `--quick` runs a shorter pass and `--filter <substring>` selects benchmarks. Files matching `BenchmarkResults/*.local.json` are ignored by Git, so use that suffix for local runs you do not intend to commit. When you quote numbers in a pull request, state the Mac model, chip, macOS version and Ferox commit. Numbers from hosted CI runners are not representative of Apple Silicon hardware.
 
 ## Reporting security issues
 

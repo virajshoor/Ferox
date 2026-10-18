@@ -363,7 +363,7 @@ This emitter is `.cpu` by default, so `ParticleSystem` simulates it. The gradien
 - **Limitation: dropped spawns.** A spawn into a full pool is discarded silently.
 - **Limitation: particle order is unstable.** Removal swaps the last particle into the hole.
 - **Limitation: ground collision only.** Particles collide only with the horizontal plane at `collisionPlaneY`.
-- **Limitation: no test targets in this snapshot.** The behaviours above come from the source. No test results are cited.
+- **Tests.** `Tests/FeroxSubsystemTests/AnimationTests.swift` covers easing, curves, tweens, clips and clip events, flipbooks, and CPU particle simulation and emission. GPU particles are not tested. The tests have not yet been run on a toolchain, so no results are cited.
 
 ## 15. Related documents
 

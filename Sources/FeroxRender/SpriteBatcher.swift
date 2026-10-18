@@ -64,6 +64,11 @@ public final class SpriteBatcher {
         var chunks: [TilemapChunk]
     }
     private var tilemapCache: [Entity: TilemapCache] = [:]
+    // Last frame's sizes, used to reserve capacity for the next frame's arrays.
+    private var lastDrawableCount = 0
+    private var lastVertexCount = 0
+    private var lastIndexCount = 0
+    private var lastBatchCount = 0
 
     public init() {}
 
@@ -77,6 +82,9 @@ public final class SpriteBatcher {
         var order: Int
         var entity: Entity
         var kind: Kind
+        /// Append position; a stable tie-break, since one entity may hold a sprite and a
+        /// shape with the same layer and order.
+        var sequence: Int
         enum Kind {
             case sprite(SpriteRenderer, Mat4)
             case shape(ShapeRenderer, Mat4)
@@ -120,19 +128,23 @@ public final class SpriteBatcher {
         }
 
         var drawables: [Drawable] = []
+        drawables.reserveCapacity(lastDrawableCount)
         world.read(SpriteRenderer.self) { e, s in
             guard visible(e) else { return }
-            drawables.append(Drawable(layer: s.sortingLayer, order: s.orderInLayer, entity: e, kind: .sprite(s, matrix(e))))
+            drawables.append(Drawable(layer: s.sortingLayer, order: s.orderInLayer, entity: e, kind: .sprite(s, matrix(e)),
+                                      sequence: drawables.count))
         }
         world.read(ShapeRenderer.self) { e, s in
             guard visible(e) else { return }
-            drawables.append(Drawable(layer: s.sortingLayer, order: s.orderInLayer, entity: e, kind: .shape(s, matrix(e))))
+            drawables.append(Drawable(layer: s.sortingLayer, order: s.orderInLayer, entity: e, kind: .shape(s, matrix(e)),
+                                      sequence: drawables.count))
         }
         var liveTilemaps = Set<Entity>()
         world.read(Tilemap.self) { e, t in
             guard visible(e) else { return }
             liveTilemaps.insert(e)
-            drawables.append(Drawable(layer: t.sortingLayer, order: Int.min, entity: e, kind: .tilemap(t, matrix(e))))
+            drawables.append(Drawable(layer: t.sortingLayer, order: Int.min, entity: e, kind: .tilemap(t, matrix(e)),
+                                      sequence: drawables.count))
         }
         // Drop caches of tilemaps that were destroyed or hidden, so they cannot leak.
         if tilemapCache.count != liveTilemaps.count || tilemapCache.keys.contains(where: { !liveTilemaps.contains($0) }) {
@@ -142,16 +154,23 @@ public final class SpriteBatcher {
             world.read(ParticleEmitter.self) { e, em in
                 guard em.simulation == .cpu, let st = world.get(ParticleState.self, e), st.pool.count > 0,
                       visible(e) else { return }
-                drawables.append(Drawable(layer: em.sortingLayer, order: 0, entity: e, kind: .particles(em, st)))
+                drawables.append(Drawable(layer: em.sortingLayer, order: 0, entity: e, kind: .particles(em, st),
+                                          sequence: drawables.count))
             }
         }
+        // A strict total order: layer, order, entity, then append sequence for ties.
         drawables.sort { a, b in
             if a.layer != b.layer { return a.layer < b.layer }
             if a.order != b.order { return a.order < b.order }
-            return a.entity < b.entity
+            if a.entity != b.entity { return a.entity < b.entity }
+            return a.sequence < b.sequence
         }
+        lastDrawableCount = drawables.count
 
         var emitter = BatchEmitter()
+        emitter.vertices.reserveCapacity(lastVertexCount)
+        emitter.indices.reserveCapacity(lastIndexCount)
+        emitter.batches.reserveCapacity(lastBatchCount)
         for d in drawables {
             switch d.kind {
             case let .sprite(s, m):
@@ -177,6 +196,9 @@ public final class SpriteBatcher {
         out.vertices = emitter.vertices
         out.indices = emitter.indices
         out.batches = emitter.batches
+        lastVertexCount = out.vertices.count
+        lastIndexCount = out.indices.count
+        lastBatchCount = out.batches.count
         out.usesStencil = out.batches.contains { $0.stencil != .none }
         out.lights = Self.lights(world: world, camera: camera, frustum: frustum)
 

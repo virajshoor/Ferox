@@ -118,6 +118,8 @@ public final class PhysicsWorld2D {
     var jointGenerations: [UInt32] = []
     var broadphase = SweepAndPrune()
     var broadphaseDirty = true
+    /// Scratch buffer reused each step for the broadphase input (avoids a per-step allocation).
+    private var broadphaseItems: [(id: Int, minX: Float, maxX: Float)] = []
 
     /// Contact and trigger events produced by the last `step`.
     public private(set) var contactEvents: [ContactEvent<Vec2>] = []
@@ -372,7 +374,11 @@ public final class PhysicsWorld2D {
 
         // 3. Solve.
         // Sorted so the solve order (and therefore the result) is deterministic.
-        let active = contacts.keys.filter { contacts[$0]!.isActive(bodies) }.sorted()
+        // Single pass over the dictionary (no per-key re-lookup); sorted for a stable order.
+        var active: [UInt64] = []
+        active.reserveCapacity(contacts.count)
+        for (k, c) in contacts where c.isActive(bodies) { active.append(k) }
+        active.sort()
         let inv = 1 / dt
         for k in active { contacts[k]!.prepare(&bodies, settings: settings, invDt: inv) }
         for j in joints.indices { joints[j]?.prepare(&bodies, dt: dt, settings: settings) }
@@ -418,15 +424,16 @@ public final class PhysicsWorld2D {
 
     func updateContacts() {
         let n = bodies.count
-        var items: [(id: Int, minX: Float, maxX: Float)] = []
-        items.reserveCapacity(n)
+        broadphaseItems.removeAll(keepingCapacity: true)
+        broadphaseItems.reserveCapacity(n)
         for i in 0..<n {
-            if let b = bodies[i] { items.append((i, b.aabbMin.x, b.aabbMax.x)) }
+            if let b = bodies[i] { broadphaseItems.append((i, b.aabbMin.x, b.aabbMax.x)) }
         }
-        broadphase.update(items, rebuild: broadphaseDirty)
+        broadphase.update(broadphaseItems, rebuild: broadphaseDirty)
         broadphaseDirty = false
 
         var seen = Set<UInt64>()
+        seen.reserveCapacity(contacts.count)
         broadphase.forEachOverlap { ia, ib in
             guard let a = bodies[ia], let b = bodies[ib] else { return }
             if a.type != .dynamic && b.type != .dynamic {
@@ -526,8 +533,11 @@ public final class PhysicsWorld2D {
         }
         let lin2 = settings.sleepLinearThreshold * settings.sleepLinearThreshold
         let ang2 = settings.sleepAngularThreshold * settings.sleepAngularThreshold
+        // Only keyed lookups are used on these maps (never iterated), so capacity hints are safe.
         var minSleep: [Int: Float] = [:]
+        minSleep.reserveCapacity(n)
         var islandAwake: [Int: Bool] = [:]
+        islandAwake.reserveCapacity(n)
         for i in 0..<n {
             guard var b = bodies[i], b.type == .dynamic else { continue }
             if b.isAwake {
@@ -748,6 +758,7 @@ struct Contact2D {
 
     mutating func update(_ m: Manifold2D) {
         var newPoints: [Point] = []
+        newPoints.reserveCapacity(m.points.count)
         for mp in m.points {
             var p = Point(point: mp.point, separation: mp.separation, id: mp.id)
             // Warm-start: carry accumulated impulses for matching features.

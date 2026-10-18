@@ -176,7 +176,11 @@ public enum RenderSceneExtractor {
         frame.camera = rc
         let frustum = Frustum(viewProjection: rc.viewProjection)
 
+        // Each renderer adds at least one instance and one item; submeshes add more items.
+        let rendererCount = world.count(of: MeshRenderer.self) + world.count(of: SkinnedMeshRenderer.self)
         var items: [Item] = []
+        items.reserveCapacity(rendererCount)
+        frame.instances.reserveCapacity(rendererCount)
         func addRenderer(_ e: Entity, mesh meshID: AssetID, materials: [AssetID], castsShadows: Bool,
                          receivesShadows: Bool, isStatic: Bool, skinned: SkinnedMeshRenderer?) {
             guard world.isActiveInHierarchy(e), cam.cullingMask.contains(layerMask(world, e)) else { return }
@@ -407,8 +411,11 @@ public enum RenderSceneExtractor {
         let first = frame.lights.count
         frame.lights.append(contentsOf: punctual.map(\.data))
         frame.punctualCount = punctual.count
-        frame.shadowedLights = punctual.indices.filter { punctual[$0].shadowed }
-            .sorted { distance2(punctual[$0].data) < distance2(punctual[$1].data) }
-            .map { first + $0 }
+        // Each distance is computed once; equal distances keep ascending index order.
+        let shadowed = punctual.indices.filter { punctual[$0].shadowed }
+            .map { (index: $0, distance: distance2(punctual[$0].data)) }
+        frame.shadowedLights = shadowed
+            .sorted { $0.distance != $1.distance ? $0.distance < $1.distance : $0.index < $1.index }
+            .map { first + $0.index }
     }
 }

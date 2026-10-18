@@ -17,9 +17,10 @@ Frame timing is driven by the engine loop described in [05-Engine-Lifecycle.md](
 7. [The CI benchmark workflow](#7-the-ci-benchmark-workflow)
 8. [Measuring on your own machine](#8-measuring-on-your-own-machine)
 9. [Code examples](#9-code-examples)
-10. [Limitations](#10-limitations)
-11. [Validation status](#11-validation-status)
-12. [Related documents](#12-related-documents)
+10. [CPU hot paths](#10-cpu-hot-paths)
+11. [Limitations](#11-limitations)
+12. [Validation status](#12-validation-status)
+13. [Related documents](#13-related-documents)
 
 ## 1. Status and scope
 
@@ -201,7 +202,18 @@ Running a single benchmark in release and writing the result:
 swift run -c release FeroxBenchmarks --filter ecs --output BenchmarkResults/local.json
 ```
 
-## 10. Limitations
+## 10. CPU hot paths
+
+The per-frame CPU code follows a few rules so that its cost grows with the work and not with lookups or allocations. Each rule below describes the code as written. None of them has been measured yet (see [section 12](#12-validation-status)), so no speed-ups are claimed.
+
+- **Component stores are fetched once per pass.** `TransformSystem.update`, `World.worldMatrix(of:)` and `World.isActiveInHierarchy(_:)` look up the `Parent`, `Children`, `Transform`, `WorldTransform` and `Disabled` stores before their loops. Inside the loops they only read sparse-set indices, so there is no dictionary lookup per entity or per ancestor.
+- **Scratch buffers are reused.** The 2D and 3D physics worlds keep their broadphase input array between steps, and the sweep-and-prune pass keeps its lookup map; both are cleared with `removeAll(keepingCapacity:)`. `SpriteBatcher` reserves its drawable, vertex, index and batch arrays from the previous frame's sizes. `RenderSceneExtractor` reserves its item and instance arrays from the number of mesh renderers.
+- **Active contacts are gathered in one pass.** Each physics step builds the sorted list of active contacts with one walk over the contact map, instead of filtering the keys and looking each one up again. The list is still sorted by key, so the solve order, and therefore the result, is unchanged.
+- **Sorts have a total order.** 2D drawables sort by layer, order in layer, entity, then append order, so a sprite and a shape on the same entity always draw sprite first. Shadow-casting point and spot lights sort by distance to the camera, computed once per light, with ties broken by light index. A total order keeps the output the same whatever sort algorithm the standard library uses.
+
+Tests pin these behaviours: `PerformancePathTests` (scene), `PhysicsDeterminismTests` (physics) and `BatchingOrderTests` (render). They check results, not timings. Timings come from [FeroxBenchmarks](#5-feroxbenchmarks).
+
+## 11. Limitations
 
 - **Nothing has been measured.** No timing, count or throughput figure in this repository has been produced by running the code.
 - **The profiler is global.** `Profiler.shared` is one instance for the whole process, and it is not reset between runs unless `reset()` is called.
@@ -215,13 +227,13 @@ swift run -c release FeroxBenchmarks --filter ecs --output BenchmarkResults/loca
 - **Counters are unlabelled.** Counter names are plain strings with no registry, so a misspelled name silently creates a new counter.
 - **Device-dependent paths are unverified.** Ray tracing, MetalFX and the dynamic-resolution controller have not been exercised on hardware.
 
-## 11. Validation status
+## 12. Validation status
 
 This document was written from the source. No macOS machine or Swift toolchain was available while the engine was written. None of the benchmark, diagnostic or profiler code has been compiled or run, and the CI benchmark workflow has not been triggered. No performance result is reported or implied anywhere in this document.
 
 The `Tests/` directory contains no tests for `Profiler`, `MemoryTracker` or the benchmark tool. The profiler is referenced only from `Tests/FeroxCoreTests/TimeTests.swift`. `FeroxBenchmarks` and `FeroxDiag` are not test targets, so `swift test` does not run them.
 
-## 12. Related documents
+## 13. Related documents
 
 - [05-Engine-Lifecycle.md](05-Engine-Lifecycle.md) for the frame whose scopes the profiler records.
 - [07-Rendering-2D.md](07-Rendering-2D.md) and [08-Rendering-3D.md](08-Rendering-3D.md) for the passes behind the render counters.

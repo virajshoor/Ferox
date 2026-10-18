@@ -154,6 +154,8 @@ struct SweepAndPrune {
         var maxX: Float
     }
     var proxies: [Proxy] = []
+    /// Scratch map reused across updates (lookup only, never iterated).
+    private var lookup: [Int: (Float, Float)] = [:]
 
     /// Updates proxy bounds. Pass `rebuild` when bodies were added or removed.
     mutating func update(_ items: [(id: Int, minX: Float, maxX: Float)], rebuild: Bool) {
@@ -162,7 +164,7 @@ struct SweepAndPrune {
             proxies.sort { $0.minX < $1.minX }
             return
         }
-        var lookup: [Int: (Float, Float)] = [:]
+        lookup.removeAll(keepingCapacity: true)
         lookup.reserveCapacity(items.count)
         for it in items { lookup[it.id] = (it.minX, it.maxX) }
         for i in proxies.indices {

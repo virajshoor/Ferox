@@ -55,7 +55,8 @@ A 2D entity uses the same `Transform` and hierarchy as a 3D entity. Only the x a
 
 1. `sortingLayer`, ascending;
 2. `orderInLayer` for sprites and shapes, or the order `Int.min` for tilemaps, ascending;
-3. the entity index, ascending, as the final tie-break.
+3. the entity index, ascending;
+4. the order in which the drawables were gathered, as the final tie-break: sprites, then shapes, then tilemaps, then particle emitters. So a sprite and a shape on the same entity, with the same layer and order, always draw sprite first.
 
 Within a sorting layer, a tilemap draws beneath every sprite and shape, because its order is the lowest possible value. Among sprites and shapes, the higher `orderInLayer` draws on top.
 

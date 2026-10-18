@@ -12,20 +12,28 @@ import FeroxCore
 public enum TransformSystem {
     /// Updates world transforms. Call once per rendered frame (after gameplay and physics).
     public static func update(_ world: World) {
-        // Ensure every Transform has a WorldTransform.
+        // Ensure every Transform has a WorldTransform. The store is looked up once here,
+        // not per entity; a nil store means no entity has the component yet.
         var missing: [Entity] = []
-        world.read(Transform.self) { e, _ in if !world.has(WorldTransform.self, e) { missing.append(e) } }
+        let presentWorld = world.storage(WorldTransform.self)
+        world.read(Transform.self) { e, _ in if presentWorld?.denseIndex(e) == nil { missing.append(e) } }
         for e in missing { world.add(WorldTransform(), to: e) }
 
         // Pass 1 — flat roots (no Parent, no Children), in parallel.
+        // Component stores are fetched once before the parallel loop (not per entity), so
+        // the loop only performs dense-index reads on them. Fetched after the step above,
+        // which may have created the WorldTransform store.
+        let parentStore = world.storage(Parent.self)
+        let childrenStore = world.storage(Children.self)
+        let worldStore = world.storage(WorldTransform.self)
         _ = world.withDenseStorage(Transform.self) { ents, transforms in
             _ = world.withDenseStorage(WorldTransform.self) { _, worlds in
                 Jobs.parallelFor(count: ents.count, minChunk: 2048) { range in
                     for i in range {
                         let e = ents[i]
-                        guard world.denseIndex(of: e, in: Parent.self) == nil,
-                            world.denseIndex(of: e, in: Children.self) == nil,
-                            let wi = world.denseIndex(of: e, in: WorldTransform.self)
+                        guard parentStore?.denseIndex(e) == nil,
+                            childrenStore?.denseIndex(e) == nil,
+                            let wi = worldStore?.denseIndex(e)
                         else { continue }
                         var w = worlds[wi]
                         if w.resetHistory {

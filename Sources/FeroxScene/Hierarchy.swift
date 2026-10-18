@@ -61,15 +61,24 @@ extension World {
     /// World matrix computed on demand from local `Transform`s by walking up the hierarchy
     /// (at most 1024 ancestors). Prefer `WorldTransform` in systems: it is cached per frame.
     public func worldMatrix(of e: Entity) -> Mat4 {
-        var m = get(Transform.self, e)?.localMatrix ?? .identity
-        var cursor = parent(of: e)
+        // Component stores are fetched once, outside the ancestor loop.
+        let transforms = storage(Transform.self)
+        let parents = storage(Parent.self)
+        var m = transforms?.get(e)?.localMatrix ?? .identity
+        var cursor = parentLink(of: e, in: parents)
         var guardCount = 0
         while let p = cursor, guardCount < 1024 {
-            m = (get(Transform.self, p)?.localMatrix ?? .identity) * m
-            cursor = parent(of: p)
+            m = (transforms?.get(p)?.localMatrix ?? .identity) * m
+            cursor = parentLink(of: p, in: parents)
             guardCount += 1
         }
         return m
+    }
+
+    /// Same result as `parent(of:)`, using an already-fetched `Parent` store.
+    private func parentLink(of e: Entity, in parents: ComponentStorage<Parent>?) -> Entity? {
+        guard let p = parents?.get(e)?.entity, isAlive(p) else { return nil }
+        return p
     }
 
     /// Sets an entity's world position, adjusting its local transform for the parent.
@@ -80,10 +89,13 @@ extension World {
 
     /// Whether `e` or any ancestor is `Disabled`.
     public func isActiveInHierarchy(_ e: Entity) -> Bool {
+        // Disabled and Parent stores are fetched once, outside the ancestor loop.
+        let disabled = storage(Disabled.self)
+        let parents = storage(Parent.self)
         var cursor: Entity? = e
         while let c = cursor {
-            if has(Disabled.self, c) { return false }
-            cursor = parent(of: c)
+            if disabled?.contains(c) == true { return false }
+            cursor = parentLink(of: c, in: parents)
         }
         return true
     }

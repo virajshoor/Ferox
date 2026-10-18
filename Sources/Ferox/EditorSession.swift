@@ -103,6 +103,27 @@ public final class EditorSession {
         onChange?()
     }
 
+    /// The nearest scene entity hit by `ray`: meshes by their world-space bounds, lights and
+    /// cameras by a small marker sphere. Editor-owned and disabled entities are skipped.
+    public func pick(_ ray: Ray) -> Entity? {
+        let world = engine.world
+        var best: (entity: Entity, t: Float)?
+        func consider(_ e: Entity, _ t: Float?) {
+            guard let t, t < best?.t ?? .infinity, !editorEntities.contains(e), !world.has(Disabled.self, e) else { return }
+            best = (e, t)
+        }
+        world.read(MeshRenderer.self) { e, renderer in
+            guard let m = world.get(WorldTransform.self, e)?.matrix,
+                  let bounds = engine.assets.mesh(renderer.mesh)?.value?.bounds, !bounds.isEmpty else { return }
+            consider(e, bounds.transformed(by: m).intersect(ray))
+        }
+        for e in world.entities(with: Light.self) + world.entities(with: Camera.self) where !world.has(MeshRenderer.self, e) {
+            guard let p = world.get(WorldTransform.self, e)?.matrix.translation else { continue }
+            consider(e, Sphere(center: p, radius: 0.3).intersect(ray))
+        }
+        return best?.entity
+    }
+
     // MARK: Editing
 
     /// Records an undo step before a change. Calls with the same non-nil `coalesce` key in

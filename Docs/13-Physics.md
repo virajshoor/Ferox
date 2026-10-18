@@ -31,7 +31,7 @@ Entities and components are described in [06-Scene-and-Entities.md](06-Scene-and
 | 3D bodies, shapes, joints, queries | Implemented: `World3D.swift`, `Collision3D.swift`. |
 | ECS bridge and components | Implemented: `PhysicsSystems.swift`, `PhysicsComponents.swift`. |
 | Shared types, broadphase, union-find | Implemented: `Common.swift`. |
-| Continuous collision detection | **Not implemented.** |
+| Continuous collision detection | Implemented for fast dynamic bodies against static and kinematic shapes: `World3D.swift`, `World2D.swift`. See [section 2.1](#21-the-step). |
 | Convex hulls for 3D shapes | **Not implemented.** |
 | Exact box-against-mesh contacts | **Not implemented.** Approximated. |
 | Multi-threaded solver | **Not implemented.** The step is single-threaded. |
@@ -46,9 +46,11 @@ Entities and components are described in [06-Scene-and-Entities.md](06-Scene-and
 2. **Detect collisions.** The broadphase proposes pairs, and the narrowphase builds a manifold for each shape pair. Contacts are created, refreshed or removed. Begin and end events are recorded, and touching contacts wake sleeping bodies.
 3. **Prepare and warm start.** Each active contact and joint computes its effective masses, position bias and restitution bias. Impulses from the previous step are re-applied if `warmStarting` is on.
 4. **Solve.** `velocityIterations` (at least 1) sweeps run over joints, then contacts.
-5. **Integrate positions.** Per-step translation and rotation are clamped by `maxTranslation` and `maxRotation`.
+5. **Integrate positions.** Fast dynamic bodies are first clamped by continuous collision (below). Per-step translation and rotation are then clamped by `maxTranslation` and `maxRotation`.
 6. **Update bounds and sleep.** AABBs are recomputed with `speculativeDistance` margin. Sleep islands are updated if `allowSleep` is on.
 7. **Dispatch** events to `onContact`, if set.
+
+**Continuous collision.** `SolverSettings.continuousCollision` is on by default. In step 5, a dynamic body whose step motion is longer than its core radius sweeps that core sphere (3D) or circle (2D) against the non-trigger shapes of static and kinematic bodies. Collision filters and joint collision disabling are respected. The motion is clamped to just before the first hit. The core radius is half of the smallest AABB half-extent. Velocity is kept, so the contact solver stops the body on the next step. See `clampContinuous` in `World3D.swift` and `World2D.swift`.
 
 ### 2.2 Broadphase
 
@@ -399,7 +401,7 @@ func movePlayer(_ player: Entity, input: Vec2, jumpPressed: Bool, dt: Float) {
 
 ## 14. Limitations
 
-- **Limitation: no continuous collision detection.** Fast, thin bodies can tunnel. `maxTranslation` limits explosions but is not a substitute. Limit speeds, thicken colliders, or use smaller fixed steps.
+- **Limitation: continuous collision is partial.** Only fast dynamic bodies are swept, and only against static and kinematic shapes. Fast dynamic-against-dynamic pairs can still tunnel. Sphere sweeps against boxes and meshes are conservative approximations. `maxTranslation` limits explosions but is not a substitute. Thicken colliders, limit speeds, or use smaller fixed steps where this matters.
 - **Limitation: no 3D convex hulls.** Decompose other shapes into primitives.
 - **Limitation: 2D polygons are convex, with at most 16 vertices.** Split concave outlines.
 - **Limitation: box against mesh is approximated.** Mesh against plane, mesh against mesh and plane against plane produce no contacts.
@@ -413,13 +415,14 @@ func movePlayer(_ player: Entity, input: Vec2, jumpPressed: Bool, dt: Float) {
 - **Limitation: `setShapes` drops contacts without ended events.**
 - **Limitation: forces are per step.**
 - **Limitation: event delivery and interpolation depend on the engine,** which is not in this snapshot.
-- **Limitation: results may not be repeatable between runs.** Contacts live in a `Dictionary`, whose iteration order Swift leaves unspecified. The solve order, and so the results, can vary. This follows from the design. No test in this snapshot checks it.
 - **Limitation: joint definitions are fixed at creation,** apart from the motor speed and target setters.
 
 ## 15. Validation status
 
-- `Tests/FeroxPhysicsTests` covers free fall, resting contacts, restitution, triggers, raycasts, filtering, sleeping, teleporting, contact events and the ECS bridge. The tests have not yet been run on a toolchain, so no results are cited.
-- The behaviour in this document was derived from the source, and should be confirmed against those tests.
+- `Tests/FeroxPhysicsTests` covers free fall, resting contacts, restitution, triggers, raycasts, filtering, sleeping, teleporting, contact events, the ECS bridge, continuous collision (`ContinuousCollisionTests.swift`) and determinism (`PhysicsDeterminismTests.swift`).
+- The physics tests (41 in total) were run on an M1 Max with macOS 27 and Swift 6.4, and all pass.
+- Contact keys are sorted before the solve, so results are repeatable from run to run. `PhysicsDeterminismTests.swift` checks this.
+- The behaviour in this document was derived from the source and checked against those tests.
 - No benchmark numbers are given. Performance should be measured, as described in [21-Performance.md](21-Performance.md).
 
 ## 16. Related documents

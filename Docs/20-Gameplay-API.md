@@ -34,7 +34,7 @@ The frame order and the phase model are explained in [05-Engine-Lifecycle.md](05
 | `GameLauncher` (flags, headless run) | Implemented: `Launcher.swift`. The headless path creates no renderer and no window. |
 | `GameHost` (window, Metal view, frame pacing) | Implemented: `GameHost.swift`, macOS only. **Not run on hardware.** |
 | Examples | Three programs in `Examples/`. **Not built or run.** |
-| Automated tests | `Tests/FeroxIntegrationTests/EngineTests.swift` drives `Engine` headlessly. It has not been run here. |
+| Automated tests | `Tests/FeroxIntegrationTests/EngineTests.swift` drives `Engine` headlessly. It passes on an M1 Max, macOS 27, Swift 6.4. |
 
 ## 2. The Game protocol
 
@@ -276,7 +276,7 @@ if let cam = engine.activeCamera() {
 
 ## 14. Validation status
 
-This document was written from the source. No macOS machine or Swift toolchain was available while the engine was written, so none of the three examples has been built, and no window has been opened. The headless path is simpler and is the one most likely to be exercised first, but it too has not been run.
+This document was written from the source. No macOS machine or Swift toolchain was available while the engine was written. Since then, all three examples have been built and run on one M1 Max (macOS 27, Swift 6.4), including the headless path (`swift run HelloFerox --headless`). Other Macs are untested.
 
 `Tests/FeroxIntegrationTests/EngineTests.swift` exercises the headless engine, and `Tests/FeroxIntegrationTests/EditorSessionTests.swift` exercises the editor core. Neither has been run for this document. The CI workflow runs `swift test` on macOS, and on Linux it runs only a filtered set that includes the integration tests. No test covers `GameHost` or `GameLauncher.main`.
 

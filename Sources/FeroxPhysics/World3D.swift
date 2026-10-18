@@ -96,7 +96,8 @@ public enum JointDesc3D: Sendable {
 ///
 /// Supported shape pairs: sphere, box, capsule (all pairs), plane vs convex, triangle mesh
 /// vs sphere/capsule (boxes vs mesh are approximated by an inscribed capsule). Convex hulls
-/// and continuous collision detection are not implemented; see Docs/13-Physics.md.
+/// are not implemented; continuous collision covers fast dynamic bodies against static and
+/// kinematic ones only. See Docs/13-Physics.md.
 public final class PhysicsWorld3D {
     public var gravity = Vec3(0, -9.81, 0)
     public var settings = SolverSettings()
@@ -379,6 +380,7 @@ public final class PhysicsWorld3D {
                 b.angularVelocity = w
             }
             let oldCenter = b.worldCenter
+            if settings.continuousCollision && b.type == .dynamic { dp = clampContinuous(i, b, from: oldCenter, dp) }
             // Quaternion integration: q' = q + ½ (ω, 0) q dt.
             let wq = Quat(x: w.x, y: w.y, z: w.z, w: 0)
             let dq = wq * b.rotation
@@ -391,6 +393,30 @@ public final class PhysicsWorld3D {
 
         if settings.allowSleep { updateSleep(dt) }
         if let onContact { for e in contactEvents { onContact(e) } }
+    }
+
+    /// Continuous collision: shortens a dynamic body's step motion `dp` (from its centre `c`) so
+    /// its core sphere stops just short of the first static or kinematic surface in the way; the
+    /// contact solver stops it on the next step. Velocity is kept.
+    /// ponytail: core-sphere sweep, Box2D-style; fast dynamic-vs-dynamic pairs can still tunnel.
+    private func clampContinuous(_ i: Int, _ b: Body3D, from c: Vec3, _ dp: Vec3) -> Vec3 {
+        let ext = b.aabb.extents - Vec3(repeating: settings.speculativeDistance)
+        let core = 0.5 * min(ext.x, min(ext.y, ext.z))
+        let len = dp.length
+        guard core > 0, len > core, let filter = b.shapes.first(where: { !$0.isTrigger })?.filter else { return dp }
+        let d = dp / len
+        let ray = Ray(origin: c, direction: d)
+        var best = len
+        for j in bodies.indices where j != i {
+            guard let o = bodies[j], o.type != .dynamic, !jointsDisableCollision(i, j),
+                  o.aabb.inflated(by: core).intersect(ray, maxDistance: len) != nil else { continue }
+            let pose = o.pose
+            for s in o.shapes where !s.isTrigger && filter.shouldCollide(with: s.filter) {
+                guard let (t, n) = Collide3D.rayShape(s, pose, c, d, best, inflate: core), t > 0, n.dot(d) < 0 else { continue }
+                best = t
+            }
+        }
+        return best < len ? d * max(best - settings.linearSlop, 0) : dp
     }
 
     private func shapeKey(_ body: Int, _ shape: Int) -> Int { (body << 8) | (shape & 0xFF) }

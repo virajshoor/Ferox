@@ -68,6 +68,17 @@ public struct Camera: Component, Codable, Hashable, Sendable {
         }
         return p
     }
+
+    /// World-space ray through `point`, given in normalised viewport coordinates (0...1, top-left
+    /// origin), for a camera whose world matrix is `cameraToWorld`. Works for both projections.
+    public func ray(through point: Vec2, aspect: Float, cameraToWorld: Mat4) -> Ray {
+        let unproject = cameraToWorld * projectionMatrix(aspect: aspect).inverse
+        let x = point.x * 2 - 1, y = 1 - point.y * 2
+        // Reverse-Z: NDC depth 1 is the near plane. 0.5 stays finite even with an infinite far plane.
+        let near = unproject.transformPoint(Vec3(x, y, 1))
+        let mid = unproject.transformPoint(Vec3(x, y, 0.5))
+        return Ray(origin: near, direction: mid - near)
+    }
 }
 
 public enum LightType: String, Codable, Sendable, CaseIterable { case directional, point, spot }

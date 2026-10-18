@@ -2,7 +2,7 @@
 
 Ferox is a Swift package for macOS. Its primary target is Apple Silicon Macs running macOS 14 or later, as stated in [CONTRIBUTING.md](../CONTRIBUTING.md). Most of the engine is ordinary Swift with no platform dependency, so the simulation core can be built and tested on Linux. The Metal renderer, windowing, and several system backends exist only on Apple platforms.
 
-This document lists what each platform gets, where the platform boundaries are in the source, and what the continuous integration (CI) workflow builds. Nothing here has been run on hardware yet. No CI result is quoted, and the document was written without a macOS or Swift toolchain available.
+This document lists what each platform gets, where the platform boundaries are in the source, and what the continuous integration (CI) workflow builds. The package has been built and run on one Apple Silicon Mac, an M1 Max with macOS 27 and Swift 6.4, as section 8 records. No CI result is quoted. This document was first written without a macOS or Swift toolchain available.
 
 ## Contents
 
@@ -115,13 +115,13 @@ The editor needs Metal. Its launcher explains that and exits.
 
 ## 7. Limitations
 
-- Nothing has been built or run on macOS in the writing of this document. The Metal code paths, MetalFX, and the macOS CI job are unverified.
+- Only one Mac has been tested: an M1 Max running macOS 27. The Metal renderer draws offscreen there. MetalFX and the macOS CI job are unverified, and other Macs and GPUs are untested.
 - The monospace text provider is a placeholder: it renders white boxes, as recorded in [28-Limitations-and-Roadmap.md](28-Limitations-and-Roadmap.md). Only platforms without CoreText use it.
 - The `Ferox` target depends on `FeroxRender`, so the Linux build of `Ferox` depends on the Metal-guarded files compiling to nothing. Whether that build succeeds has not been confirmed in this snapshot.
 
 ## 8. Validation status
 
-- No macOS build, test run or CI result is cited.
+- A local macOS build (`swift build --build-tests`, zero warnings) and full `swift test` run pass on the M1 Max. No CI result is cited.
 - The Linux portable build and tests are configured in CI but are not reported here.
 - No benchmark numbers are given. Measurements should be taken on a named Mac, as [CONTRIBUTING.md](../CONTRIBUTING.md) asks.
 

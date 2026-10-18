@@ -315,6 +315,12 @@ final class EditorController: Game {
                 if input.wasPressed(Key.delete) || input.wasPressed(Key.backspace) { session.deleteSelection() }
                 if input.wasPressed(Key.escape) { session.select(nil) }
             }
+            if input.wasPressed(MouseButton.left), !overPanel,
+               let camera = world.get(Camera.self, editorCamera), let m = world.get(WorldTransform.self, editorCamera)?.matrix {
+                let size = engine.viewportPoints
+                let ray = camera.ray(through: input.mousePosition / size, aspect: size.x / max(size.y, 1), cameraToWorld: m)
+                session.select(session.pick(ray))
+            }
             drawGizmos(host.renderer.debugDraw)
         }
         let dirty = session.isDirty ? " (edited)" : ""

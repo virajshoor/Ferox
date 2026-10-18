@@ -94,7 +94,7 @@ The list below states what the source implements. Each item links to the documen
 
 - **Scenes and entities.** Generational entity handles, sparse-set component storage, parent-child hierarchy with transform propagation, a phase-ordered system scheduler, a JSON scene and prefab format with validation, and a scene manager with additive loads and fades. See [06-Scene-and-Entities.md](06-Scene-and-Entities.md).
 - **Engine loop.** Fixed-timestep simulation with render interpolation, a frame clock with time scale and pause, edit mode, and headless runs. See [05-Engine-Lifecycle.md](05-Engine-Lifecycle.md).
-- **Physics.** Sequential-impulse rigid bodies in 2D and 3D, with warm starting, Coulomb friction, speculative contacts, sleep islands, joints, a capsule character controller and collision events. Continuous collision detection is not implemented. See [13-Physics.md](13-Physics.md).
+- **Physics.** Sequential-impulse rigid bodies in 2D and 3D, with warm starting, Coulomb friction, speculative contacts, sleep islands, joints, a capsule character controller and collision events. Continuous collision detection sweeps fast dynamic bodies against static and kinematic bodies and clamps their motion for the step. Fast dynamic-versus-dynamic pairs can still tunnel. See [13-Physics.md](13-Physics.md).
 - **Input.** Keyboard, mouse and gamepad state, action maps and contexts, and input recording and playback. See [14-Input.md](14-Input.md).
 - **Rendering, 2D.** CPU-batched sprites, shapes, tilemaps, stencil masks and 2D lights in the same HDR pass as 3D. See [07-Rendering-2D.md](07-Rendering-2D.md).
 - **Rendering, 3D.** A clustered forward or forward renderer with metallic-roughness PBR materials, LOD groups, GPU-driven instance culling with Hi-Z occlusion, reverse-Z depth, and render hooks for custom GPU work. See [08-Rendering-3D.md](08-Rendering-3D.md).
@@ -111,7 +111,7 @@ The list below states what the source implements. Each item links to the documen
 | Platform | Status |
 | --- | --- |
 | macOS 14 or later | The target platform. `Package.swift` declares `.macOS(.v14)`. |
-| Apple Silicon | The primary target, according to `CONTRIBUTING.md`. |
+| Apple Silicon | The primary target, according to `CONTRIBUTING.md`. Verified on one M1 Max only. |
 | Linux | The CI runs a portable job that builds `FeroxMath` and `FeroxCore` and runs the test filters for the portable modules. The rest of the package is not built there. |
 | iOS, tvOS, visionOS | Not declared in `Package.swift`. Not supported by this snapshot. |
 
@@ -131,21 +131,20 @@ Hardware requirements and build instructions are in [02-Getting-Started.md](02-G
 
 ## 7. What is and is not verified
 
-This documentation was written from the source code of this repository snapshot. The package was later built and tested with Swift 6.1.3 on Linux. No Mac with a Metal device was available. The following statements therefore hold:
+This documentation was written from the source code of this repository snapshot. The package has since been built and run on one Mac: an M1 Max running macOS 27, with Swift 6.4. The following statements hold:
 
-- **Built on Linux only.** Every target builds with Swift 6.1.3 on Linux. Code behind `#if canImport(Metal)`, AppKit or AVFoundation is compiled out there, so the macOS build may still show errors.
-- **Run headless only.** `HelloFerox --headless --frames 120` runs on Linux. No window was opened and no frame was rendered.
-- **Tested on Linux.** All 491 tests in the test targets (see [04-Building-and-Testing.md](04-Building-and-Testing.md)) pass on Linux. Tests that need Metal have not run.
+- **Built and tested on one Mac.** `swift build --build-tests` has zero warnings, and the full `swift test` suite (504 XCTest tests, see [04-Building-and-Testing.md](04-Building-and-Testing.md)) passes. No Intel Macs, other GPUs or iOS devices have been tested.
+- **Examples run.** HelloFerox, Platformer2D and Showcase3D run on the M1 Max. `swift run FeroxDiag --render` draws an offscreen frame with the Metal renderer.
 - **Not measured.** No benchmark result, frame time or memory figure is given in any document of this series. The benchmark tool exists, but its output has not been recorded here. See [21-Performance.md](21-Performance.md).
-- **Not checked on hardware.** Every rendering, lighting, upscaling and ray-tracing behaviour described in sections 07 to 12 is derived from the Swift and Metal source. None has been observed on a Mac. Statements about hardware tiers repeat what the source comments say, and are marked as such where they appear.
+- **Limited hardware checks.** Apart from the offscreen render and the examples above, the rendering, lighting, upscaling and ray-tracing behaviour described in sections 07 to 12 is derived from the Swift and Metal source. It has not been observed on hardware. Statements about hardware tiers repeat what the source comments say, and are marked as such where they appear.
 - **Source-level only.** Where a document describes an algorithm, it describes what the code does. It does not claim that the output is correct or that it is efficient.
 
 ## 8. Limitations
 
-- **Limitation: no verification in this snapshot.** Section 7 applies to every document in this series.
-- **Limitation: never compiled.** Expect compile errors on the first `swift build` and test failures on the first `swift test`.
+- **Limitation: one machine verified.** Verification covers one M1 Max running macOS 27. Section 7 applies to every document in this series.
+- **Limitation: other hardware is untested.** Other Macs, GPUs and iOS devices have not been tested.
 - **Limitation: Linux is partial.** Only the portable modules are built in CI on Linux. The renderer and the examples require macOS.
-- **Limitation: a basic editor.** `FeroxEditor` has no viewport picking and a fixed toolbar layout. See [22-Editor.md](22-Editor.md).
+- **Limitation: a basic editor.** `FeroxEditor` picks entities in the viewport by world bounds for meshes, and by a small marker sphere for lights and cameras. It has a fixed toolbar layout. See [22-Editor.md](22-Editor.md).
 
 ## 9. Related documents
 

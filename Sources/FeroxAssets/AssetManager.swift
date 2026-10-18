@@ -74,7 +74,8 @@ private struct ModelCacheHeader: Codable {
 /// - Processed models are cached in `.ferox-cache/` keyed by source hash (incremental rebuilds).
 /// - With `hotReload` enabled, the project is re-scanned periodically and changed assets
 ///   (plus dependents) are reloaded; `onReload` notifies the renderer and other systems.
-/// - Texture memory is tracked against `budget`; unreferenced textures are evicted LRU.
+/// - Texture and mesh memory are tracked against `budget`; unreferenced textures and cached
+///   models are evicted LRU. Registered meshes are never evicted.
 public final class AssetManager: @unchecked Sendable {
     public let database: AssetDatabase?
     public var budget: MemoryBudget
@@ -95,6 +96,8 @@ public final class AssetManager: @unchecked Sendable {
     private var raw: [AssetID: AssetHandle<Data>] = [:]
     private var meshes: [AssetID: AssetHandle<MeshData>] = [:]
     private var frame: UInt64 = 0
+    /// Budget kinds already warned about while over budget (avoids a warning every frame).
+    private var budgetWarnings: Set<String> = []
     private var lastScan: Double = 0
     private var scanInFlight = false
     public private(set) var loadCount = 0
@@ -250,7 +253,10 @@ public final class AssetManager: @unchecked Sendable {
     // MARK: Models
 
     public func model(_ id: AssetID) -> AssetHandle<LoadedModel> {
-        if let h = models[id] { return h }
+        if let h = models[id] {
+            h.lastUsedFrame = frame
+            return h
+        }
         let h = AssetHandle<LoadedModel>(id: id)
         models[id] = h
         startModelLoad(h)
@@ -459,24 +465,40 @@ public final class AssetManager: @unchecked Sendable {
 
     /// Total CPU-side texture bytes currently resident.
     public var residentTextureBytes: Int { textures.values.reduce(0) { $0 + $1.byteCount } }
+    /// Total CPU-side mesh bytes: registered meshes plus cached model data.
+    public var residentMeshBytes: Int {
+        meshes.values.reduce(0) { $0 + $1.byteCount } + models.values.reduce(0) { $0 + $1.byteCount }
+    }
 
     private func enforceBudget() {
-        var total = residentTextureBytes
-        guard total > budget.textureBytes else { return }
-        // Evict least-recently-used textures that nobody else references.
-        let candidates = textures.keys.sorted { (textures[$0]?.lastUsedFrame ?? 0) < (textures[$1]?.lastUsedFrame ?? 0) }
-        for id in candidates where total > budget.textureBytes {
-            guard textures[id]?.state == .loaded, var h = textures.removeValue(forKey: id) else { continue }
+        Self.evictUnused(&textures, limit: budget.textureBytes, pinnedBytes: 0, kind: "Texture", warned: &budgetWarnings)
+        // Registered meshes have no source to reload from, so only cached models are evicted.
+        Self.evictUnused(&models, limit: budget.meshBytes, pinnedBytes: meshes.values.reduce(0) { $0 + $1.byteCount },
+                         kind: "Mesh", warned: &budgetWarnings)
+    }
+
+    /// Evicts least-recently-used loaded entries of `cache` that nobody else references until
+    /// `pinnedBytes` plus the cache's bytes fit in `limit`. Evicted assets reload on next request.
+    private static func evictUnused<T>(
+        _ cache: inout [AssetID: AssetHandle<T>], limit: Int, pinnedBytes: Int, kind: String, warned: inout Set<String>
+    ) {
+        var total = cache.values.reduce(pinnedBytes) { $0 + $1.byteCount }
+        guard total > limit else { warned.remove(kind); return }
+        let candidates = cache.keys.sorted { (cache[$0]?.lastUsedFrame ?? 0) < (cache[$1]?.lastUsedFrame ?? 0) }
+        for id in candidates where total > limit {
+            guard cache[id]?.state == .loaded, var h = cache.removeValue(forKey: id) else { continue }
             // With the dictionary entry removed, a unique reference means no game code holds it.
             if isKnownUniquelyReferenced(&h) {
                 total -= h.byteCount
                 Profiler.shared.count("assets.evicted")
             } else {
-                textures[id] = h
+                cache[id] = h
             }
         }
-        if total > budget.textureBytes {
-            Log.warning("Assets", "Texture memory \(total >> 20) MB exceeds budget \(budget.textureBytes >> 20) MB (all textures in use)")
+        if total > limit, warned.insert(kind).inserted {
+            Log.warning("Assets", "\(kind) memory \(total >> 20) MB exceeds budget \(limit >> 20) MB (all in use)")
+        } else if total <= limit {
+            warned.remove(kind)
         }
     }
 

@@ -80,6 +80,8 @@ public struct SolverSettings: Codable, Sendable, Hashable {
     /// Hard cap on per-step translation to prevent tunnelling explosions.
     public var maxTranslation: Float = 4
     public var maxRotation: Float = 0.5 * .pi
+    /// Sweeps fast dynamic bodies against static and kinematic bodies so they cannot tunnel.
+    public var continuousCollision = true
     public init() {}
 }
 

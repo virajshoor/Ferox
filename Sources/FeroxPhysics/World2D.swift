@@ -103,8 +103,8 @@ public enum JointDesc2D: Sendable {
 ///   velocity threshold, Baumgarte stabilisation with slop, and speculative contacts.
 /// - Sleeping: union-find islands over contacts/joints.
 ///
-/// Limitations: no continuous collision detection (fast thin objects may tunnel; keep
-/// `maxTranslation` and the step size reasonable), polygons are convex (≤16 vertices).
+/// Limitations: continuous collision only sweeps dynamic bodies against static and kinematic
+/// ones (fast dynamic pairs may still tunnel), polygons are convex (≤16 vertices).
 public final class PhysicsWorld2D {
     public var gravity = Vec2(0, -9.81)
     public var settings = SolverSettings()
@@ -406,6 +406,7 @@ public final class PhysicsWorld2D {
             }
             // Integrate about the centre of mass.
             let oldCenter = b.worldCenter
+            if settings.continuousCollision && b.type == .dynamic { dp = clampContinuous(i, b, from: oldCenter, dp) }
             b.angle += da
             let newCenter = oldCenter + dp
             b.position = newCenter - Transform2D(position: .zero, angle: b.angle).rotate(b.localCenter)
@@ -418,6 +419,31 @@ public final class PhysicsWorld2D {
 
         // 6. Dispatch events.
         if let onContact { for e in contactEvents { onContact(e) } }
+    }
+
+    /// Continuous collision: shortens a dynamic body's step motion `dp` (from its centre `c`) so
+    /// its core circle stops just short of the first static or kinematic surface in the way; the
+    /// contact solver stops it on the next step. Velocity is kept.
+    /// ponytail: core-circle sweep, Box2D-style; fast dynamic-vs-dynamic pairs can still tunnel.
+    private func clampContinuous(_ i: Int, _ b: Body2D, from c: Vec2, _ dp: Vec2) -> Vec2 {
+        let ext = (b.aabbMax - b.aabbMin) * 0.5 - settings.speculativeDistance
+        let core = 0.5 * min(ext.x, ext.y)
+        let len = dp.length
+        guard core > 0, len > core, let filter = b.shapes.first(where: { !$0.isTrigger })?.filter else { return dp }
+        let to = c + dp
+        let lo = pointwiseMin(c, to) - core, hi = pointwiseMax(c, to) + core
+        var best: Float = 1
+        for j in bodies.indices where j != i {
+            guard let o = bodies[j], o.type != .dynamic, !jointsDisableCollision(i, j),
+                  o.aabbMin.x <= hi.x, o.aabbMax.x >= lo.x, o.aabbMin.y <= hi.y, o.aabbMax.y >= lo.y else { continue }
+            let xf = o.transform
+            for s in o.shapes where !s.isTrigger && filter.shouldCollide(with: s.filter) {
+                guard let (t, n) = Collide2D.raycast(s, xf, origin: c, delta: dp, inflate: core),
+                      t > 0, t < best, n.dot(dp) < 0 else { continue }
+                best = t
+            }
+        }
+        return best < 1 ? dp * max(best - settings.linearSlop / len, 0) : dp
     }
 
     private func shapeKey(_ body: Int, _ shape: Int) -> Int { (body << 8) | (shape & 0xFF) }

@@ -29,9 +29,9 @@ Frame timing is driven by the engine loop described in [05-Engine-Lifecycle.md](
 | `Profiler` (CPU scopes, GPU samples, counters, history, Chrome trace export) | Implemented: `Sources/FeroxCore/Profiler.swift`. Not run. |
 | Renderer counters (`RenderCounters`) | Implemented in the Metal path. **Not run on hardware.** |
 | Frame and render statistics | Implemented: `FrameStatistics`, `RenderFrameStatistics`. |
-| `MemoryTracker` and `MemoryBudget` | Implemented. Texture budget enforced by the asset manager; audio budget enforced by streaming over-budget clips. Mesh budget not enforced. |
-| `FeroxBenchmarks` | Implemented: `Sources/FeroxBenchmarks/FeroxBenchmarks.swift`. **Never run.** |
-| `FeroxDiag` | Implemented: `Sources/FeroxDiag/FeroxDiag.swift`. **Never run.** |
+| `MemoryTracker` and `MemoryBudget` | Implemented. Texture budget enforced by the asset manager; audio budget enforced by streaming over-budget clips. Mesh budget enforced for cached model data (unreferenced models are evicted LRU); registered meshes are counted but never evicted. |
+| `FeroxBenchmarks` | Implemented: `Sources/FeroxBenchmarks/FeroxBenchmarks.swift`. Run on one M1 Max (`--quick`); no numbers are cited as targets. |
+| `FeroxDiag` | Implemented: `Sources/FeroxDiag/FeroxDiag.swift`. Run on one M1 Max, including the offscreen `--render` check. |
 | CI benchmark workflow | Implemented: `.github/workflows/benchmarks.yml`, manual trigger only. **Never run.** |
 | Published numbers | **None.** |
 
@@ -223,7 +223,7 @@ Tests pin these behaviours: `PerformancePathTests` (scene), `PhysicsDeterminismT
 - **Benchmark names can mislead.** Physics benchmark names include the full body count even in quick runs, which use fewer bodies.
 - **The benchmark tool has no statistical tests.** It reports a mean, median, minimum and maximum, but does not check for noise or thermal throttling.
 - **Hosted runners are not representative.** The CI benchmark runs on virtualised hardware and is only a trend indicator.
-- **Mesh budget not enforced.** The mesh limit is stored, but no mesh eviction was found in the source reviewed.
+- **Mesh budget enforced for cached model data (unreferenced models are evicted LRU); registered meshes are counted but never evicted.** The mesh limit is stored, but no mesh eviction was found in the source reviewed.
 - **Counters are unlabelled.** Counter names are plain strings with no registry, so a misspelled name silently creates a new counter.
 - **Device-dependent paths are unverified.** Ray tracing, MetalFX and the dynamic-resolution controller have not been exercised on hardware.
 

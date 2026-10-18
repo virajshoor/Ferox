@@ -21,7 +21,7 @@ The open-source game engine for macOS and Apple Silicon.
 
 > [!IMPORTANT]
 > **Project status: pre-release (0.1.0, unreleased).** Verified on a Mac (Apple M1 Max, macOS 27,
-> Swift 6.4): every target builds with no warnings, all 494 tests pass, the Metal renderer draws
+> Swift 6.4): every target builds with no warnings, all 504 tests pass, the Metal renderer draws
 > offscreen frames, and the examples run. The Linux CI builds and tests the platform-independent
 > modules. Testing so far covers one machine, so please report build errors or rendering issues on
 > other Macs.

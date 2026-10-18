@@ -110,6 +110,16 @@ public struct ActionValue: Sendable, Hashable {
 /// main thread, after which the state is immutable for the frame.
 public final class InputSystem: @unchecked Sendable {
     public private(set) var state = InputState()
+    /// Dead zone applied to analogue sticks.
+    public var stickDeadZone: DeadZone {
+        get { state.stickDeadZone }
+        set { state.stickDeadZone = newValue }
+    }
+    /// Dead zone applied to analogue triggers.
+    public var triggerDeadZone: DeadZone {
+        get { state.triggerDeadZone }
+        set { state.triggerDeadZone = newValue }
+    }
     private let queue = ThreadSafeQueue<InputEvent>()
 
     public private(set) var maps: [String: ActionMap] = [:]

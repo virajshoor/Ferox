@@ -64,7 +64,6 @@ public struct PhysicsMaterial: Codable, Sendable, Hashable {
 /// Solver configuration shared by the 2D and 3D worlds.
 public struct SolverSettings: Codable, Sendable, Hashable {
     public var velocityIterations = 8
-    public var positionIterations = 3
     /// Fraction of penetration resolved per step (Baumgarte factor).
     public var baumgarte: Float = 0.2
     /// Allowed penetration before correction starts (world units).
@@ -119,7 +118,7 @@ public struct ContactEvent<V: Sendable>: Sendable {
 
 /// Line primitive emitted for debug visualisation.
 public struct DebugLine<V: Sendable>: Sendable {
-    public enum Kind: Sendable { case collider, sleeping, staticCollider, trigger, contact, contactNormal, joint, force, aabb }
+    public enum Kind: Sendable { case collider, sleeping, staticCollider, trigger, contact, contactNormal, joint, aabb }
     public var a: V
     public var b: V
     public var kind: Kind

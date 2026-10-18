@@ -20,7 +20,8 @@ public struct UnknownComponents: Component, Hashable, Sendable {
 
 /// Registry of serializable component types (by stable name).
 ///
-/// Engine modules register their components at start-up (`registerBuiltins`), and games
+/// Scene components are registered automatically; other engine modules register theirs at
+/// start-up (e.g. `registerPhysicsComponents`, called by `Engine`), and games
 /// register their own with `ComponentRegistry.shared.register(MyComponent.self)`.
 public final class ComponentRegistry: @unchecked Sendable {
     public struct Entry {

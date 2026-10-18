@@ -286,7 +286,7 @@ public final class World {
 
     /// Borrows the raw dense arrays of `A` for high-performance or parallel processing
     /// (e.g. with `Jobs.parallelFor`). Element `i` of `components` belongs to `entities[i]`.
-    /// Structural changes are forbidden for the duration of `body`.
+    /// Structural changes requested during `body` are deferred until it returns.
     public func withDenseStorage<A: Component, R>(
         _ a: A.Type, _ body: (UnsafeBufferPointer<Entity>, UnsafeMutableBufferPointer<A>) throws -> R
     ) rethrows -> R? {

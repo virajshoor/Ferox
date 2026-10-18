@@ -371,7 +371,8 @@ public final class PhysicsWorld2D {
         updateContacts()
 
         // 3. Solve.
-        let active = contacts.keys.filter { contacts[$0]!.isActive(bodies) }
+        // Sorted so the solve order (and therefore the result) is deterministic.
+        let active = contacts.keys.filter { contacts[$0]!.isActive(bodies) }.sorted()
         let inv = 1 / dt
         for k in active { contacts[k]!.prepare(&bodies, settings: settings, invDt: inv) }
         for j in joints.indices { joints[j]?.prepare(&bodies, dt: dt, settings: settings) }

@@ -346,7 +346,8 @@ public final class PhysicsWorld3D {
 
         updateContacts()
 
-        let active = contacts.keys.filter { contacts[$0]!.isActive(bodies) }
+        // Sorted so the solve order (and therefore the result) is deterministic.
+        let active = contacts.keys.filter { contacts[$0]!.isActive(bodies) }.sorted()
         for k in active { contacts[k]!.prepare(bodies, settings: settings, invDt: inv) }
         for j in joints.indices { joints[j]?.prepare(bodies, dt: dt, settings: settings) }
         if settings.warmStarting {

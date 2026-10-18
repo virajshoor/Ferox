@@ -47,7 +47,7 @@ extension World {
         remove(Parent.self, from: child)
     }
 
-    /// Root entities (those with a `Transform` and no parent), in creation order.
+    /// Root entities (those with a `Transform` and no parent), in entity index order.
     public var rootEntities: [Entity] {
         entities(with: Transform.self).filter { parent(of: $0) == nil }.sorted()
     }
@@ -58,8 +58,8 @@ extension World {
         for c in children(of: e) { visitSubtree(c, depth: depth + 1, visit) }
     }
 
-    /// World matrix computed on demand by walking up the hierarchy. Use `WorldTransform`
-    /// in systems; this is for tools and one-off queries where it may be stale.
+    /// World matrix computed on demand from local `Transform`s by walking up the hierarchy
+    /// (at most 1024 ancestors). Prefer `WorldTransform` in systems: it is cached per frame.
     public func worldMatrix(of e: Entity) -> Mat4 {
         var m = get(Transform.self, e)?.localMatrix ?? .identity
         var cursor = parent(of: e)

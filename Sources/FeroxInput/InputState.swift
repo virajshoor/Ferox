@@ -47,7 +47,6 @@ public struct GamepadState: Sendable, Hashable {
     public var rawAxes = [Float](repeating: 0, count: GamepadAxis.allCases.count)
     var down: UInt32 = 0
     var previous: UInt32 = 0
-    public var supportsHaptics = false
 
     public init(id: Int, name: String) {
         self.id = id

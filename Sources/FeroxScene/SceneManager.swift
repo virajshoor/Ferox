@@ -139,6 +139,11 @@ public final class SceneManager {
         world.read(SceneMember.self) { e, m in
             if m.scene == handle && !world.has(PersistAcrossScenes.self, e) { doomed.append(e) }
         }
+        // Persistent entities nested under doomed ones are detached first (destroy is recursive).
+        world.read(PersistAcrossScenes.self) { e, _ in
+            if world.get(SceneMember.self, e)?.scene == handle, world.parent(of: e) != nil { world.deferStructural { world.setParent(e, .null, keepWorldTransform: true) } }
+        }
+        world.flushDeferred()
         // Only destroy subtree roots among the doomed set (destroy is recursive).
         let doomedSet = Set(doomed)
         for e in doomed where world.parent(of: e).map({ !doomedSet.contains($0) }) ?? true { world.destroy(e) }

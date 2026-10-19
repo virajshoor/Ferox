@@ -31,7 +31,10 @@ final class MeshBudgetTests: XCTestCase {
         XCTAssertGreaterThan(manager.residentMeshBytes, 0)
         XCTAssertTrue(manager.model(id) === handle, "a referenced model must stay cached")
 
-        weak let released = handle
+        // Swift 5.10 (CI) rejects `weak let`. Swift 6.2+ warns if a `weak var` is only
+        // initialized, never assigned. A separate assignment is valid on both.
+        weak var released: AssetHandle<LoadedModel>?
+        released = handle
         handle = nil
         manager.update()
         XCTAssertNil(released, "an unreferenced model over budget must be evicted")

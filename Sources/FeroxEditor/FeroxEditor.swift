@@ -2,7 +2,7 @@ import Ferox
 import Foundation
 
 #if canImport(AppKit) && canImport(MetalKit)
-    import AppKit
+    @preconcurrency import AppKit
 #endif
 
 /// `FeroxEditor` — a scene editor built on `EditorSession`, `GameHost` and Ferox UI.

@@ -7,7 +7,6 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 src="$root/Sources/FeroxRender/Shaders"
 out=${1:-$(mktemp -d)}
 mkdir -p "$out"
-sdk=$(xcrun --sdk macosx --show-sdk-path)
 for file in "$src"/*.metal; do
     name=$(basename "$file" .metal)
     if [ "$name" = "Common" ]; then
@@ -19,8 +18,9 @@ for file in "$src"/*.metal; do
         printf '\n#line 1 "%s.metal"\n' "$name"
         cat "$file"
     } >"$combined"
+    # `xcrun -sdk macosx` selects the SDK. The metal driver itself rejects `-sdk`.
     xcrun -sdk macosx metal -c "$combined" -o "$out/$name.air" \
-        -std=macos-metal3.0 -fpreserve-invariance -sdk "$sdk"
+        -std=macos-metal3.0 -fpreserve-invariance
     echo "compiled $name.metal"
 done
 echo "shader air files: $out"

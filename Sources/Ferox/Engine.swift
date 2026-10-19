@@ -2,7 +2,8 @@ import Foundation
 
 /// Everything needed to start an `Engine`. Plain data so it can be loaded from a project
 /// file or built in code.
-public struct EngineConfiguration: Sendable {
+/// `URL` is not `Sendable` on the Swift 5.10 Linux SDK. The roots are immutable paths.
+public struct EngineConfiguration: @unchecked Sendable {
     /// Window title (macOS host) and log prefix.
     public var title = "Ferox"
     /// Initial window content size in points.

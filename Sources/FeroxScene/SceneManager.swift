@@ -67,7 +67,8 @@ public enum SceneLoadMode: Sendable { case single, additive }
 /// scene); each entity created by a load is tagged with `SceneMember`. Unloading destroys
 /// the members except those marked `PersistAcrossScenes`.
 public final class SceneManager {
-    public struct LoadedScene: Sendable {
+    /// `URL` is not `Sendable` on the Swift 5.10 Linux SDK. `source` is an immutable path.
+    public struct LoadedScene: @unchecked Sendable {
         public let handle: SceneHandle
         public var name: String
         public var source: URL?

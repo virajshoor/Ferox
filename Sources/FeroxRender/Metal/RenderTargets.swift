@@ -57,13 +57,22 @@
             let fence: any MTLFence
             private var signaled = false
             init(fence: any MTLFence) { self.fence = fence }
-            func begin(_ encoder: any MTLCommandEncoder) {
-                if signaled {
-                    encoder.waitForFence(fence)
-                    signaled = false
-                }
+
+            func begin(_ encoder: any MTLRenderCommandEncoder) {
+                guard signaled else { return }
+                encoder.waitForFence(fence, before: [.vertex, .fragment])
+                signaled = false
             }
-            func end(_ encoder: any MTLCommandEncoder) {
+            func end(_ encoder: any MTLRenderCommandEncoder) {
+                encoder.updateFence(fence, after: [.vertex, .fragment])
+                signaled = true
+            }
+            func begin(_ encoder: any MTLComputeCommandEncoder) {
+                guard signaled else { return }
+                encoder.waitForFence(fence)
+                signaled = false
+            }
+            func end(_ encoder: any MTLComputeCommandEncoder) {
                 encoder.updateFence(fence)
                 signaled = true
             }
@@ -255,9 +264,8 @@
                 guard let descriptor = descriptors[request.resource],
                     let placement = layout.placement(of: request.resource)
                 else { throw RenderError.allocation(request.resource.rawValue) }
-                descriptor.heapOffset = placement.offset
                 if aliasing { descriptor.hazardTrackingMode = .untracked }
-                guard let texture = heap.makeTexture(descriptor: descriptor) else {
+                guard let texture = heap.makeTexture(descriptor: descriptor, offset: placement.offset) else {
                     throw RenderError.allocation(request.resource.rawValue)
                 }
                 texture.label = TransientHeapPlan.label(request.resource) ?? "Ferox.\(request.resource.rawValue)"
@@ -287,7 +295,7 @@
             placed = made
         }
 
-        private func descriptor(_ request: TransientHeapPlan.TransientRequest) -> MTLTextureDescriptor {
+        private func descriptor(_ request: TransientRequest) -> MTLTextureDescriptor {
             let d = MTLTextureDescriptor()
             d.textureType = request.sampleCount > 1 ? .type2DMultisample : .type2D
             d.pixelFormat = format(request.resource)

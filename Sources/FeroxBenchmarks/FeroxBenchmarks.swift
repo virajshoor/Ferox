@@ -279,7 +279,7 @@ enum FeroxBenchmarks {
     #if canImport(Metal)
         /// Times complete offscreen frames (CPU encode + GPU execution + wait) of a lit scene.
         static func gpuBenchmarks(_ device: RenderDevice) -> [Benchmark] {
-            var benches = QualityPreset.allCases.compactMap { preset in
+            var benches: [Benchmark] = QualityPreset.allCases.compactMap { preset -> Benchmark? in
                 // One renderer per preset, created up front: pipeline compilation is a one-off
                 // cost that must not land in the timed loop.
                 let assets = AssetManager(database: nil)

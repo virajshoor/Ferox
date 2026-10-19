@@ -437,7 +437,7 @@ Practical points:
 - **Limitation: Tiled.** Only the first tile layer and first tileset are read, and only uncompressed encodings.
 - **Limitation: `.fxmat` identifiers.** The file's `id` is overwritten with the asset identifier on load.
 - **Limitation: `waitForPendingLoads`** blocks the calling thread until all work finishes.
-- **Tests.** `Tests/FeroxSubsystemTests/AssetsTests.swift` covers procedural meshes, validation, image decoding, minimal glTF import, path containment and database discovery. The tests have not yet been run on a toolchain.
+- **Tests.** `Tests/FeroxSubsystemTests/AssetsTests.swift` covers procedural meshes, validation, image decoding, minimal glTF import, path containment and database discovery. The tests run in CI.
 
 ## 16. Related documents
 

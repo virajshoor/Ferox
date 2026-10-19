@@ -283,7 +283,7 @@ for (netID, state) in states {
 
 This document was written from the source. No macOS machine or Swift toolchain was available while the engine was written. Nothing in `FeroxNet` has been compiled, and no packet has been sent over a socket or simulated through `LoopbackNetwork` in any run that this document reports. The latency and loss values in `NetworkConditioner.poorWiFi` are design presets, not measurements.
 
-`Tests/FeroxSubsystemTests/NetTests.swift` covers the reader and writer, decoder bounds, snapshot limits and splitting, the message registry, sequence wrap-around, reliable delivery, duplicate and malformed packets, the loopback transport and a client–server handshake. Those tests have not yet been run on a toolchain. The UDP and DTLS paths are not tested and have not been tried on a device.
+`Tests/FeroxSubsystemTests/NetTests.swift` covers the reader and writer, decoder bounds, snapshot limits and splitting, the message registry, sequence wrap-around, reliable delivery, duplicate and malformed packets, the loopback transport and a client–server handshake. Those tests run in CI. The UDP and DTLS paths are not tested and have not been tried on a device.
 
 ## 13. Related documents
 

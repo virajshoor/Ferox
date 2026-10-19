@@ -3,6 +3,7 @@
 /// ray-tracing gating, and clamping of out-of-range values) against `DeviceCapabilities`.
 import Foundation
 import XCTest
+
 @testable import FeroxCore
 
 final class GraphicsSettingsTests: XCTestCase {
@@ -239,7 +240,8 @@ final class ShadowSettingsTests: XCTestCase {
         XCTAssertEqual(GraphicsSettings(preset: .medium).shadows.localShadowSlices, 6)
         XCTAssertEqual(GraphicsSettings(preset: .high).shadows.localShadowSlices, 12)
         XCTAssertEqual(GraphicsSettings(preset: .ultra).shadows.localShadowSlices, 24)
-        XCTAssertGreaterThan(GraphicsSettings(preset: .ultra).shadows.localResolution,
-                             GraphicsSettings(preset: .low).shadows.localResolution)
+        XCTAssertGreaterThan(
+            GraphicsSettings(preset: .ultra).shadows.localResolution,
+            GraphicsSettings(preset: .low).shadows.localResolution)
     }
 }

@@ -84,18 +84,13 @@ The full capability model, and the rules that map settings onto it, are in [24-G
 
 ## 5. Continuous integration
 
-The workflow is `.github/workflows/ci.yml`. It has three jobs.
+The workflow is `.github/workflows/ci.yml`. It has four jobs. Image tags are pinned by digest. See [04-Building-and-Testing.md](04-Building-and-Testing.md).
 
-**macOS build and test** runs on the `macos-14` runner. It selects `/Applications/Xcode_15.4.app` if that path exists, prints the Swift version, and then runs:
+**macOS build and test** runs on `macos-15`. It requires `/Applications/Xcode_16.4.app` and fails if that bundle is missing. It then builds in debug, runs `swift test --enable-xctest --parallel`, compiles every shader module with `Scripts/compile-shaders.sh`, and builds in release.
 
-1. `swift build -c debug`
-2. `swift test --parallel`
-3. `swift build -c release`
+**Linux Swift 5.10** is the tools-version floor (`swift:5.10` by digest). It builds `Ferox` and runs all seven test targets with warnings as errors. It does not pass `--enable-xctest`.
 
-**Linux portable modules** runs in the `swift:5.10` container on `ubuntu-latest`. It runs:
-
-1. `swift build --target Ferox`, which builds the engine without Metal.
-2. `swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests|FeroxSubsystemTests|FeroxRenderTests|FeroxIntegrationTests"`, which runs all seven test targets. None of them needs a GPU.
+**Linux Swift 6.2** (`swift:6.2` by digest) lints with `swift format`, builds `FeroxMath` and `FeroxCore` with `-strict-concurrency=complete` and warnings as errors, and runs `swift test --enable-xctest --parallel`. The rest of the package stays in Swift 5 mode.
 
 **Markdown links** runs lychee in offline mode over `README.md` and `Docs/**/*.md`, and fails on a broken relative link.
 

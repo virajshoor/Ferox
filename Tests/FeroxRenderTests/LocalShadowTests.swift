@@ -1,13 +1,16 @@
+import Ferox
 /// Tests for point- and spot-light shadow planning (`LocalShadowPlanner`), the extractor's
 /// shadow inputs (`shadowedLights`, the per-instance receive flag), the shared probe face
 /// size and the camera viewport conversion. None of these touch Metal.
 import XCTest
-import Ferox
+
 @testable import FeroxRender
 
 final class LocalShadowPlannerTests: XCTestCase {
-    func light(type: Float, at p: Vec3 = .zero, range: Float = 10, direction: Vec3 = .forward,
-               cosOuter: Float = cos(0.5)) -> LightData {
+    func light(
+        type: Float, at p: Vec3 = .zero, range: Float = 10, direction: Vec3 = .forward,
+        cosOuter: Float = cos(0.5)
+    ) -> LightData {
         var d = LightData()
         d.positionRange = Vec4(p, range)
         d.color = Vec4(1, 1, 1, type)
@@ -63,8 +66,9 @@ final class LocalShadowPlannerTests: XCTestCase {
     func testSpotMatrixCoversCone() throws {
         let halfAngle: Float = 0.5
         for dir in [Vec3.forward, Vec3(0, -1, 0)] {
-            let m = LocalShadowPlanner.spotMatrix(position: .zero, direction: dir, cosOuter: cos(halfAngle),
-                                                  range: 10, resolution: 512)
+            let m = LocalShadowPlanner.spotMatrix(
+                position: .zero, direction: dir, cosOuter: cos(halfAngle),
+                range: 10, resolution: 512)
             let centre = try XCTUnwrap(project(m, dir * 5))
             XCTAssertEqual(centre.x, 0, accuracy: 1e-4)
             XCTAssertEqual(centre.y, 0, accuracy: 1e-4)
@@ -78,8 +82,9 @@ final class LocalShadowPlannerTests: XCTestCase {
     /// Slices go nearest-first; a point light that no longer fits is skipped, directional lights never get one.
     func testPlanAssignsSlicesWithinBudget() {
         var lights = [light(type: 0), light(type: 1), light(type: 2), light(type: 1, at: Vec3(5, 0, 0))]
-        let slices = LocalShadowPlanner.plan(lights: &lights, candidates: [1, 2, 3, 0], budget: 8,
-                                             resolution: 512, normalBias: 0.02)
+        let slices = LocalShadowPlanner.plan(
+            lights: &lights, candidates: [1, 2, 3, 0], budget: 8,
+            resolution: 512, normalBias: 0.02)
         XCTAssertEqual(slices.count, 7)
         XCTAssertEqual(slices.prefix(6).map(\.face), Array(0..<6))
         XCTAssertTrue(slices.prefix(6).allSatisfy { $0.light == 1 })
@@ -97,11 +102,15 @@ final class LocalShadowPlannerTests: XCTestCase {
     /// A zero budget shadows nothing; a huge budget is capped at `maxSlices`; bad indices are ignored.
     func testPlanBudgetLimits() {
         var lights = (0..<20).map { light(type: 1, at: Vec3(Float($0), 0, 0)) }
-        XCTAssertTrue(LocalShadowPlanner.plan(lights: &lights, candidates: Array(0..<20), budget: 0,
-                                              resolution: 512, normalBias: 0).isEmpty)
+        XCTAssertTrue(
+            LocalShadowPlanner.plan(
+                lights: &lights, candidates: Array(0..<20), budget: 0,
+                resolution: 512, normalBias: 0
+            ).isEmpty)
         XCTAssertTrue(lights.allSatisfy { $0.extra.y < 0 })
-        let slices = LocalShadowPlanner.plan(lights: &lights, candidates: [-1, 99] + Array(0..<20), budget: 1000,
-                                             resolution: 512, normalBias: 0)
+        let slices = LocalShadowPlanner.plan(
+            lights: &lights, candidates: [-1, 99] + Array(0..<20), budget: 1000,
+            resolution: 512, normalBias: 0)
         XCTAssertEqual(slices.count, 60, "ten point lights fit in 64 slices")
         XCTAssertLessThanOrEqual(slices.count, LocalShadowPlanner.maxSlices)
         XCTAssertEqual(lights.filter { $0.extra.y >= 0 }.count, 10)
@@ -124,8 +133,9 @@ final class LocalShadowExtractionTests: XCTestCase {
 
     func extract() -> RenderFrameData {
         TransformSystem.update(world)
-        return RenderSceneExtractor.extract(world: world, assets: assets, animations: nil, aspect: 16.0 / 9,
-                                            options: ExtractionOptions())
+        return RenderSceneExtractor.extract(
+            world: world, assets: assets, animations: nil, aspect: 16.0 / 9,
+            options: ExtractionOptions())
     }
 
     func addLight(_ type: LightType, at p: Vec3, shadows: Bool) {
@@ -174,21 +184,31 @@ final class ProbeAndViewportMathTests: XCTestCase {
 
     /// Normalised viewports become whole pixels, clipped to the output and never empty.
     func testViewportPixels() {
-        XCTAssertEqual(RenderMath.viewportPixels(.unit, outputWidth: 1920, outputHeight: 1080),
-                       PixelRect(x: 0, y: 0, width: 1920, height: 1080))
-        XCTAssertEqual(RenderMath.viewportPixels(Rect(x: 0.5, y: 0, width: 0.5, height: 1),
-                                                 outputWidth: 1920, outputHeight: 1080),
-                       PixelRect(x: 960, y: 0, width: 960, height: 1080))
-        XCTAssertEqual(RenderMath.viewportPixels(Rect(x: -1, y: -1, width: 3, height: 3),
-                                                 outputWidth: 800, outputHeight: 600),
-                       PixelRect(x: 0, y: 0, width: 800, height: 600))
-        XCTAssertEqual(RenderMath.viewportPixels(Rect(x: 2, y: 2, width: 1, height: 1),
-                                                 outputWidth: 800, outputHeight: 600),
-                       PixelRect(x: 799, y: 599, width: 1, height: 1))
-        XCTAssertEqual(RenderMath.viewportPixels(Rect(x: .nan, y: 0, width: .nan, height: 0),
-                                                 outputWidth: 800, outputHeight: 600),
-                       PixelRect(x: 0, y: 0, width: 1, height: 1))
-        XCTAssertEqual(RenderMath.viewportPixels(.unit, outputWidth: 0, outputHeight: 0),
-                       PixelRect(x: 0, y: 0, width: 1, height: 1))
+        XCTAssertEqual(
+            RenderMath.viewportPixels(.unit, outputWidth: 1920, outputHeight: 1080),
+            PixelRect(x: 0, y: 0, width: 1920, height: 1080))
+        XCTAssertEqual(
+            RenderMath.viewportPixels(
+                Rect(x: 0.5, y: 0, width: 0.5, height: 1),
+                outputWidth: 1920, outputHeight: 1080),
+            PixelRect(x: 960, y: 0, width: 960, height: 1080))
+        XCTAssertEqual(
+            RenderMath.viewportPixels(
+                Rect(x: -1, y: -1, width: 3, height: 3),
+                outputWidth: 800, outputHeight: 600),
+            PixelRect(x: 0, y: 0, width: 800, height: 600))
+        XCTAssertEqual(
+            RenderMath.viewportPixels(
+                Rect(x: 2, y: 2, width: 1, height: 1),
+                outputWidth: 800, outputHeight: 600),
+            PixelRect(x: 799, y: 599, width: 1, height: 1))
+        XCTAssertEqual(
+            RenderMath.viewportPixels(
+                Rect(x: .nan, y: 0, width: .nan, height: 0),
+                outputWidth: 800, outputHeight: 600),
+            PixelRect(x: 0, y: 0, width: 1, height: 1))
+        XCTAssertEqual(
+            RenderMath.viewportPixels(.unit, outputWidth: 0, outputHeight: 0),
+            PixelRect(x: 0, y: 0, width: 1, height: 1))
     }
 }

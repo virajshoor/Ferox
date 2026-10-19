@@ -1,5 +1,5 @@
-import Foundation
 import FeroxCore
+import Foundation
 
 /// Human-readable entity name (shown in the editor hierarchy).
 public struct Name: Component, Codable, Hashable, Sendable, ExpressibleByStringLiteral {

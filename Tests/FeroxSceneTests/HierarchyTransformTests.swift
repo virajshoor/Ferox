@@ -3,6 +3,7 @@
 /// propagation of world matrices and motion history.
 import FeroxCore
 import XCTest
+
 @testable import FeroxScene
 
 final class HierarchyTests: XCTestCase {
@@ -200,5 +201,41 @@ final class TransformSystemTests: XCTestCase {
         TransformSystem.update(world)
         let w = world.get(WorldTransform.self, e)
         XCTAssertEqual(w?.previous.translation.x ?? -1, w?.position.x ?? -2, accuracy: 1e-5)
+    }
+}
+
+final class FlatRootPlanTests: XCTestCase {
+    func testPairsKeepOnlyFlatRootsWithAWorldTransform() {
+        let pairs = FlatRootPlan.pairs(
+            entityCount: 4,
+            isFlatRoot: { $0 != 1 },
+            worldIndex: { $0 == 2 ? nil : $0 + 10 })
+        XCTAssertEqual(pairs, [FlatRootPair(transform: 0, world: 10), FlatRootPair(transform: 3, world: 13)])
+    }
+
+    func testWriteRollsPreviousAndClearsDirty() {
+        var transform = Transform(position: Vec3(4, 0, 0))
+        var world = WorldTransform(matrix: .identity)
+        world.resetHistory = false
+        FlatRootPlan.write(transform: &transform, world: &world)
+        XCTAssertEqual(world.position.x, 4, accuracy: 1e-5)
+        XCTAssertEqual(world.previous.translation.x, 0, accuracy: 1e-5)
+        XCTAssertFalse(transform.isDirty)
+        let kept = world.matrix
+        transform = Transform(position: Vec3(4, 0, 0))
+        transform.isDirty = false
+        FlatRootPlan.write(transform: &transform, world: &world)
+        XCTAssertEqual(world.matrix, kept)
+        XCTAssertEqual(world.previous, kept)
+    }
+
+    func testWriteResetHistoryZeroesMotion() {
+        var transform = Transform(position: Vec3(2, 0, 0))
+        var world = WorldTransform()
+        FlatRootPlan.write(transform: &transform, world: &world)
+        XCTAssertFalse(world.resetHistory)
+        XCTAssertEqual(world.matrix, world.previous)
+        XCTAssertEqual(world.position.x, 2, accuracy: 1e-5)
+        XCTAssertFalse(transform.isDirty)
     }
 }

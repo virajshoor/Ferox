@@ -2,6 +2,7 @@
 /// normal matrices, projection and view matrices (including reverse-Z depth), and Affine2D.
 import Foundation
 import XCTest
+
 @testable import FeroxMath
 
 private func assertVec3(
@@ -29,7 +30,8 @@ final class MatrixTests: XCTestCase {
 
     // Multiplying two translations adds their offsets.
     func testTranslationsCompose() {
-        let a = Vec3(1, 2, 3), b = Vec3(-4, 0, 5)
+        let a = Vec3(1, 2, 3)
+        let b = Vec3(-4, 0, 5)
         XCTAssertTrue((Mat4.translation(a) * Mat4.translation(b)).isApproximatelyEqual(to: .translation(a + b)))
     }
 
@@ -62,7 +64,8 @@ final class MatrixTests: XCTestCase {
 
     // The skew matrix of a vector multiplied by b equals the cross product a x b.
     func testSkewMatrixMatchesCrossProduct() {
-        let a = Vec3(1, -2, 0.5), b = Vec3(3, 4, -1)
+        let a = Vec3(1, -2, 0.5)
+        let b = Vec3(3, 4, -1)
         assertVec3(Mat3.skew(a) * b, a.cross(b))
     }
 

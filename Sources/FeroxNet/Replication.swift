@@ -46,12 +46,16 @@ public struct SnapshotMessage: NetMessage, Hashable {
         tick = try r.readUInt32()
         serverTime = try r.readDouble()
         let n = try r.readVarUInt()
-        guard n <= UInt64(SnapshotMessage.maxObjects) else { throw NetDecodeError.lengthExceeded(Int(clamping: n), max: SnapshotMessage.maxObjects) }
+        guard n <= UInt64(SnapshotMessage.maxObjects) else {
+            throw NetDecodeError.lengthExceeded(Int(clamping: n), max: SnapshotMessage.maxObjects)
+        }
         var objs: [ObjectState] = []
         for _ in 0..<Int(n) {
             let id = try r.readVarUInt()
             guard id <= UInt64(UInt32.max) else { throw NetDecodeError.invalidValue("netID") }
-            let p = try r.readVec3(), q = try r.readQuat(), v = try r.readVec3()
+            let p = try r.readVec3()
+            let q = try r.readQuat()
+            let v = try r.readVec3()
             objs.append(ObjectState(netID: UInt32(id), position: p, rotation: q, velocity: v))
         }
         objects = objs
@@ -62,8 +66,9 @@ public struct SnapshotMessage: NetMessage, Hashable {
     public static func split(tick: UInt32, serverTime: Double, objects: [ObjectState]) -> [SnapshotMessage] {
         guard !objects.isEmpty else { return [SnapshotMessage(tick: tick, serverTime: serverTime, objects: [])] }
         return stride(from: 0, to: objects.count, by: maxObjects).map {
-            SnapshotMessage(tick: tick, serverTime: serverTime,
-                            objects: Array(objects[$0..<min($0 + maxObjects, objects.count)]))
+            SnapshotMessage(
+                tick: tick, serverTime: serverTime,
+                objects: Array(objects[$0..<min($0 + maxObjects, objects.count)]))
         }
     }
 }
@@ -115,7 +120,8 @@ public struct InputMessage: NetMessage, Hashable {
     }
     public init(from r: inout NetReader) throws {
         tick = try r.readUInt32()
-        let x = try r.readQuantized(lo: -1, hi: 1), y = try r.readQuantized(lo: -1, hi: 1)
+        let x = try r.readQuantized(lo: -1, hi: 1)
+        let y = try r.readQuantized(lo: -1, hi: 1)
         move = Vec2(x, y)
         buttons = try r.readUInt32()
     }
@@ -165,7 +171,8 @@ public struct SnapshotInterpolator: Sendable {
         guard let first = snapshots.first else { return [:] }
         if t <= first.time { return first.objects }
         for i in 1..<max(snapshots.count, 1) where i < snapshots.count && t <= snapshots[i].time {
-            let a = snapshots[i - 1], b = snapshots[i]
+            let a = snapshots[i - 1]
+            let b = snapshots[i]
             let u = Float((t - a.time) / max(b.time - a.time, 1e-6))
             var out: [UInt32: ObjectState] = [:]
             for (id, sb) in b.objects {
@@ -173,8 +180,9 @@ public struct SnapshotInterpolator: Sendable {
                     out[id] = sb
                     continue
                 }
-                out[id] = ObjectState(netID: id, position: sa.position.lerp(to: sb.position, u),
-                                      rotation: sa.rotation.slerp(to: sb.rotation, u), velocity: sa.velocity.lerp(to: sb.velocity, u))
+                out[id] = ObjectState(
+                    netID: id, position: sa.position.lerp(to: sb.position, u),
+                    rotation: sa.rotation.slerp(to: sb.rotation, u), velocity: sa.velocity.lerp(to: sb.velocity, u))
             }
             return out
         }

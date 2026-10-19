@@ -30,7 +30,7 @@ let swiftSettings: [SwiftSetting] = [
 let package = Package(
     name: "Ferox",
     platforms: [
-        .macOS(.v14),
+        .macOS(.v14)
     ],
     products: [
         .library(name: "Ferox", targets: ["Ferox"]),
@@ -51,13 +51,16 @@ let package = Package(
         .target(name: "FeroxMath", swiftSettings: swiftSettings),
         .target(name: "FeroxCore", dependencies: ["FeroxMath"], swiftSettings: swiftSettings),
         .target(name: "FeroxScene", dependencies: ["FeroxMath", "FeroxCore"], swiftSettings: swiftSettings),
-        .target(name: "FeroxPhysics", dependencies: ["FeroxMath", "FeroxCore", "FeroxScene"],
-                swiftSettings: swiftSettings),
-        .target(name: "FeroxAnimation", dependencies: ["FeroxMath", "FeroxCore", "FeroxScene"],
-                swiftSettings: swiftSettings),
+        .target(
+            name: "FeroxPhysics", dependencies: ["FeroxMath", "FeroxCore", "FeroxScene"],
+            swiftSettings: swiftSettings),
+        .target(
+            name: "FeroxAnimation", dependencies: ["FeroxMath", "FeroxCore", "FeroxScene"],
+            swiftSettings: swiftSettings),
         .target(name: "FeroxInput", dependencies: ["FeroxMath", "FeroxCore"], swiftSettings: swiftSettings),
-        .target(name: "FeroxAssets", dependencies: ["FeroxMath", "FeroxCore", "FeroxScene", "FeroxAnimation"],
-                swiftSettings: swiftSettings),
+        .target(
+            name: "FeroxAssets", dependencies: ["FeroxMath", "FeroxCore", "FeroxScene", "FeroxAnimation"],
+            swiftSettings: swiftSettings),
         .target(name: "FeroxNet", dependencies: ["FeroxCore"], swiftSettings: swiftSettings),
         .target(name: "FeroxAudio", dependencies: ["FeroxMath", "FeroxCore"], swiftSettings: swiftSettings),
         .target(name: "FeroxUI", dependencies: ["FeroxMath", "FeroxCore", "FeroxInput"], swiftSettings: swiftSettings),
@@ -86,21 +89,27 @@ let package = Package(
         .executableTarget(name: "FeroxBenchmarks", dependencies: ["Ferox"], swiftSettings: swiftSettings),
 
         // MARK: Examples
-        .executableTarget(name: "HelloFerox", dependencies: ["Ferox"], path: "Examples/HelloFerox",
-                          swiftSettings: swiftSettings),
-        .executableTarget(name: "Platformer2D", dependencies: ["Ferox"], path: "Examples/Platformer2D",
-                          swiftSettings: swiftSettings),
-        .executableTarget(name: "Showcase3D", dependencies: ["Ferox"], path: "Examples/Showcase3D",
-                          swiftSettings: swiftSettings),
+        .executableTarget(
+            name: "HelloFerox", dependencies: ["Ferox"], path: "Examples/HelloFerox",
+            swiftSettings: swiftSettings),
+        .executableTarget(
+            name: "Platformer2D", dependencies: ["Ferox"], path: "Examples/Platformer2D",
+            swiftSettings: swiftSettings),
+        .executableTarget(
+            name: "Showcase3D", dependencies: ["Ferox"], path: "Examples/Showcase3D",
+            swiftSettings: swiftSettings),
 
         // MARK: Tests
         .testTarget(name: "FeroxMathTests", dependencies: ["FeroxMath"]),
         .testTarget(name: "FeroxCoreTests", dependencies: ["FeroxCore"]),
         .testTarget(name: "FeroxSceneTests", dependencies: ["FeroxScene", "FeroxCore"]),
         .testTarget(name: "FeroxPhysicsTests", dependencies: ["FeroxPhysics", "FeroxScene", "FeroxCore"]),
-        .testTarget(name: "FeroxSubsystemTests",
-                    dependencies: ["FeroxInput", "FeroxAnimation", "FeroxAssets", "FeroxNet", "FeroxUI", "FeroxAudio",
-                                   "FeroxScene", "FeroxCore"]),
+        .testTarget(
+            name: "FeroxSubsystemTests",
+            dependencies: [
+                "FeroxInput", "FeroxAnimation", "FeroxAssets", "FeroxNet", "FeroxUI", "FeroxAudio",
+                "FeroxScene", "FeroxCore",
+            ]),
         .testTarget(name: "FeroxRenderTests", dependencies: ["FeroxRender", "Ferox"]),
         .testTarget(name: "FeroxIntegrationTests", dependencies: ["Ferox"]),
     ]

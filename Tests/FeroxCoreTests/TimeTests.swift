@@ -2,6 +2,7 @@
 /// (time scale, pause, delta clamping), rolling frame statistics, and the frame profiler.
 import Foundation
 import XCTest
+
 @testable import FeroxCore
 
 final class FixedTimestepTests: XCTestCase {
@@ -143,7 +144,7 @@ final class FrameStatisticsTests: XCTestCase {
     // Average, minimum, maximum and count are computed over the samples added so far.
     func testBasicAggregates() {
         var stats = FrameStatistics(capacity: 8)
-        [1.0, 2.0, 3.0].forEach { stats.add($0) }
+        for sample in [1.0, 2.0, 3.0] { stats.add(sample) }
         XCTAssertEqual(stats.count, 3)
         XCTAssertEqual(stats.average, 2, accuracy: 1e-12)
         XCTAssertEqual(stats.minimum, 1)
@@ -153,7 +154,7 @@ final class FrameStatisticsTests: XCTestCase {
     // Once full, the ring buffer keeps only the most recent samples.
     func testCapacityWrapKeepsNewestSamples() {
         var stats = FrameStatistics(capacity: 2)
-        [1.0, 2.0, 3.0].forEach { stats.add($0) }
+        for sample in [1.0, 2.0, 3.0] { stats.add(sample) }
         XCTAssertEqual(stats.count, 2)
         XCTAssertEqual(stats.minimum, 2)
         XCTAssertEqual(stats.average, 2.5, accuracy: 1e-12)
@@ -162,7 +163,7 @@ final class FrameStatisticsTests: XCTestCase {
     // Percentile 0 and 100 give the extremes, and the median of three samples is the middle one.
     func testPercentiles() {
         var stats = FrameStatistics(capacity: 3)
-        [1.0, 2.0, 3.0].forEach { stats.add($0) }
+        for sample in [1.0, 2.0, 3.0] { stats.add(sample) }
         XCTAssertEqual(stats.percentile(0), 1)
         XCTAssertEqual(stats.percentile(50), 2)
         XCTAssertEqual(stats.percentile(100), 3)
@@ -178,14 +179,14 @@ final class FrameStatisticsTests: XCTestCase {
     // hitchCount counts frames more than 50 % over the budget.
     func testHitchCountUsesFiftyPercentThreshold() {
         var stats = FrameStatistics(capacity: 3)
-        [0.01, 0.02, 0.04].forEach { stats.add($0) }
+        for sample in [0.01, 0.02, 0.04] { stats.add(sample) }
         XCTAssertEqual(stats.hitchCount(budget: 0.01), 2)
     }
 
     // Sample standard deviation (n - 1 denominator) matches the textbook example.
     func testSampleStandardDeviation() {
         var stats = FrameStatistics(capacity: 8)
-        [2.0, 4, 4, 4, 5, 5, 7, 9].forEach { stats.add($0) }
+        for sample in [2.0, 4, 4, 4, 5, 5, 7, 9] { stats.add(sample) }
         XCTAssertEqual(stats.standardDeviation, (32.0 / 7.0).squareRoot(), accuracy: 1e-9)
     }
 }

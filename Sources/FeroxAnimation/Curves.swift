@@ -11,8 +11,12 @@ public protocol Interpolatable: Sendable, Codable, Hashable {
 extension Float: Interpolatable {
     public static func interpolate(_ a: Float, _ b: Float, _ t: Float) -> Float { a + (b - a) * t }
     public static func hermite(_ p0: Float, _ m0: Float, _ p1: Float, _ m1: Float, _ t: Float, _ dt: Float) -> Float {
-        let t2 = t * t, t3 = t2 * t
-        let h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2
+        let t2 = t * t
+        let t3 = t2 * t
+        let h00 = 2 * t3 - 3 * t2 + 1
+        let h10 = t3 - 2 * t2 + t
+        let h01 = -2 * t3 + 3 * t2
+        let h11 = t3 - t2
         return h00 * p0 + h10 * dt * m0 + h01 * p1 + h11 * dt * m1
     }
 }
@@ -20,8 +24,12 @@ extension Float: Interpolatable {
 extension SIMD3: Interpolatable where Scalar == Float {
     public static func interpolate(_ a: Self, _ b: Self, _ t: Float) -> Self { a + (b - a) * t }
     public static func hermite(_ p0: Self, _ m0: Self, _ p1: Self, _ m1: Self, _ t: Float, _ dt: Float) -> Self {
-        let t2 = t * t, t3 = t2 * t
-        let h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2
+        let t2 = t * t
+        let t3 = t2 * t
+        let h00 = 2 * t3 - 3 * t2 + 1
+        let h10 = t3 - 2 * t2 + t
+        let h01 = -2 * t3 + 3 * t2
+        let h11 = t3 - t2
         return p0 * h00 + m0 * (h10 * dt) + p1 * h01 + m1 * (h11 * dt)
     }
 }
@@ -29,8 +37,12 @@ extension SIMD3: Interpolatable where Scalar == Float {
 extension SIMD4: Interpolatable where Scalar == Float {
     public static func interpolate(_ a: Self, _ b: Self, _ t: Float) -> Self { a + (b - a) * t }
     public static func hermite(_ p0: Self, _ m0: Self, _ p1: Self, _ m1: Self, _ t: Float, _ dt: Float) -> Self {
-        let t2 = t * t, t3 = t2 * t
-        let h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2
+        let t2 = t * t
+        let t3 = t2 * t
+        let h00 = 2 * t3 - 3 * t2 + 1
+        let h10 = t3 - 2 * t2 + t
+        let h01 = -2 * t3 + 3 * t2
+        let h11 = t3 - t2
         return p0 * h00 + m0 * (h10 * dt) + p1 * h01 + m1 * (h11 * dt)
     }
 }
@@ -79,7 +91,8 @@ public struct AnimationCurve<Value: Interpolatable>: Codable, Hashable, Sendable
 
     /// Index of the last key with time <= t (binary search).
     func segment(_ t: Float) -> Int {
-        var lo = 0, hi = keys.count - 1
+        var lo = 0
+        var hi = keys.count - 1
         while lo < hi {
             let mid = (lo + hi + 1) / 2
             if keys[mid].time <= t { lo = mid } else { hi = mid - 1 }
@@ -93,7 +106,8 @@ public struct AnimationCurve<Value: Interpolatable>: Codable, Hashable, Sendable
         let last = keys[keys.count - 1]
         if t >= last.time { return last.value }
         let i = segment(t)
-        let a = keys[i], b = keys[i + 1]
+        let a = keys[i]
+        let b = keys[i + 1]
         let dt = b.time - a.time
         let u = dt > 0 ? (t - a.time) / dt : 0
         switch interpolation {
@@ -125,13 +139,15 @@ public enum Easing: String, Codable, Sendable, CaseIterable {
         case .easeOutSine: return sin(t * .pi / 2)
         case .easeInOutSine: return -(cos(.pi * t) - 1) / 2
         case .easeOutBack:
-            let c1: Float = 1.70158, c3 = c1 + 1
+            let c1: Float = 1.70158
+            let c3 = c1 + 1
             return 1 + c3 * pow(t - 1, 3) + c1 * pow(t - 1, 2)
         case .easeOutElastic:
             if t == 0 || t == 1 { return t }
             return pow(2, -10 * t) * sin((t * 10 - 0.75) * (2 * .pi / 3)) + 1
         case .easeOutBounce:
-            let n1: Float = 7.5625, d1: Float = 2.75
+            let n1: Float = 7.5625
+            let d1: Float = 2.75
             var u = t
             if u < 1 / d1 { return n1 * u * u }
             if u < 2 / d1 {

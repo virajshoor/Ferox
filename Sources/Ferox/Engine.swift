@@ -2,7 +2,8 @@ import Foundation
 
 /// Everything needed to start an `Engine`. Plain data so it can be loaded from a project
 /// file or built in code.
-public struct EngineConfiguration: Sendable {
+/// `URL` is not `Sendable` on the Swift 5.10 Linux SDK. The roots are immutable paths.
+public struct EngineConfiguration: @unchecked Sendable {
     /// Window title (macOS host) and log prefix.
     public var title = "Ferox"
     /// Initial window content size in points.
@@ -270,43 +271,42 @@ public final class Engine {
 
     // MARK: Helpers
 
-    /// The camera the renderer will use: the enabled camera with the highest priority
-    /// (ties go to the lowest entity index, matching `RenderSceneExtractor`).
+    /// The camera the renderer draws to the screen. This is `RenderSceneExtractor.mainCamera`:
+    /// active in the hierarchy, `renderTarget == nil`, highest priority, and on a tie the
+    /// lowest entity index. Audio and game code follow the same camera as the picture.
     public func activeCamera() -> (entity: Entity, camera: Camera, transform: WorldTransform)? {
-        var best: (Entity, Camera, WorldTransform)?
-        world.read(Camera.self) { e, c in
-            guard !world.has(Disabled.self, e), let t = world.get(WorldTransform.self, e) else { return }
-            if best == nil || c.priority > best!.1.priority { best = (e, c, t) }
-        }
-        return best.map { (entity: $0.0, camera: $0.1, transform: $0.2) }
+        guard let (e, c) = RenderSceneExtractor.mainCamera(in: world) else { return nil }
+        let t = world.get(WorldTransform.self, e) ?? WorldTransform(matrix: world.worldMatrix(of: e))
+        return (entity: e, camera: c, transform: t)
     }
 
     /// Spatial audio follows the active camera.
     private func updateAudioListener() {
         guard let cam = activeCamera() else { return }
         let m = cam.transform.matrix
-        audio.setListener(position: m.translation, forward: m.transformDirection(.forward).normalized,
-                          up: m.transformDirection(.up).normalized)
+        audio.setListener(
+            position: m.translation, forward: m.transformDirection(.forward).normalized,
+            up: m.transformDirection(.up).normalized)
     }
 
     private static func makeAudioBackend(enabled: Bool) -> any AudioBackend {
         #if canImport(AVFoundation)
-        if enabled {
-            do {
-                return try AVAudioBackend()
-            } catch {
-                Log.warning("Audio", "Audio output unavailable (\(error)); continuing without sound")
+            if enabled {
+                do {
+                    return try AVAudioBackend()
+                } catch {
+                    Log.warning("Audio", "Audio output unavailable (\(error)); continuing without sound")
+                }
             }
-        }
         #endif
         return SilentAudioBackend()
     }
 
     private static func makeFontProvider() -> any UIFontProvider {
         #if canImport(CoreText)
-        return CoreTextFontProvider()
+            return CoreTextFontProvider()
         #else
-        return MonospaceFontProvider()
+            return MonospaceFontProvider()
         #endif
     }
 }

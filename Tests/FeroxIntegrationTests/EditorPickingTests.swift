@@ -1,5 +1,6 @@
 /// Tests for viewport picking: `Camera.ray(through:aspect:cameraToWorld:)` and `EditorSession.pick`.
 import XCTest
+
 @testable import Ferox
 
 final class EditorPickingTests: XCTestCase {

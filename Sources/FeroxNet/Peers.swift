@@ -117,7 +117,9 @@ public final class NetServer {
         return events
     }
 
-    private func rateLimited(_ table: inout [NetEndpoint: (window: Double, count: Int)], _ ep: NetEndpoint, now: Double, limit: Int) -> Bool {
+    private func rateLimited(
+        _ table: inout [NetEndpoint: (window: Double, count: Int)], _ ep: NetEndpoint, now: Double, limit: Int
+    ) -> Bool {
         var e = table[ep] ?? (now, 0)
         if now - e.window >= 1 { e = (now, 0) }
         e.count += 1
@@ -129,7 +131,9 @@ public final class NetServer {
     private func handle(_ bytes: [UInt8], from ep: NetEndpoint, now: Double) {
         var r = NetReader(bytes)
         do {
-            guard try r.readUInt16() == config.protocolID, let type = PacketType(rawValue: try r.readUInt8()) else { return }
+            guard try r.readUInt16() == config.protocolID, let type = PacketType(rawValue: try r.readUInt8()) else {
+                return
+            }
             switch type {
             case .connectRequest:
                 guard bytes.count >= Framing.requestPadding,
@@ -288,14 +292,18 @@ public final class NetClient {
     private func handle(_ bytes: [UInt8], now: Double) {
         var r = NetReader(bytes)
         do {
-            guard try r.readUInt16() == config.protocolID, let type = PacketType(rawValue: try r.readUInt8()) else { return }
+            guard try r.readUInt16() == config.protocolID, let type = PacketType(rawValue: try r.readUInt8()) else {
+                return
+            }
             switch type {
             case .challenge:
                 guard state == .connecting, try r.readUInt64() == salt else { return }
                 serverSalt = try r.readUInt64()
                 lastAttempt = -1
             case .accept:
-                guard state == .connecting, let ss = serverSalt, try r.readUInt64() == ss ^ salt, let server else { return }
+                guard state == .connecting, let ss = serverSalt, try r.readUInt64() == ss ^ salt, let server else {
+                    return
+                }
                 let c = NetConnection(endpoint: server, token: ss ^ salt, protocolID: config.protocolID, now: now)
                 c.timeout = config.timeout
                 connection = c

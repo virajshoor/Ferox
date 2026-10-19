@@ -1,8 +1,9 @@
+import FeroxCore
 /// Tests for the networking layer without real sockets: binary coding and bounded decoding, message
 /// round trips and caps, sequence arithmetic, connection packet framing, reliable delivery over
 /// the in-memory loopback network, and a client-server handshake.
 import XCTest
-import FeroxCore
+
 @testable import FeroxNet
 
 final class NetTests: XCTestCase {
@@ -102,7 +103,8 @@ final class NetTests: XCTestCase {
     /// A full snapshot with worst-case net ids still fits in one message.
     func testFullSnapshotFitsMessageSize() {
         let objects = (0..<SnapshotMessage.maxObjects).map {
-            ObjectState(netID: UInt32.max - UInt32($0), position: Vec3(1, 2, 3), rotation: .identity, velocity: Vec3(4, 5, 6))
+            ObjectState(
+                netID: UInt32.max - UInt32($0), position: Vec3(1, 2, 3), rotation: .identity, velocity: Vec3(4, 5, 6))
         }
         var w = NetWriter()
         SnapshotMessage(tick: .max, serverTime: 1e9, objects: objects).encode(&w)
@@ -288,7 +290,7 @@ final class NetTests: XCTestCase {
         client.send(TextMessage("hi"))
         pump(10)
         let texts = serverEvents.compactMap { event -> String? in
-            if case let .message(_, message) = event { return (message as? TextMessage)?.text }
+            if case .message(_, let message) = event { return (message as? TextMessage)?.text }
             return nil
         }
         XCTAssertEqual(texts, ["hi"])

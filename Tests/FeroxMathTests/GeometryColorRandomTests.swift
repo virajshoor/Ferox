@@ -2,6 +2,7 @@
 /// (sRGB, hex, HSV) and the deterministic random number generators (PCG32 and Halton).
 import Foundation
 import XCTest
+
 @testable import FeroxMath
 
 final class GeometryTests: XCTestCase {
@@ -127,7 +128,7 @@ final class ColorTests: XCTestCase {
 
     // An RRGGBBAA hex value keeps its alpha channel when hasAlpha is set.
     func testHexWithAlpha() {
-        let c = Color(hex: 0x11223380, hasAlpha: true)
+        let c = Color(hex: 0x1122_3380, hasAlpha: true)
         XCTAssertEqual(c.a, Float(0x80) / 255, accuracy: 1e-5)
     }
 
@@ -170,7 +171,8 @@ final class ColorTests: XCTestCase {
 final class RandomTests: XCTestCase {
     // Two generators with the same seed and stream produce identical sequences.
     func testSameSeedProducesSameSequence() {
-        var a = PCG32(seed: 12345), b = PCG32(seed: 12345)
+        var a = PCG32(seed: 12345)
+        var b = PCG32(seed: 12345)
         for _ in 0..<200 {
             XCTAssertEqual(a.nextUInt32(), b.nextUInt32())
         }
@@ -178,7 +180,9 @@ final class RandomTests: XCTestCase {
 
     // A different seed or stream produces a different first value.
     func testDifferentSeedOrStreamDiffers() {
-        var a = PCG32(seed: 1), b = PCG32(seed: 2), c = PCG32(seed: 1, stream: 99)
+        var a = PCG32(seed: 1)
+        var b = PCG32(seed: 2)
+        var c = PCG32(seed: 1, stream: 99)
         let first = a.nextUInt32()
         XCTAssertNotEqual(first, b.nextUInt32())
         XCTAssertNotEqual(first, c.nextUInt32())
@@ -224,7 +228,8 @@ final class RandomTests: XCTestCase {
 
     // The standard library's random API is deterministic when driven by a seeded PCG32.
     func testStandardLibraryRandomIsDeterministic() {
-        var a = PCG32(seed: 42), b = PCG32(seed: 42)
+        var a = PCG32(seed: 42)
+        var b = PCG32(seed: 42)
         XCTAssertEqual(Int.random(in: 0..<1_000_000, using: &a), Int.random(in: 0..<1_000_000, using: &b))
     }
 

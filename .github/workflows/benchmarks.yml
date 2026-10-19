@@ -13,15 +13,19 @@ jobs:
     # job are useful for spotting large regressions and trends only. They are not
     # representative of Apple Silicon hardware. Use local release runs for
     # performance claims.
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
 
-      - name: Select Xcode 15.4
+      - name: Select Xcode 16.4
         run: |
-          if [ -d /Applications/Xcode_15.4.app ]; then
-            sudo xcode-select -s /Applications/Xcode_15.4.app
+          set -euo pipefail
+          xcode="/Applications/Xcode_16.4.app"
+          if [ ! -d "$xcode" ]; then
+            echo "Required Xcode is missing: $xcode" >&2
+            exit 1
           fi
+          sudo xcode-select -s "$xcode"
 
       - name: Run quick benchmarks
         run: |

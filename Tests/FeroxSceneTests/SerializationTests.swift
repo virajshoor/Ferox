@@ -5,6 +5,7 @@
 import FeroxCore
 import Foundation
 import XCTest
+
 @testable import FeroxScene
 
 private struct SavedHealth: SerializableComponent, Equatable {
@@ -216,7 +217,8 @@ final class RenderComponentDecodingTests: XCTestCase {
         json.removeValue(forKey: "castsShadows")
         json.removeValue(forKey: "receivesShadows")
         json.removeValue(forKey: "joints")
-        let decoded = try JSONDecoder().decode(SkinnedMeshRenderer.self, from: JSONSerialization.data(withJSONObject: json))
+        let decoded = try JSONDecoder().decode(
+            SkinnedMeshRenderer.self, from: JSONSerialization.data(withJSONObject: json))
         XCTAssertEqual(decoded.mesh, AssetID("m"))
         XCTAssertEqual(decoded.skin, AssetID("s"))
         XCTAssertTrue(decoded.joints.isEmpty)

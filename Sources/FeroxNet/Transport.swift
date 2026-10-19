@@ -2,9 +2,9 @@ import FeroxCore
 import Foundation
 
 #if canImport(Network)
-import CryptoKit
-import Network
-import Security
+    import CryptoKit
+    import Network
+    import Security
 #endif
 
 /// Opaque address of a remote peer.
@@ -90,7 +90,8 @@ public final class LoopbackNetwork: @unchecked Sendable {
             let copies = Double(rng.nextFloat()) < conditioner.duplication ? 2 : 1
             for _ in 0..<copies {
                 let j = conditioner.jitter * (Double(rng.nextFloat()) * 2 - 1)
-                inFlight.append(InFlight(deliverAt: now + max(0, conditioner.latency + j), bytes: bytes, from: from, to: to))
+                inFlight.append(
+                    InFlight(deliverAt: now + max(0, conditioner.latency + j), bytes: bytes, from: from, to: to))
             }
         }
     }
@@ -151,7 +152,7 @@ public enum TransportSecurity: Sendable, Hashable {
 
     /// Checks the configuration before any socket is opened.
     public func validate() throws {
-        guard case let .preSharedKey(identity, passphrase) = self else { return }
+        guard case .preSharedKey(let identity, let passphrase) = self else { return }
         guard !identity.isEmpty, identity.utf8.count <= Self.maximumIdentityLength else {
             throw NetDecodeError.invalidValue("PSK identity must be 1–\(Self.maximumIdentityLength) bytes")
         }
@@ -164,116 +165,120 @@ public enum TransportSecurity: Sendable, Hashable {
 }
 
 #if canImport(Network)
-/// UDP transport using Network.framework.
-///
-/// Server mode listens on a port and creates a connection per remote endpoint; client
-/// mode connects to one server. Received datagrams are queued and drained on the game
-/// thread by `receive()`. Datagrams larger than `maxDatagramSize` are dropped.
-///
-/// Transport security: `TransportSecurity.none` is plain UDP, unencrypted and
-/// unauthenticated. For real deployments pass `.preSharedKey`, which wraps traffic in
-/// DTLS-PSK, and keep game-level validation regardless (see Docs/23-Networking.md).
-public final class UDPTransport: NetTransport, @unchecked Sendable {
-    public private(set) var localEndpoint: NetEndpoint
-    public static let maxDatagramSize = 1400
-    private let queue = DispatchQueue(label: "dev.ferox.net.udp")
-    private var listener: NWListener?
-    private var connections: [NetEndpoint: NWConnection] = [:]
-    private let inbox = ThreadSafeQueue<([UInt8], NetEndpoint)>()
-    private let lock = NSLock()
-    private let parameters: NWParameters
+    /// UDP transport using Network.framework.
+    ///
+    /// Server mode listens on a port and creates a connection per remote endpoint; client
+    /// mode connects to one server. Received datagrams are queued and drained on the game
+    /// thread by `receive()`. Datagrams larger than `maxDatagramSize` are dropped.
+    ///
+    /// Transport security: `TransportSecurity.none` is plain UDP, unencrypted and
+    /// unauthenticated. For real deployments pass `.preSharedKey`, which wraps traffic in
+    /// DTLS-PSK, and keep game-level validation regardless (see Docs/23-Networking.md).
+    public final class UDPTransport: NetTransport, @unchecked Sendable {
+        public private(set) var localEndpoint: NetEndpoint
+        public static let maxDatagramSize = 1400
+        private let queue = DispatchQueue(label: "dev.ferox.net.udp")
+        private var listener: NWListener?
+        private var connections: [NetEndpoint: NWConnection] = [:]
+        private let inbox = ThreadSafeQueue<([UInt8], NetEndpoint)>()
+        private let lock = NSLock()
+        private let parameters: NWParameters
 
-    /// Builds the Network.framework parameters for `security`.
-    static func makeParameters(_ security: TransportSecurity) throws -> NWParameters {
-        try security.validate()
-        guard case let .preSharedKey(identity, passphrase) = security else { return .udp }
-        let tls = NWProtocolTLS.Options()
-        let sec = tls.securityProtocolOptions
-        // The key is HMAC-SHA256(passphrase, identity): 32 raw bytes, identical on both ends.
-        let key = SymmetricKey(data: Data(passphrase.utf8))
-        let code = HMAC<SHA256>.authenticationCode(for: Data(identity.utf8), using: key)
-        let psk = code.withUnsafeBytes { DispatchData(bytes: $0) }
-        let id = Data(identity.utf8).withUnsafeBytes { DispatchData(bytes: $0) }
-        sec_protocol_options_add_pre_shared_key(sec, psk as __DispatchData, id as __DispatchData)
-        if let suite = tls_ciphersuite_t(rawValue: UInt16(TLS_PSK_WITH_AES_128_GCM_SHA256)) {
-            sec_protocol_options_append_tls_ciphersuite(sec, suite)
+        /// Builds the Network.framework parameters for `security`.
+        static func makeParameters(_ security: TransportSecurity) throws -> NWParameters {
+            try security.validate()
+            guard case .preSharedKey(let identity, let passphrase) = security else { return .udp }
+            let tls = NWProtocolTLS.Options()
+            let sec = tls.securityProtocolOptions
+            // The key is HMAC-SHA256(passphrase, identity): 32 raw bytes, identical on both ends.
+            let key = SymmetricKey(data: Data(passphrase.utf8))
+            let code = HMAC<SHA256>.authenticationCode(for: Data(identity.utf8), using: key)
+            let psk = code.withUnsafeBytes { DispatchData(bytes: $0) }
+            let id = Data(identity.utf8).withUnsafeBytes { DispatchData(bytes: $0) }
+            sec_protocol_options_add_pre_shared_key(sec, psk as __DispatchData, id as __DispatchData)
+            if let suite = tls_ciphersuite_t(rawValue: UInt16(TLS_PSK_WITH_AES_128_GCM_SHA256)) {
+                sec_protocol_options_append_tls_ciphersuite(sec, suite)
+            }
+            // TLS-PSK suites are TLS 1.2 suites, so pin DTLS 1.2.
+            sec_protocol_options_set_min_tls_protocol_version(sec, .DTLSv12)
+            sec_protocol_options_set_max_tls_protocol_version(sec, .DTLSv12)
+            return NWParameters(dtls: tls, udp: NWProtocolUDP.Options())
         }
-        // TLS-PSK suites are TLS 1.2 suites, so pin DTLS 1.2.
-        sec_protocol_options_set_min_tls_protocol_version(sec, .DTLSv12)
-        sec_protocol_options_set_max_tls_protocol_version(sec, .DTLSv12)
-        return NWParameters(dtls: tls, udp: NWProtocolUDP.Options())
-    }
 
-    /// Creates a server transport listening on `port` (0 = ephemeral).
-    public init(listenOn port: UInt16, security: TransportSecurity = .none) throws {
-        parameters = try Self.makeParameters(security)
-        parameters.allowLocalEndpointReuse = true
-        guard let p = NWEndpoint.Port(rawValue: port) else { throw NetDecodeError.invalidValue("port \(port)") }
-        let l = try NWListener(using: parameters, on: p)
-        localEndpoint = NetEndpoint(host: "0.0.0.0", port: port)
-        listener = l
-        l.newConnectionHandler = { [weak self] c in self?.adopt(c) }
-        l.stateUpdateHandler = { [weak self] state in
-            if case .ready = state, let port = l.port?.rawValue { self?.lock.locked { self?.localEndpoint = NetEndpoint(host: "0.0.0.0", port: port) } }
-            if case .failed(let e) = state { Log.error("Net", "UDP listener failed: \(e)") }
+        /// Creates a server transport listening on `port` (0 = ephemeral).
+        public init(listenOn port: UInt16, security: TransportSecurity = .none) throws {
+            parameters = try Self.makeParameters(security)
+            parameters.allowLocalEndpointReuse = true
+            guard let p = NWEndpoint.Port(rawValue: port) else { throw NetDecodeError.invalidValue("port \(port)") }
+            let l = try NWListener(using: parameters, on: p)
+            localEndpoint = NetEndpoint(host: "0.0.0.0", port: port)
+            listener = l
+            l.newConnectionHandler = { [weak self] c in self?.adopt(c) }
+            l.stateUpdateHandler = { [weak self] state in
+                if case .ready = state, let port = l.port?.rawValue {
+                    self?.lock.locked { self?.localEndpoint = NetEndpoint(host: "0.0.0.0", port: port) }
+                }
+                if case .failed(let e) = state { Log.error("Net", "UDP listener failed: \(e)") }
+            }
+            l.start(queue: queue)
         }
-        l.start(queue: queue)
-    }
 
-    /// Creates a client transport connected to `server`. Throws only for an invalid
-    /// `security` configuration; connection failures are logged when they happen.
-    public init(connectingTo server: NetEndpoint, security: TransportSecurity = .none) throws {
-        parameters = try Self.makeParameters(security)
-        localEndpoint = NetEndpoint(host: "client", port: 0)
-        let c = NWConnection(host: NWEndpoint.Host(server.host), port: NWEndpoint.Port(rawValue: server.port) ?? 0, using: parameters)
-        connections[server] = c
-        start(c, endpoint: server)
-    }
-
-    private func adopt(_ c: NWConnection) {
-        guard case let .hostPort(host, port) = c.endpoint else {
-            c.cancel()
-            return
+        /// Creates a client transport connected to `server`. Throws only for an invalid
+        /// `security` configuration; connection failures are logged when they happen.
+        public init(connectingTo server: NetEndpoint, security: TransportSecurity = .none) throws {
+            parameters = try Self.makeParameters(security)
+            localEndpoint = NetEndpoint(host: "client", port: 0)
+            let c = NWConnection(
+                host: NWEndpoint.Host(server.host), port: NWEndpoint.Port(rawValue: server.port) ?? 0, using: parameters
+            )
+            connections[server] = c
+            start(c, endpoint: server)
         }
-        let ep = NetEndpoint(host: "\(host)", port: port.rawValue)
-        lock.locked { connections[ep] = c }
-        start(c, endpoint: ep)
-    }
 
-    private func start(_ c: NWConnection, endpoint: NetEndpoint) {
-        c.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .failed(let e):
-                Log.warning("Net", "UDP connection \(endpoint) failed: \(e)")
-                _ = self?.lock.locked { self?.connections.removeValue(forKey: endpoint) }
-            case .cancelled:
-                _ = self?.lock.locked { self?.connections.removeValue(forKey: endpoint) }
-            default: break
+        private func adopt(_ c: NWConnection) {
+            guard case .hostPort(let host, let port) = c.endpoint else {
+                c.cancel()
+                return
+            }
+            let ep = NetEndpoint(host: "\(host)", port: port.rawValue)
+            lock.locked { connections[ep] = c }
+            start(c, endpoint: ep)
+        }
+
+        private func start(_ c: NWConnection, endpoint: NetEndpoint) {
+            c.stateUpdateHandler = { [weak self] state in
+                switch state {
+                case .failed(let e):
+                    Log.warning("Net", "UDP connection \(endpoint) failed: \(e)")
+                    _ = self?.lock.locked { self?.connections.removeValue(forKey: endpoint) }
+                case .cancelled:
+                    _ = self?.lock.locked { self?.connections.removeValue(forKey: endpoint) }
+                default: break
+                }
+            }
+            c.start(queue: queue)
+            receiveLoop(c, endpoint: endpoint)
+        }
+
+        private func receiveLoop(_ c: NWConnection, endpoint: NetEndpoint) {
+            c.receiveMessage { [weak self] data, _, _, error in
+                guard let self else { return }
+                if let data, data.count <= UDPTransport.maxDatagramSize { self.inbox.push(([UInt8](data), endpoint)) }
+                if error == nil { self.receiveLoop(c, endpoint: endpoint) }
             }
         }
-        c.start(queue: queue)
-        receiveLoop(c, endpoint: endpoint)
-    }
 
-    private func receiveLoop(_ c: NWConnection, endpoint: NetEndpoint) {
-        c.receiveMessage { [weak self] data, _, _, error in
-            guard let self else { return }
-            if let data, data.count <= UDPTransport.maxDatagramSize { self.inbox.push(([UInt8](data), endpoint)) }
-            if error == nil { self.receiveLoop(c, endpoint: endpoint) }
+        public func send(_ bytes: [UInt8], to: NetEndpoint) {
+            guard bytes.count <= UDPTransport.maxDatagramSize, let c = lock.locked({ connections[to] }) else { return }
+            c.send(content: Data(bytes), completion: .idempotent)
+        }
+
+        public func receive() -> [(bytes: [UInt8], from: NetEndpoint)] { inbox.drain().map { ($0.0, $0.1) } }
+
+        public func close() {
+            listener?.cancel()
+            for c in lock.locked({ Array(connections.values) }) { c.cancel() }
+            lock.locked { connections.removeAll() }
         }
     }
-
-    public func send(_ bytes: [UInt8], to: NetEndpoint) {
-        guard bytes.count <= UDPTransport.maxDatagramSize, let c = lock.locked({ connections[to] }) else { return }
-        c.send(content: Data(bytes), completion: .idempotent)
-    }
-
-    public func receive() -> [(bytes: [UInt8], from: NetEndpoint)] { inbox.drain().map { ($0.0, $0.1) } }
-
-    public func close() {
-        listener?.cancel()
-        for c in lock.locked({ Array(connections.values) }) { c.cancel() }
-        lock.locked { connections.removeAll() }
-    }
-}
 #endif

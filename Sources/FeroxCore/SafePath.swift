@@ -25,10 +25,15 @@ public enum PathError: Error, Equatable, CustomStringConvertible {
 /// Validation is lexical and also resolves symbolic links when the target exists, so a
 /// symlink inside the project pointing elsewhere is rejected as well.
 public struct SafePath: Sendable {
-    public let root: URL
+    /// Absolute path of the allowed root. Stored as `String` because `URL` is not `Sendable`
+    /// on the Swift 5.10 Linux SDK, and that warning is an error on the floor CI job.
+    private let rootPath: String
+    public var root: URL { URL(fileURLWithPath: rootPath) }
     public static let maxLength = 4096
 
-    public init(root: URL) { self.root = root.standardizedFileURL.resolvingSymlinksInPath() }
+    public init(root: URL) {
+        rootPath = root.standardizedFileURL.resolvingSymlinksInPath().path
+    }
 
     /// Resolves `relative` against the root, rejecting traversal, absolute paths and
     /// control characters. Returns the resolved file URL.
@@ -114,7 +119,7 @@ public enum DecodeLimitError: Error, Equatable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case let .fileTooLarge(path, size, limit): "\(path) is \(size) bytes, over the \(limit)-byte limit"
+        case .fileTooLarge(let path, let size, let limit): "\(path) is \(size) bytes, over the \(limit)-byte limit"
         }
     }
 }

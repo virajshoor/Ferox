@@ -5,7 +5,9 @@ import Foundation
 /// values are copied as raw bytes, which makes cache loads close to memcpy speed.
 struct BinaryWriter {
     var data = Data()
-    mutating func write<T: FixedWidthInteger>(_ v: T) { withUnsafeBytes(of: v.littleEndian) { data.append(contentsOf: $0) } }
+    mutating func write<T: FixedWidthInteger>(_ v: T) {
+        withUnsafeBytes(of: v.littleEndian) { data.append(contentsOf: $0) }
+    }
     mutating func write(_ s: String) {
         let b = Data(s.utf8)
         write(UInt32(b.count))
@@ -46,7 +48,9 @@ struct BinaryReader {
     mutating func readArray<T>(_: T.Type, limit: Int = 100_000_000) throws -> [T] {
         let count = Int(try read(UInt64.self))
         let bytes = count * MemoryLayout<T>.stride
-        guard count >= 0, count <= limit, offset + bytes <= data.count else { throw AssetError.corrupt(name, reason: "bad array length") }
+        guard count >= 0, count <= limit, offset + bytes <= data.count else {
+            throw AssetError.corrupt(name, reason: "bad array length")
+        }
         var out = [T]()
         out.reserveCapacity(count)
         data.withUnsafeBytes { raw in
@@ -106,7 +110,9 @@ extension MeshData {
         let sc = Int(try r.read(UInt32.self))
         guard sc <= 65536 else { throw AssetError.corrupt(r.name, reason: "too many submeshes") }
         for _ in 0..<sc {
-            let o = Int(try r.read(UInt32.self)), c = Int(try r.read(UInt32.self)), mi = Int(try r.read(UInt32.self))
+            let o = Int(try r.read(UInt32.self))
+            let c = Int(try r.read(UInt32.self))
+            let mi = Int(try r.read(UInt32.self))
             m.submeshes.append(Submesh(indexOffset: o, indexCount: c, materialIndex: mi))
         }
         m.recomputeBounds()
@@ -129,11 +135,18 @@ extension ImageData {
     }
 
     static func decodeBinary(_ r: inout BinaryReader) throws -> ImageData {
-        guard try r.read(UInt32.self) == 0x4D49_5846 else { throw AssetError.corrupt(r.name, reason: "bad image magic") }
-        let w = Int(try r.read(UInt32.self)), h = Int(try r.read(UInt32.self))
-        guard let fmt = PixelFormat(rawValue: try r.readString()) else { throw AssetError.corrupt(r.name, reason: "bad pixel format") }
+        guard try r.read(UInt32.self) == 0x4D49_5846 else {
+            throw AssetError.corrupt(r.name, reason: "bad image magic")
+        }
+        let w = Int(try r.read(UInt32.self))
+        let h = Int(try r.read(UInt32.self))
+        guard let fmt = PixelFormat(rawValue: try r.readString()) else {
+            throw AssetError.corrupt(r.name, reason: "bad pixel format")
+        }
         var img = ImageData(width: w, height: h, format: fmt, pixels: try r.readData())
-        guard img.pixels.count == w * h * fmt.bytesPerPixel else { throw AssetError.corrupt(r.name, reason: "pixel size mismatch") }
+        guard img.pixels.count == w * h * fmt.bytesPerPixel else {
+            throw AssetError.corrupt(r.name, reason: "pixel size mismatch")
+        }
         let mc = Int(try r.read(UInt32.self))
         guard mc <= 32 else { throw AssetError.corrupt(r.name, reason: "bad mip count") }
         for _ in 0..<mc { img.mips.append(try r.readData()) }

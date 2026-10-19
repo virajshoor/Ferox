@@ -11,6 +11,8 @@ struct MeshOut {
     float4 currentClip;
     float4 previousClip;
     uint instance [[flat]];
+    // Draw slot (`instance_id`, including base instance). Indexes the material-id buffer.
+    uint materialSlot [[flat]];
 };
 
 struct SkinResult {
@@ -76,6 +78,7 @@ vertex MeshOut meshVertex(MeshVertexIn v [[stage_in]],
     o.currentClip = frame.unjitteredViewProjection * world;
     o.previousClip = frame.previousUnjitteredViewProjection * prevWorld;
     o.instance = index;
+    o.materialSlot = iid;
     return o;
 }
 
@@ -101,6 +104,7 @@ vertex MeshOut shadowVertex(MeshVertexIn v [[stage_in]],
     o.currentClip = o.position;
     o.previousClip = o.position;
     o.instance = index;
+    o.materialSlot = iid;
     return o;
 }
 
@@ -166,16 +170,41 @@ struct PrepassOut {
 
 fragment PrepassOut prepassFragment(MeshOut in [[stage_in]], bool frontFacing [[front_facing]],
                                     constant FrameUniforms &frame [[buffer(BUF_FRAME)]],
-                                    constant MaterialUniforms &mat [[buffer(BUF_MATERIAL)]],
+                                    constant MaterialUniforms &matDiscrete [[buffer(BUF_MATERIAL), function_constant(USE_DISCRETE_MATERIALS)]],
                                     const device InstanceData *instances [[buffer(BUF_INSTANCES)]],
-                                    texture2d<float> baseColorTex [[texture(0)]],
-                                    texture2d<float> normalTex [[texture(1)]],
-                                    texture2d<float> metalRoughTex [[texture(2)]],
-                                    texture2d<float> occlusionTex [[texture(3)]],
-                                    texture2d<float> emissiveTex [[texture(4)]],
+                                    texture2d<float> baseColorTex [[texture(0), function_constant(USE_DISCRETE_MATERIALS)]],
+                                    texture2d<float> normalTex [[texture(1), function_constant(USE_DISCRETE_MATERIALS)]],
+                                    texture2d<float> metalRoughTex [[texture(2), function_constant(USE_DISCRETE_MATERIALS)]],
+                                    texture2d<float> occlusionTex [[texture(3), function_constant(USE_DISCRETE_MATERIALS)]],
+                                    texture2d<float> emissiveTex [[texture(4), function_constant(USE_DISCRETE_MATERIALS)]],
+                                    constant MaterialRecord *materials [[buffer(BUF_MATERIAL_TABLE), function_constant(USE_MATERIAL_ARGUMENTS)]],
+                                    const device uint *materialIds [[buffer(BUF_MATERIAL_IDS), function_constant(USE_MATERIAL_ARGUMENTS)]],
                                     sampler s [[sampler(0)]]) {
-    SurfaceData sd = buildSurface(in, frontFacing, mat, instances[in.instance], baseColorTex, normalTex, metalRoughTex,
-                                  occlusionTex, emissiveTex, s, frame.cameraPosition.xyz);
+    constant MaterialUniforms *matPtr;
+    texture2d<float> bc;
+    texture2d<float> nm;
+    texture2d<float> mr;
+    texture2d<float> oc;
+    texture2d<float> em;
+    if (USE_MATERIAL_ARGUMENTS_V) {
+        MaterialRecord rec = materials[materialIds[in.materialSlot]];
+        matPtr = rec.uniforms;
+        bc = rec.baseColor;
+        nm = rec.normalMap;
+        mr = rec.metalRough;
+        oc = rec.occlusion;
+        em = rec.emissive;
+    } else {
+        matPtr = &matDiscrete;
+        bc = baseColorTex;
+        nm = normalTex;
+        mr = metalRoughTex;
+        oc = occlusionTex;
+        em = emissiveTex;
+    }
+    constant MaterialUniforms &mat = *matPtr;
+    SurfaceData sd = buildSurface(in, frontFacing, mat, instances[in.instance], bc, nm, mr, oc, em, s,
+                                  frame.cameraPosition.xyz);
     if (HAS_ALPHA_TEST_V && sd.alpha < mat.params2.x) { discard_fragment(); }
     PrepassOut o;
     o.normalRoughness = float4(sd.normal * 0.5f + 0.5f, sd.roughness);
@@ -183,6 +212,20 @@ fragment PrepassOut prepassFragment(MeshOut in [[stage_in]], bool frontFacing [[
     float2 cur = in.currentClip.xy / in.currentClip.w;
     float2 prev = in.previousClip.xy / in.previousClip.w;
     o.motion = (cur - prev) * float2(0.5f, -0.5f);
+    return o;
+}
+
+/// Optional picking target. Not attached to the default prepass pipeline: a caller that
+/// wants instance ids builds a pipeline with this fragment and an `r32Uint` colour attachment.
+/// The value is the index into `InstanceData` / `InstancePickMap` (`0xFFFFFFFF` is unused here;
+/// a cleared attachment is the miss).
+struct PickOut {
+    uint instanceID [[color(0)]];
+};
+
+fragment PickOut prepassPickFragment(MeshOut in [[stage_in]]) {
+    PickOut o;
+    o.instanceID = in.instance;
     return o;
 }
 
@@ -299,18 +342,20 @@ inline float4 sampleProbes(SurfaceData sd, float3 R, float lod, constant FrameUn
 
 fragment float4 forwardFragment(MeshOut in [[stage_in]], bool frontFacing [[front_facing]],
                                 constant FrameUniforms &frame [[buffer(BUF_FRAME)]],
-                                constant MaterialUniforms &mat [[buffer(BUF_MATERIAL)]],
+                                constant MaterialUniforms &matDiscrete [[buffer(BUF_MATERIAL), function_constant(USE_DISCRETE_MATERIALS)]],
                                 const device InstanceData *instances [[buffer(BUF_INSTANCES)]],
                                 const device LightData *lights [[buffer(BUF_LIGHTS)]],
                                 const device uint *clusterCounts [[buffer(BUF_CLUSTER_COUNTS)]],
                                 const device ushort *clusterIndices [[buffer(BUF_CLUSTER_INDICES)]],
                                 const device ProbeData *probes [[buffer(BUF_PROBES)]],
                                 const device float4x4 *localMatrices [[buffer(BUF_LOCAL_SHADOW_MATRICES)]],
-                                texture2d<float> baseColorTex [[texture(0)]],
-                                texture2d<float> normalTex [[texture(1)]],
-                                texture2d<float> metalRoughTex [[texture(2)]],
-                                texture2d<float> occlusionTex [[texture(3)]],
-                                texture2d<float> emissiveTex [[texture(4)]],
+                                texture2d<float> baseColorTex [[texture(0), function_constant(USE_DISCRETE_MATERIALS)]],
+                                texture2d<float> normalTex [[texture(1), function_constant(USE_DISCRETE_MATERIALS)]],
+                                texture2d<float> metalRoughTex [[texture(2), function_constant(USE_DISCRETE_MATERIALS)]],
+                                texture2d<float> occlusionTex [[texture(3), function_constant(USE_DISCRETE_MATERIALS)]],
+                                texture2d<float> emissiveTex [[texture(4), function_constant(USE_DISCRETE_MATERIALS)]],
+                                constant MaterialRecord *materials [[buffer(BUF_MATERIAL_TABLE), function_constant(USE_MATERIAL_ARGUMENTS)]],
+                                const device uint *materialIds [[buffer(BUF_MATERIAL_IDS), function_constant(USE_MATERIAL_ARGUMENTS)]],
                                 texturecube<float> prefiltered [[texture(5)]],
                                 texture2d<float> brdfLUT [[texture(6)]],
                                 depth2d_array<float> shadowMap [[texture(7)]],
@@ -323,8 +368,31 @@ fragment float4 forwardFragment(MeshOut in [[stage_in]], bool frontFacing [[fron
                                 sampler s [[sampler(0)]],
                                 sampler shadowCmp [[sampler(1)]]) {
     constexpr sampler linearClamp(filter::linear, mip_filter::linear, address::clamp_to_edge);
-    SurfaceData sd = buildSurface(in, frontFacing, mat, instances[in.instance], baseColorTex, normalTex, metalRoughTex,
-                                  occlusionTex, emissiveTex, s, frame.cameraPosition.xyz);
+    constant MaterialUniforms *matPtr;
+    texture2d<float> bc;
+    texture2d<float> nm;
+    texture2d<float> mr;
+    texture2d<float> oc;
+    texture2d<float> em;
+    if (USE_MATERIAL_ARGUMENTS_V) {
+        MaterialRecord rec = materials[materialIds[in.materialSlot]];
+        matPtr = rec.uniforms;
+        bc = rec.baseColor;
+        nm = rec.normalMap;
+        mr = rec.metalRough;
+        oc = rec.occlusion;
+        em = rec.emissive;
+    } else {
+        matPtr = &matDiscrete;
+        bc = baseColorTex;
+        nm = normalTex;
+        mr = metalRoughTex;
+        oc = occlusionTex;
+        em = emissiveTex;
+    }
+    constant MaterialUniforms &mat = *matPtr;
+    SurfaceData sd = buildSurface(in, frontFacing, mat, instances[in.instance], bc, nm, mr, oc, em, s,
+                                  frame.cameraPosition.xyz);
     if (HAS_ALPHA_TEST_V && sd.alpha < mat.params2.x) { discard_fragment(); }
     if (IS_UNLIT_V) {
         // Same premultiplied convention as the lit path below.

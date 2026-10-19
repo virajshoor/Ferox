@@ -95,8 +95,10 @@ public final class SpriteBatcher {
 
     /// Builds the 2D frame as seen by `camera` (normally `RenderFrameData.camera`).
     /// `targetSize` is the render-target size in pixels (pixel snapping).
-    public func build(world: World, assets: AssetManager, camera: RenderCamera,
-                      targetSize: SIMD2<Int>) -> SpriteFrameData {
+    public func build(
+        world: World, assets: AssetManager, camera: RenderCamera,
+        targetSize: SIMD2<Int>
+    ) -> SpriteFrameData {
         var out = SpriteFrameData()
         let cam = camera.camera
 
@@ -131,31 +133,41 @@ public final class SpriteBatcher {
         drawables.reserveCapacity(lastDrawableCount)
         world.read(SpriteRenderer.self) { e, s in
             guard visible(e) else { return }
-            drawables.append(Drawable(layer: s.sortingLayer, order: s.orderInLayer, entity: e, kind: .sprite(s, matrix(e)),
-                                      sequence: drawables.count))
+            drawables.append(
+                Drawable(
+                    layer: s.sortingLayer, order: s.orderInLayer, entity: e, kind: .sprite(s, matrix(e)),
+                    sequence: drawables.count))
         }
         world.read(ShapeRenderer.self) { e, s in
             guard visible(e) else { return }
-            drawables.append(Drawable(layer: s.sortingLayer, order: s.orderInLayer, entity: e, kind: .shape(s, matrix(e)),
-                                      sequence: drawables.count))
+            drawables.append(
+                Drawable(
+                    layer: s.sortingLayer, order: s.orderInLayer, entity: e, kind: .shape(s, matrix(e)),
+                    sequence: drawables.count))
         }
         var liveTilemaps = Set<Entity>()
         world.read(Tilemap.self) { e, t in
             guard visible(e) else { return }
             liveTilemaps.insert(e)
-            drawables.append(Drawable(layer: t.sortingLayer, order: Int.min, entity: e, kind: .tilemap(t, matrix(e)),
-                                      sequence: drawables.count))
+            drawables.append(
+                Drawable(
+                    layer: t.sortingLayer, order: Int.min, entity: e, kind: .tilemap(t, matrix(e)),
+                    sequence: drawables.count))
         }
         // Drop caches of tilemaps that were destroyed or hidden, so they cannot leak.
-        if tilemapCache.count != liveTilemaps.count || tilemapCache.keys.contains(where: { !liveTilemaps.contains($0) }) {
+        if tilemapCache.count != liveTilemaps.count || tilemapCache.keys.contains(where: { !liveTilemaps.contains($0) })
+        {
             tilemapCache = tilemapCache.filter { liveTilemaps.contains($0.key) }
         }
         if cam.projection == .orthographic {
             world.read(ParticleEmitter.self) { e, em in
                 guard em.simulation == .cpu, let st = world.get(ParticleState.self, e), st.pool.count > 0,
-                      visible(e) else { return }
-                drawables.append(Drawable(layer: em.sortingLayer, order: 0, entity: e, kind: .particles(em, st),
-                                          sequence: drawables.count))
+                    visible(e)
+                else { return }
+                drawables.append(
+                    Drawable(
+                        layer: em.sortingLayer, order: 0, entity: e, kind: .particles(em, st),
+                        sequence: drawables.count))
             }
         }
         // A strict total order: layer, order, entity, then append sequence for ties.
@@ -173,21 +185,25 @@ public final class SpriteBatcher {
         emitter.batches.reserveCapacity(lastBatchCount)
         for d in drawables {
             switch d.kind {
-            case let .sprite(s, m):
+            case .sprite(let s, let m):
                 if emitSprite(s, m, assets: assets, frustum: frustum, into: &emitter) {
                     out.drawnObjects += 1
                 } else {
                     out.culledObjects += 1
                 }
-            case let .shape(s, m):
-                if emitShape(s, m, frustum: frustum, into: &emitter) { out.drawnObjects += 1 } else { out.culledObjects += 1 }
-            case let .tilemap(t, m):
+            case .shape(let s, let m):
+                if emitShape(s, m, frustum: frustum, into: &emitter) {
+                    out.drawnObjects += 1
+                } else {
+                    out.culledObjects += 1
+                }
+            case .tilemap(let t, let m):
                 if emitTilemap(t, m, entity: d.entity, assets: assets, frustum: frustum, into: &emitter) {
                     out.drawnObjects += 1
                 } else {
                     out.culledObjects += 1
                 }
-            case let .particles(em, st):
+            case .particles(let em, let st):
                 emitParticles(em, st, camera: camera, assets: assets, into: &emitter)
                 out.drawnObjects += 1
             }
@@ -222,15 +238,19 @@ public final class SpriteBatcher {
         var batches: [SpriteBatch] = []
         var current: SpriteBatch?
 
-        mutating func begin(texture: AssetID?, normalMap: AssetID?, blend: SpriteBlendMode,
-                            filter: TextureFilter, stencil: SpriteStencil) {
+        mutating func begin(
+            texture: AssetID?, normalMap: AssetID?, blend: SpriteBlendMode,
+            filter: TextureFilter, stencil: SpriteStencil
+        ) {
             if let c = current, c.texture == texture, c.normalMap == normalMap, c.blend == blend,
-               c.filter == filter, c.stencil == stencil {
+                c.filter == filter, c.stencil == stencil
+            {
                 return
             }
             flush()
-            current = SpriteBatch(texture: texture, normalMap: normalMap, blend: blend, filter: filter,
-                                  stencil: stencil, firstIndex: indices.count, indexCount: 0)
+            current = SpriteBatch(
+                texture: texture, normalMap: normalMap, blend: blend, filter: filter,
+                stencil: stencil, firstIndex: indices.count, indexCount: 0)
         }
 
         mutating func flush() {
@@ -258,7 +278,8 @@ public final class SpriteBatcher {
     }
 
     static func worldBounds(_ pts: [Vec2], z: Float) -> AABB {
-        var lo = Vec3(repeating: .greatestFiniteMagnitude), hi = Vec3(repeating: -.greatestFiniteMagnitude)
+        var lo = Vec3(repeating: .greatestFiniteMagnitude)
+        var hi = Vec3(repeating: -.greatestFiniteMagnitude)
         for p in pts {
             lo = pointwiseMin(lo, Vec3(p.x, p.y, z))
             hi = pointwiseMax(hi, Vec3(p.x, p.y, z))
@@ -277,13 +298,18 @@ public final class SpriteBatcher {
     static func vertexColor(_ c: Color, blend: SpriteBlendMode) -> Vec4 {
         switch blend {
         case .premultiplied: return c.vector
-        case .additive: var v = c.premultiplied; v.w = 0; return v
+        case .additive:
+            var v = c.premultiplied
+            v.w = 0
+            return v
         default: return c.premultiplied
         }
     }
 
-    func emitSprite(_ s: SpriteRenderer, _ m: Mat4, assets: AssetManager, frustum: Frustum,
-                    into e: inout BatchEmitter) -> Bool {
+    func emitSprite(
+        _ s: SpriteRenderer, _ m: Mat4, assets: AssetManager, frustum: Frustum,
+        into e: inout BatchEmitter
+    ) -> Bool {
         let handle = assets.texture(s.texture, srgb: true)
         var size = s.size
         if size == nil {
@@ -292,19 +318,24 @@ public final class SpriteBatcher {
             size = Vec2(Float(img.width) * s.uvRect.width, Float(img.height) * s.uvRect.height) / ppu
         }
         guard let sz = size, sz.x > 0, sz.y > 0 else { return false }
-        let x0 = -s.pivot.x * sz.x, y0 = -s.pivot.y * sz.y
+        let x0 = -s.pivot.x * sz.x
+        let y0 = -s.pivot.y * sz.y
         let local = [Vec2(x0, y0), Vec2(x0 + sz.x, y0), Vec2(x0 + sz.x, y0 + sz.y), Vec2(x0, y0 + sz.y)]
         let p = local.map { Self.xy(m, $0) }
         guard frustum.intersects(Self.worldBounds(p, z: m.c3.z)) else { return false }
 
         let r = s.uvRect
-        var u0 = r.minX, u1 = r.maxX, vTop = r.minY, vBottom = r.maxY
+        var u0 = r.minX
+        var u1 = r.maxX
+        var vTop = r.minY
+        var vBottom = r.maxY
         if s.flipX { swap(&u0, &u1) }
         if s.flipY { swap(&vTop, &vBottom) }
         let uv = [Vec2(u0, vBottom), Vec2(u1, vBottom), Vec2(u1, vTop), Vec2(u0, vTop)]
         if let n = s.normalMap { _ = assets.texture(n, srgb: false) }
-        e.begin(texture: s.texture, normalMap: s.receives2DLighting ? s.normalMap : nil, blend: s.blend,
-                filter: s.filter, stencil: Self.stencil(isMask: s.isMask, id: s.maskID))
+        e.begin(
+            texture: s.texture, normalMap: s.receives2DLighting ? s.normalMap : nil, blend: s.blend,
+            filter: s.filter, stencil: Self.stencil(isMask: s.isMask, id: s.maskID))
         e.quad(p, uv, Self.vertexColor(s.color, blend: s.blend), lit: s.receives2DLighting)
         return true
     }
@@ -314,13 +345,17 @@ public final class SpriteBatcher {
         var filled = true
         var closedStroke = true
         switch s.shape {
-        case let .rectangle(size, radius): outline = Tessellator.roundedRect(size: size, cornerRadius: radius)
-        case let .circle(radius, segments): outline = Tessellator.circle(radius: radius, segments: segments)
-        case let .polygon(points): outline = points
-        case let .line(a, b):
-            outline = [a, b]; filled = false; closedStroke = false
-        case let .polyline(points, closed):
-            outline = points; filled = false; closedStroke = closed
+        case .rectangle(let size, let radius): outline = Tessellator.roundedRect(size: size, cornerRadius: radius)
+        case .circle(let radius, let segments): outline = Tessellator.circle(radius: radius, segments: segments)
+        case .polygon(let points): outline = points
+        case .line(let a, let b):
+            outline = [a, b]
+            filled = false
+            closedStroke = false
+        case .polyline(let points, let closed):
+            outline = points
+            filled = false
+            closedStroke = closed
         }
         guard !outline.isEmpty else { return false }
         let world = outline.map { Self.xy(m, $0) }
@@ -331,42 +366,56 @@ public final class SpriteBatcher {
         guard frustum.intersects(bounds) else { return false }
 
         e.begin(texture: nil, normalMap: nil, blend: .alpha, filter: .linear, stencil: .none)
-        let minY = outline.map(\.y).min() ?? 0, maxY = outline.map(\.y).max() ?? 0
+        let minY = outline.map(\.y).min() ?? 0
+        let maxY = outline.map(\.y).max() ?? 0
         let span = max(maxY - minY, 1e-6)
         func gradientColor(_ p: Vec2) -> Vec4 { s.fill.evaluate((p.y - minY) / span).premultiplied }
 
         if filled {
             let idx = Tessellator.triangulate(outline)
-            let verts = (0..<outline.count).map { SpriteVertex(position: world[$0], uv: Vec2(0.5, 0.5), color: gradientColor(outline[$0])) }
+            let verts = (0..<outline.count).map {
+                SpriteVertex(position: world[$0], uv: Vec2(0.5, 0.5), color: gradientColor(outline[$0]))
+            }
             e.add(verts, idx)
             if s.strokeWidth > 0 {
                 let st = Tessellator.stroke(outline, width: s.strokeWidth, closed: true)
                 let c = s.strokeColor.premultiplied
-                e.add(st.positions.map { SpriteVertex(position: Self.xy(m, $0), uv: Vec2(0.5, 0.5), color: c) }, st.indices)
+                e.add(
+                    st.positions.map { SpriteVertex(position: Self.xy(m, $0), uv: Vec2(0.5, 0.5), color: c) },
+                    st.indices)
             }
         } else {
             // Lines use the fill gradient along their length; zero width means a hairline
             // of 0.02 world units.
             let st = Tessellator.stroke(outline, width: s.strokeWidth > 0 ? s.strokeWidth : 0.02, closed: closedStroke)
             var lengths: [Float] = [0]
-            for i in 1..<max(outline.count, 1) { lengths.append(lengths[i - 1] + outline[i].distance(to: outline[i - 1])) }
+            for i in 1..<max(outline.count, 1) {
+                lengths.append(lengths[i - 1] + outline[i].distance(to: outline[i - 1]))
+            }
             let total = max(lengths.last ?? 0, 1e-6)
             let verts = st.positions.enumerated().map { i, p in
                 let t = lengths[min(i / 2, lengths.count - 1)] / total
-                return SpriteVertex(position: Self.xy(m, p), uv: Vec2(0.5, 0.5), color: s.fill.evaluate(t).premultiplied)
+                return SpriteVertex(
+                    position: Self.xy(m, p), uv: Vec2(0.5, 0.5), color: s.fill.evaluate(t).premultiplied)
             }
             e.add(verts, st.indices)
         }
         return true
     }
 
-    func emitTilemap(_ t: Tilemap, _ m: Mat4, entity: Entity, assets: AssetManager, frustum: Frustum,
-                     into e: inout BatchEmitter) -> Bool {
+    func emitTilemap(
+        _ t: Tilemap, _ m: Mat4, entity: Entity, assets: AssetManager, frustum: Frustum,
+        into e: inout BatchEmitter
+    ) -> Bool {
         guard t.width > 0, t.height > 0, t.tiles.count == t.width * t.height else { return false }
         _ = assets.texture(t.tileset, srgb: true)
         var h = Hasher()
-        h.combine(t.width); h.combine(t.height); h.combine(t.tileSize.x); h.combine(t.tileSize.y)
-        h.combine(t.tilesetColumns); h.combine(t.tilesetRows)
+        h.combine(t.width)
+        h.combine(t.height)
+        h.combine(t.tileSize.x)
+        h.combine(t.tileSize.y)
+        h.combine(t.tilesetColumns)
+        h.combine(t.tilesetRows)
         let signature = h.finalize()
         let cache: TilemapCache
         if let c = tilemapCache[entity], c.revision == t.revision, c.signature == signature {
@@ -408,35 +457,46 @@ public final class SpriteBatcher {
         let inset = Vec2(0.5 / Float(max(t.tilesetColumns * 64, 1)), 0.5 / Float(max(t.tilesetRows * 64, 1)))
         for cy in stride(from: 0, to: t.height, by: cs) {
             for cx in stride(from: 0, to: t.width, by: cs) {
-                var pos: [Vec2] = [], uv: [Vec2] = []
+                var pos: [Vec2] = []
+                var uv: [Vec2] = []
                 for y in cy..<min(cy + cs, t.height) {
                     for x in cx..<min(cx + cs, t.width) {
                         let tile = t.tiles[y * t.width + x]
                         guard tile >= 0, tile < maxTile else { continue }
-                        let x0 = Float(x) * t.tileSize.x, y0 = Float(y) * t.tileSize.y
-                        let x1 = x0 + t.tileSize.x, y1 = y0 + t.tileSize.y
+                        let x0 = Float(x) * t.tileSize.x
+                        let y0 = Float(y) * t.tileSize.y
+                        let x1 = x0 + t.tileSize.x
+                        let y1 = y0 + t.tileSize.y
                         pos += [Vec2(x0, y0), Vec2(x1, y0), Vec2(x1, y1), Vec2(x0, y1)]
                         let r = t.uvRect(for: tile)
-                        let u0 = r.minX + inset.x, u1 = r.maxX - inset.x
-                        let vt = r.minY + inset.y, vb = r.maxY - inset.y
+                        let u0 = r.minX + inset.x
+                        let u1 = r.maxX - inset.x
+                        let vt = r.minY + inset.y
+                        let vb = r.maxY - inset.y
                         uv += [Vec2(u0, vb), Vec2(u1, vb), Vec2(u1, vt), Vec2(u0, vt)]
                     }
                 }
                 let lo = Vec3(Float(cx) * t.tileSize.x, Float(cy) * t.tileSize.y, -0.01)
-                let hi = Vec3(Float(min(cx + cs, t.width)) * t.tileSize.x, Float(min(cy + cs, t.height)) * t.tileSize.y, 0.01)
-                chunks.append(TilemapChunk(bounds: AABB(min: pointwiseMin(lo, hi), max: pointwiseMax(lo, hi)), positions: pos, uvs: uv))
+                let hi = Vec3(
+                    Float(min(cx + cs, t.width)) * t.tileSize.x, Float(min(cy + cs, t.height)) * t.tileSize.y, 0.01)
+                chunks.append(
+                    TilemapChunk(
+                        bounds: AABB(min: pointwiseMin(lo, hi), max: pointwiseMax(lo, hi)), positions: pos, uvs: uv))
             }
         }
         return chunks
     }
 
-    func emitParticles(_ em: ParticleEmitter, _ st: ParticleState, camera: RenderCamera, assets: AssetManager,
-                       into e: inout BatchEmitter) {
+    func emitParticles(
+        _ em: ParticleEmitter, _ st: ParticleState, camera: RenderCamera, assets: AssetManager,
+        into e: inout BatchEmitter
+    ) {
         let pool = st.pool
         if let t = em.texture { _ = assets.texture(t, srgb: true) }
         e.begin(texture: em.texture, normalMap: nil, blend: em.blend, filter: .linear, stencil: .none)
         let local = em.space == .local
-        let cols = max(em.sheetGrid.x, 1), rows = max(em.sheetGrid.y, 1)
+        let cols = max(em.sheetGrid.x, 1)
+        let rows = max(em.sheetGrid.y, 1)
         let frames = cols * rows
         var verts: [SpriteVertex] = []
         var idx: [UInt32] = []
@@ -448,17 +508,21 @@ public final class SpriteBatcher {
             let size = pool.sizes[i] * (em.sizeOverLifetime.sample(t) ?? 1) * 0.5
             let c = Self.vertexColor(em.colorOverLifetime.evaluate(t), blend: em.blend)
             let rot = pool.rotations[i]
-            let cs = cos(rot), sn = sin(rot)
+            let cs = cos(rot)
+            let sn = sin(rot)
             let corners = [Vec2(-1, -1), Vec2(1, -1), Vec2(1, 1), Vec2(-1, 1)].map { k in
                 Vec2(p3.x, p3.y) + Vec2(k.x * cs - k.y * sn, k.x * sn + k.y * cs) * size
             }
             // Flipbook frame from age (sheetFPS > 0) or normalised lifetime.
             var frame = 0
             if frames > 1 {
-                frame = em.sheetFPS > 0 ? Int(pool.ages[i] * em.sheetFPS) % frames : min(Int(t * Float(frames)), frames - 1)
+                frame =
+                    em.sheetFPS > 0 ? Int(pool.ages[i] * em.sheetFPS) % frames : min(Int(t * Float(frames)), frames - 1)
             }
-            let fw = 1 / Float(cols), fh = 1 / Float(rows)
-            let u0 = Float(frame % cols) * fw, v0 = Float(frame / cols) * fh
+            let fw = 1 / Float(cols)
+            let fh = 1 / Float(rows)
+            let u0 = Float(frame % cols) * fw
+            let v0 = Float(frame / cols) * fh
             let uv = [Vec2(u0, v0 + fh), Vec2(u0 + fw, v0 + fh), Vec2(u0 + fw, v0), Vec2(u0, v0)]
             let base = UInt32(verts.count)
             for k in 0..<4 { verts.append(SpriteVertex(position: corners[k], uv: uv[k], color: c)) }
@@ -476,8 +540,12 @@ public final class SpriteBatcher {
             let m = world.get(WorldTransform.self, e)?.matrix ?? world.worldMatrix(of: e)
             let p = m.translation
             let radius = max(l.range, 1e-3)
-            guard frustum.intersects(AABB(min: Vec3(p.x - radius, p.y - radius, -0.01 + min(p.z, 0)),
-                                          max: Vec3(p.x + radius, p.y + radius, 0.01 + max(p.z, 0)))) else { return }
+            guard
+                frustum.intersects(
+                    AABB(
+                        min: Vec3(p.x - radius, p.y - radius, -0.01 + min(p.z, 0)),
+                        max: Vec3(p.x + radius, p.y + radius, 0.01 + max(p.z, 0))))
+            else { return }
             var d = Light2D()
             // Height above the sprite plane: |z|, or a quarter of the range on the plane.
             let height = abs(p.z) > 0.01 ? abs(p.z) : radius * 0.25
@@ -487,8 +555,9 @@ public final class SpriteBatcher {
                 let f = m.transformDirection(.forward)
                 let dir = Vec2(f.x, f.y)
                 let outer = min(max(l.outerConeAngle, 0.001), .pi - 0.001)
-                d.params = Vec4(0, cos(outer), dir.lengthSquared > 1e-8 ? dir.normalized.x : 1,
-                                dir.lengthSquared > 1e-8 ? dir.normalized.y : 0)
+                d.params = Vec4(
+                    0, cos(outer), dir.lengthSquared > 1e-8 ? dir.normalized.x : 1,
+                    dir.lengthSquared > 1e-8 ? dir.normalized.y : 0)
             }
             out.append((d, (Vec2(p.x, p.y) - Vec2(camera.position.x, camera.position.y)).lengthSquared))
         }

@@ -1,8 +1,9 @@
+import FeroxCore
 /// Tests for the asset layer: procedural mesh geometry and validation, in-memory registration
 /// with revision tracking, the Netpbm image decoder, a minimal glTF import, path containment and
 /// database discovery over a temporary directory. No GPU, network or AppKit is involved.
 import XCTest
-import FeroxCore
+
 @testable import FeroxAssets
 
 final class AssetsTests: XCTestCase {
@@ -146,9 +147,9 @@ final class AssetsTests: XCTestCase {
     /// A minimal glTF document produces a node hierarchy with the scene's root nodes.
     func testMinimalGLTFBuildsNodeHierarchy() throws {
         let json = """
-        {"asset":{"version":"2.0"},"scenes":[{"nodes":[0]}],
-         "nodes":[{"name":"Root","children":[1]},{"name":"Child"}]}
-        """
+            {"asset":{"version":"2.0"},"scenes":[{"nodes":[0]}],
+             "nodes":[{"name":"Root","children":[1]},{"name":"Child"}]}
+            """
         let model = try GLTFImporter(imageDecoder: nil).load(data: Data(json.utf8), name: "minimal")
         XCTAssertEqual(model.nodes.count, 2)
         XCTAssertEqual(model.roots, [0])
@@ -195,7 +196,8 @@ final class AssetsTests: XCTestCase {
         let id = try XCTUnwrap(database.id(forPath: "textures/checker.png"))
         XCTAssertEqual(database.entry(id)?.kind, .texture)
         XCTAssertNil(database.id(forPath: "notes.txt"))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("textures/checker.png.meta").path))
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: root.appendingPathComponent("textures/checker.png.meta").path))
 
         XCTAssertTrue(database.refresh().isEmpty)
     }

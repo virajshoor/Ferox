@@ -58,7 +58,9 @@ public struct AnimatorTransition: Codable, Hashable, Sendable {
     public var duration: Float
     /// Normalised time [0, 1] of the source state after which the transition may fire; nil = any time.
     public var exitTime: Float?
-    public init(from: String?, to: String, conditions: [TransitionCondition], duration: Float = 0.2, exitTime: Float? = nil) {
+    public init(
+        from: String?, to: String, conditions: [TransitionCondition], duration: Float = 0.2, exitTime: Float? = nil
+    ) {
         self.from = from
         self.to = to
         self.conditions = conditions
@@ -73,8 +75,10 @@ public struct AnimatorController: Codable, Hashable, Sendable {
     public var transitions: [AnimatorTransition]
     public var defaultState: String
     public var defaultParameters: [String: AnimatorParameter]
-    public init(states: [AnimatorState], transitions: [AnimatorTransition], defaultState: String,
-                parameters: [String: AnimatorParameter] = [:]) {
+    public init(
+        states: [AnimatorState], transitions: [AnimatorTransition], defaultState: String,
+        parameters: [String: AnimatorParameter] = [:]
+    ) {
         self.states = states
         self.transitions = transitions
         self.defaultState = defaultState
@@ -106,7 +110,9 @@ public struct Animator: SerializableComponent, Hashable, Sendable {
 
     /// Single-clip convenience (looping playback with no transitions).
     public init(clip: AssetID) {
-        self.init(controller: AnimatorController(states: [AnimatorState(name: "Default", clip: clip)], transitions: [], defaultState: "Default"))
+        self.init(
+            controller: AnimatorController(
+                states: [AnimatorState(name: "Default", clip: clip)], transitions: [], defaultState: "Default"))
     }
 
     public mutating func set(_ name: String, _ value: Float) { parameters[name] = .float(value) }
@@ -126,8 +132,8 @@ public struct Animator: SerializableComponent, Hashable, Sendable {
 
     func check(_ c: TransitionCondition) -> Bool {
         switch c {
-        case let .greater(n, v): if case .float(let f)? = parameters[n] { return f > v } else { return false }
-        case let .less(n, v): if case .float(let f)? = parameters[n] { return f < v } else { return false }
+        case .greater(let n, let v): if case .float(let f)? = parameters[n] { return f > v } else { return false }
+        case .less(let n, let v): if case .float(let f)? = parameters[n] { return f < v } else { return false }
         case .isTrue(let n): if case .bool(let b)? = parameters[n] { return b } else { return false }
         case .isFalse(let n): if case .bool(let b)? = parameters[n] { return !b } else { return true }
         case .trigger(let n): if case .trigger(let b)? = parameters[n] { return b } else { return false }
@@ -148,7 +154,9 @@ public struct Animator: SerializableComponent, Hashable, Sendable {
         let dur = max(clipDuration(st), 1e-4)
         let normalized = stateTime / dur
         for t in controller.transitions where (t.from == nil || t.from == currentState) && t.to != currentState {
-            if let exit = t.exitTime, normalized.truncatingRemainder(dividingBy: 1) < exit && normalized < 1 { continue }
+            if let exit = t.exitTime, normalized.truncatingRemainder(dividingBy: 1) < exit && normalized < 1 {
+                continue
+            }
             guard t.conditions.allSatisfy(check) else { continue }
             for c in t.conditions { if case .trigger(let n) = c { parameters[n] = .trigger(false) } }
             crossFade(to: t.to, duration: t.duration)

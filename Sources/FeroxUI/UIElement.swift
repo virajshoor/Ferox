@@ -38,7 +38,9 @@ public struct Anchors: Sendable, Hashable {
     }
 }
 
-public enum AccessibilityRole: String, Sendable { case none, group, staticText, image, button, checkbox, slider, textField, list, popUpButton, scrollArea }
+public enum AccessibilityRole: String, Sendable {
+    case none, group, staticText, image, button, checkbox, slider, textField, list, popUpButton, scrollArea
+}
 
 /// Pointer/keyboard event delivered to elements.
 public enum UIEvent: Sendable {
@@ -53,7 +55,9 @@ public enum UIEvent: Sendable {
 }
 
 /// Keys relevant to UI (decoupled from FeroxInput.Key to keep the event enum small).
-public enum FeroxInputKey: Sendable, Hashable { case left, right, up, down, home, end, backspace, delete, enter, escape, tab, a, c, v, x }
+public enum FeroxInputKey: Sendable, Hashable {
+    case left, right, up, down, home, end, backspace, delete, enter, escape, tab, a, c, v, x
+}
 
 public struct UIModifiers: OptionSet, Sendable, Hashable {
     public let rawValue: UInt8
@@ -175,12 +179,14 @@ open class UIElement {
             } else {
                 let avail = Rect(
                     x: contentRect.minX + c.margin.left, y: contentRect.minY + c.margin.top,
-                    width: max(0, contentRect.width - c.margin.horizontal), height: max(0, contentRect.height - c.margin.vertical))
+                    width: max(0, contentRect.width - c.margin.horizontal),
+                    height: max(0, contentRect.height - c.margin.vertical))
                 let size = c.resolvedSize(in: avail.size, measured: c.measure(available: avail.size, context: context))
                 let align = c.alignSelf ?? .stretch
                 let w = (align == .stretch && isFlexible(c.width)) ? avail.width : size.x
                 let h = (align == .stretch && isFlexible(c.height)) ? avail.height : size.y
-                let x: Float, y: Float
+                let x: Float
+                let y: Float
                 switch align {
                 case .start, .stretch: (x, y) = (avail.minX, avail.minY)
                 case .center: (x, y) = (avail.minX + (avail.width - w) / 2, avail.minY + (avail.height - h) / 2)
@@ -194,7 +200,9 @@ open class UIElement {
     /// Draws the element (not its children).
     open func draw(_ list: inout UIDrawList, context: UIContext) {
         if let bg = background {
-            list.rect(frame, bg, bottom: backgroundBottom, radius: cornerRadius, border: borderWidth, borderColor: borderColor)
+            list.rect(
+                frame, bg, bottom: backgroundBottom, radius: cornerRadius, border: borderWidth, borderColor: borderColor
+            )
         } else if borderWidth > 0 {
             list.rect(frame, .clear, radius: cornerRadius, border: borderWidth, borderColor: borderColor)
         }
@@ -259,10 +267,15 @@ open class UIElement {
     }
 
     /// Animates visual properties.
-    public func animate(opacity: Float? = nil, offset: Vec2? = nil, scale: Float? = nil, duration: Float, easing: UIEasing = .easeOut, context: UIContext) {
-        context.animator.add(UIAnimation(element: self, fromOpacity: self.opacity, toOpacity: opacity ?? self.opacity,
-                                         fromOffset: self.offset, toOffset: offset ?? self.offset,
-                                         fromScale: self.scale, toScale: scale ?? self.scale, duration: max(duration, 1e-3), easing: easing))
+    public func animate(
+        opacity: Float? = nil, offset: Vec2? = nil, scale: Float? = nil, duration: Float, easing: UIEasing = .easeOut,
+        context: UIContext
+    ) {
+        context.animator.add(
+            UIAnimation(
+                element: self, fromOpacity: self.opacity, toOpacity: opacity ?? self.opacity,
+                fromOffset: self.offset, toOffset: offset ?? self.offset,
+                fromScale: self.scale, toScale: scale ?? self.scale, duration: max(duration, 1e-3), easing: easing))
     }
 }
 
@@ -275,7 +288,10 @@ open class UIStack: UIElement {
     public var alignment: UIAlignment
     public var justify: Justify = .start
 
-    public init(_ axis: Axis, spacing: Float = 8, alignment: UIAlignment = .stretch, name: String = "", _ children: [UIElement] = []) {
+    public init(
+        _ axis: Axis, spacing: Float = 8, alignment: UIAlignment = .stretch, name: String = "",
+        _ children: [UIElement] = []
+    ) {
         self.axis = axis
         self.spacing = spacing
         self.alignment = alignment
@@ -294,7 +310,8 @@ open class UIStack: UIElement {
 
     open override func contentSize(available: Vec2, context: UIContext) -> Vec2 {
         let items = children.filter { $0.isVisible && $0.anchors == nil }
-        var m: Float = 0, c: Float = 0
+        var m: Float = 0
+        var c: Float = 0
         for e in items {
             let s = e.measure(available: available, context: context)
             if case .fill = mainSpec(e) {} else { m += main(s) }
@@ -385,8 +402,11 @@ struct UIAnimation {
     var easing: UIEasing
     var elapsed: Float = 0
 
-    init(element: UIElement, fromOpacity: Float, toOpacity: Float, fromOffset: Vec2, toOffset: Vec2, fromScale: Float, toScale: Float,
-         duration: Float, easing: UIEasing) {
+    init(
+        element: UIElement, fromOpacity: Float, toOpacity: Float, fromOffset: Vec2, toOffset: Vec2, fromScale: Float,
+        toScale: Float,
+        duration: Float, easing: UIEasing
+    ) {
         self.element = element
         self.fromOpacity = fromOpacity
         self.toOpacity = toOpacity

@@ -143,16 +143,23 @@ public final class AssetDatabase: @unchecked Sendable {
     public func refresh() -> Changes {
         var changes = Changes()
         let fm = FileManager.default
-        guard let enumerator = fm.enumerator(
-            at: root, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants])
+        guard
+            let enumerator = fm.enumerator(
+                at: root, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants])
         else { return changes }
         var seen = Set<String>()
         var materials: [(url: URL, id: AssetID)] = []
         for case let url as URL in enumerator {
             let rel = safePath.relativePath(for: url) ?? url.lastPathComponent
-            if rel.hasPrefix(".ferox-cache") || rel.hasPrefix(".build") { enumerator.skipDescendants(); continue }
-            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]),
+            if rel.hasPrefix(".ferox-cache") || rel.hasPrefix(".build") {
+                enumerator.skipDescendants()
+                continue
+            }
+            guard
+                let values = try? url.resourceValues(forKeys: [
+                    .isRegularFileKey, .fileSizeKey, .contentModificationDateKey,
+                ]),
                 values.isRegularFile == true
             else { continue }
             let ext = url.pathExtension.lowercased()
@@ -166,7 +173,8 @@ public final class AssetDatabase: @unchecked Sendable {
             if let e = existing, e.size == size, e.modified == modified { continue }
 
             let metaURL = url.appendingPathExtension("meta")
-            var meta = (try? Data(contentsOf: metaURL)).flatMap { try? JSONDecoder().decode(AssetMeta.self, from: $0) }
+            var meta =
+                (try? Data(contentsOf: metaURL)).flatMap { try? JSONDecoder().decode(AssetMeta.self, from: $0) }
                 ?? existing?.meta ?? AssetMeta(kind: kind)
             meta.kind = kind
             let hash = (try? Data(contentsOf: url, options: .mappedIfSafe)).map(fnv1a64) ?? ""
@@ -184,7 +192,11 @@ public final class AssetDatabase: @unchecked Sendable {
                 entries[meta.id] = entry
                 byPath[rel] = meta.id
             }
-            if existing == nil { changes.added.append(meta.id) } else if contentChanged { changes.modified.append(meta.id) }
+            if existing == nil {
+                changes.added.append(meta.id)
+            } else if contentChanged {
+                changes.modified.append(meta.id)
+            }
             if kind == .material { materials.append((url, meta.id)) }
         }
         // Materials reference textures by id, which may only have been indexed later in this scan.
@@ -198,7 +210,9 @@ public final class AssetDatabase: @unchecked Sendable {
             if writesMetaFiles {
                 let enc = JSONEncoder()
                 enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-                if let d = try? enc.encode(updated.meta) { try? d.write(to: m.url.appendingPathExtension("meta"), options: .atomic) }
+                if let d = try? enc.encode(updated.meta) {
+                    try? d.write(to: m.url.appendingPathExtension("meta"), options: .atomic)
+                }
             }
         }
         lock.locked {
@@ -238,7 +252,8 @@ public final class AssetDatabase: @unchecked Sendable {
         switch kind {
         case .model where url.pathExtension.lowercased() == "gltf":
             guard let j = try? JSONDecoder().decode(JSONValue.self, from: data) else { return [] }
-            let uris = (j["buffers"]?.arrayValue ?? []).compactMap { $0["uri"]?.stringValue }
+            let uris =
+                (j["buffers"]?.arrayValue ?? []).compactMap { $0["uri"]?.stringValue }
                 + (j["images"]?.arrayValue ?? []).compactMap { $0["uri"]?.stringValue }
             return uris.compactMap(rel)
         case .spriteAtlas:
@@ -251,8 +266,10 @@ public final class AssetDatabase: @unchecked Sendable {
             return (j["tilesets"]?.arrayValue ?? []).compactMap { $0["image"]?.stringValue }.compactMap(rel)
         case .material:
             guard let m = try? JSONDecoder().decode(MaterialData.self, from: data) else { return [] }
-            return [m.baseColorTexture, m.normalTexture, m.metallicRoughnessTexture, m.occlusionTexture, m.emissiveTexture]
-                .compactMap { $0 }.compactMap { id in lock.locked { entries[id]?.path } }
+            return [
+                m.baseColorTexture, m.normalTexture, m.metallicRoughnessTexture, m.occlusionTexture, m.emissiveTexture,
+            ]
+            .compactMap { $0 }.compactMap { id in lock.locked { entries[id]?.path } }
         default:
             return []
         }
@@ -266,8 +283,11 @@ public final class AssetDatabase: @unchecked Sendable {
 
     /// Reads a cached product if it was produced from the current source hash.
     public func cachedData(for id: AssetID, suffix: String) -> Data? {
-        guard let e = entry(id), let d = try? Data(contentsOf: cacheURL(for: id, suffix: suffix)), d.count > 64 else { return nil }
-        let header = String(decoding: d.prefix(64), as: UTF8.self).trimmingCharacters(in: .controlCharacters.union(.whitespaces))
+        guard let e = entry(id), let d = try? Data(contentsOf: cacheURL(for: id, suffix: suffix)), d.count > 64 else {
+            return nil
+        }
+        let header = String(decoding: d.prefix(64), as: UTF8.self).trimmingCharacters(
+            in: .controlCharacters.union(.whitespaces))
         guard header == "FXCACHE1 \(e.meta.sourceHash)" else { return nil }
         return d.dropFirst(64)
     }

@@ -38,9 +38,10 @@ public final class EventBus {
         let key = ObjectIdentifier(type)
         let id = nextID
         nextID += 1
-        handlers[key, default: []].append(Handler(id: id) { any in
-            if let e = any as? E { handler(e) }
-        })
+        handlers[key, default: []].append(
+            Handler(id: id) { any in
+                if let e = any as? E { handler(e) }
+            })
         return Subscription(id: id, typeKey: key)
     }
 

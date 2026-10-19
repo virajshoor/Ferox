@@ -50,7 +50,8 @@ public struct PCG32: RandomNumberGenerator, Hashable, Codable, Sendable {
 /// Low-discrepancy Halton sequence, used for TAA sub-pixel jitter and sampling.
 public enum Halton {
     public static func value(index: Int, base: Int) -> Float {
-        var f: Float = 1, r: Float = 0
+        var f: Float = 1
+        var r: Float = 0
         var i = index
         while i > 0 {
             f /= Float(base)

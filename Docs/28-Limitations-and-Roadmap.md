@@ -18,22 +18,22 @@ The most important limitation is the first one: Ferox has been verified on one A
 
 ## 1. Verification status
 
-- **Limitation: one machine verified.** The package has been built on an M1 Max running macOS 27 with Swift 6.4. `swift build --build-tests` has zero warnings, and the full `swift test` suite (504 XCTest tests) passes. The Metal renderer draws an offscreen frame, and the HelloFerox, Platformer2D and Showcase3D examples run. No Intel Macs, other GPUs or iOS devices have been tested, and the macOS CI job is not covered by this result. See [25-Platform-Support.md](25-Platform-Support.md).
-- **Limitation: MetalFX upscaling is unverified on hardware.** Its code paths and the fallbacks in [24-Graphics-Settings-and-Presets.md](24-Graphics-Settings-and-Presets.md) follow the resolver's rules. How they behave on a real device is not known.
+- **Limitation: one machine verified for a drawn frame.** The package has been built on an M1 Max running macOS 27 with Swift 6.4. That run's suite was 504 XCTest tests, the Metal renderer drew an offscreen frame, and the HelloFerox, Platformer2D and Showcase3D examples ran. The current portable suite is 542 XCTest tests on Swift 6.2.3 (Linux). The macOS CI job compiles shaders and can construct a `Renderer` when the runner has a GPU. That does not replace a frame capture on Apple Silicon. No Intel Macs or iOS devices have been tested. See [25-Platform-Support.md](25-Platform-Support.md).
+- **Limitation: MetalFX upscaling is probed, not frame-captured.** At init the renderer asks `MTLFXTemporalScalerDescriptor` for a scaler with the prepass depth format (`depth32Float_stencil8`) at 16×16 → 32×32 and stores the result on `Renderer.metalFXProbe`. A nil scaler falls back to Ferox's temporal resolve. Motion scale and jitter conversion live in `MetalFXTemporalMapping` and are unit-tested. No temporal frame has been captured on hardware in this change.
 - No benchmark numbers, frame rates or timings are quoted anywhere in these documents, because none have been measured. The method is in [21-Performance.md](21-Performance.md).
 
 ## 2. Rendering
 
-- **Limitation: single active camera.** The renderer picks one camera for each frame: the enabled camera with the highest `priority`, and the lowest entity index on a tie. The source calls it the active camera.
-- **Limitation: Camera renderTarget is ignored.** The active camera's `viewport` is honoured: the scene is presented into that rectangle of the drawable, the rest is cleared to black, and UI still covers the full drawable. `Camera.renderTarget` is not yet honoured, and a camera that sets it is skipped when the main camera is chosen. Because only one camera renders per frame, split-screen is not possible yet.
+- **Limitation: one screen camera.** The drawable shows one camera: the enabled camera with the highest `priority` and no `renderTarget`, and the lowest entity index on a tie. Other active cameras that set `renderTarget` are drawn into textures (`Renderer.renderedCameraTarget`). Those textures share the screen view's pixel size and are not a second presented view, so split-screen of two drawables is still one renderer per view.
 - **Limitation: the sky is drawn only for perspective cameras.** For an orthographic camera the background is the clear colour (`Renderer`'s doc comment).
 - **Limitation: changing `maxFramesInFlight` needs the renderer recreated.** The renderer logs a warning when the value changes at run time. See [section 7 of 24-Graphics-Settings-and-Presets.md](24-Graphics-Settings-and-Presets.md#7-changing-settings-at-run-time).
 - **Limitation: the monospace font provider renders white boxes.** `MonospaceFontProvider` emits glyph quads with placeholder texture coordinates, so the glyphs do not show. The engine uses it only where CoreText is unavailable. On macOS, the engine uses `CoreTextFontProvider` instead.
 - **Limitation: reflection probes share one face size and are capped at 16.** All probes share one cube array, so the face size is the largest `ReflectionProbe.resolution` among the probes, rounded up to a power of two and clamped to 32–256 px. A change of size re-captures every probe. At most 16 probes are captured, and extra probes are ignored with a warning. Where probes overlap, the innermost one wins, and nothing is blended.
 - **Limitation: Hi-Z occlusion can pop for one frame.** Occlusion culling uses a Hi-Z pyramid built from the previous frame's depth, so objects can pop in or out for one frame.
 - **Limitation: local shadows are budgeted.** Point and spot lights with `castsShadows` get shadow maps, nearest to the camera first, until `ShadowSettings.localShadowSlices` runs out (a spot light takes one slice, a point light six). Lights beyond the budget are lit without shadows. PCSS applies to the sun only; local shadows use hard or PCF filtering.
-- **Limitation: the mesh memory budget is only partly enforced.** `MemoryBudget.meshBytes` is enforced for cached model data: least-recently-used model assets that nothing references are evicted when model and mesh memory exceed the budget, and they reload on demand. Meshes registered in memory (built-ins, procedural meshes and model sub-meshes) are never evicted. They are only counted and warned about. Textures are evicted under `textureBytes`, and audio clips that would exceed `audioBytes` are streamed from disk instead of decoded.
+- **Limitation: the mesh memory budget is split.** `MemoryBudget.meshBytes` evicts unreferenced cached models. Meshes registered in memory (built-ins, procedural meshes and model sub-meshes) are counted and warned about, and the asset manager does not remove them. The GPU mesh cache evicts by idle time and then by real buffer bytes against the same budget, keeping anything drawn this frame. Textures are evicted under `textureBytes`, and audio clips that would exceed `audioBytes` are streamed from disk instead of decoded.
 - **Limitation: indirect draw counters are an upper bound.** The counts are known only on the GPU after culling. The CPU counters report the upper bound.
+- **Limitation: indirect command buffers do not carry GPU-culled draws.** `MTLIndirectRenderCommand` on the macOS 15 SDK draws with a CPU-side index count. Batches whose counts were written by the culling kernels stay on the immediate indirect-draw path. The command buffer is used when GPU culling is off for that pass, the device is Metal 3, argument buffers were built, and the pass has one cull mode.
 - **Limitation: skinned motion vectors use the current pose.** Motion vectors for skinned meshes are taken from the current pose.
 
 ## 3. Lighting, post-processing and tone mapping
@@ -56,7 +56,7 @@ See [11-Ray-Tracing.md](11-Ray-Tracing.md) for the budget rules, and [24-Graphic
 
 ## 6. Editor
 
-- **Limitation: viewport picking is coarse.** Left-clicking in the viewport selects the nearest entity. Meshes are picked by their world bounds, and lights and cameras by a small marker sphere. Entities can also be selected from the hierarchy panel. The viewport camera orbits, zooms and pans, as the `FeroxEditor` doc comment describes. The editor's own guide is [22-Editor.md](22-Editor.md).
+- **Limitation: picking is CPU-side.** Left-clicking in the viewport selects the nearest entity. A mesh with indices is tested with a front-face triangle raycast (`MeshRaycast`); a mesh without indices uses its world bounds. Lights and cameras without a mesh use a 0.3-unit marker sphere. `prepassPickFragment` can write an instance id into an `r32Uint` attachment, and `InstancePickMap` turns that id into an entity, but the editor does not read a GPU attachment back. The editor's own guide is [22-Editor.md](22-Editor.md).
 
 ## 7. Networking
 
@@ -76,14 +76,14 @@ See [11-Ray-Tracing.md](11-Ray-Tracing.md) for the budget rules, and [24-Graphic
 The items below are plans. They are based on gaps that the source records or that this review found. They are not commitments, they have no dates, and they may change or be dropped.
 
 - **Verify on more hardware.** The package has been built, tested and rendered on one M1 Max. Repeat the build, the tests and `FeroxDiag --render` on other named Apple Silicon Macs and on other GPUs. Record the Mac model, chip, macOS version and commit, as [CONTRIBUTING.md](../CONTRIBUTING.md) asks, and then update [25-Platform-Support.md](25-Platform-Support.md) and this document.
-- **Verify MetalFX.** Check the spatial and temporal MetalFX paths on devices that support them and on devices that do not, and confirm each fallback.
-- **Render targets and multiple cameras.** Render to `Camera.renderTarget`, and support more than one camera in a frame. This would enable split-screen and picture-in-picture.
+- **Verify MetalFX on a captured frame.** The probe records whether a temporal scaler can be created for the prepass depth format. A captured frame on hardware that supports MetalFX, and on hardware that does not, is still needed.
+- **Independent camera targets.** Render-target cameras already draw into textures at the screen view's size. Per-camera resolution, a depth buffer that outlives the blit, and presenting two viewports in one drawable are not done.
 - **Sky for other projections.** Draw the sky for orthographic cameras, or document the clear-colour behaviour as the intended design.
 - **Reflection probes.** Support per-probe face sizes, blending between overlapping probes, and review the limit of 16 probes.
 - **GPU particles.** Support colour over lifetime on the GPU path, and let local-space emitters follow the emitter.
 - **More glTF features.** The importer's header lists what it rejects or skips: sparse accessors, morph target rendering (weights are imported only as animation channels), non-triangle primitives, Draco and meshopt compression, and `KHR_texture_transform`. Any of these could be supported in a later version.
 - **Stronger transport security.** Verify the DTLS-PSK handshake on hardware, and consider per-player credentials so that one leaked passphrase does not expose every session.
-- **Physics.** The gaps in [13-Physics.md](13-Physics.md), section 14, include collision between fast dynamic bodies (continuous collision detection covers only dynamic bodies against static and kinematic ones) and 3D convex hulls. Those are candidates for later work as well.
+- **Physics.** Convex hulls and dynamic-versus-dynamic sweeps are in. Remaining gaps in [13-Physics.md](13-Physics.md), section 14, include edge-edge hull contacts, hull-versus-mesh manifolds, and a less conservative core sweep.
 
 ## 9. Related documents
 

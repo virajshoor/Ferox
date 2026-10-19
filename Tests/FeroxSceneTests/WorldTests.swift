@@ -3,6 +3,7 @@
 /// changes made during iteration, resources, and the structure-version counter.
 import FeroxCore
 import XCTest
+
 @testable import FeroxScene
 
 private struct TestHealth: Component, Equatable {

@@ -1,9 +1,10 @@
+import FeroxCore
 /// Tests for the animation subsystem: easing endpoints, curve sampling, tween progression and loop
 /// modes, clip timing and event crossing, flipbooks and the CPU particle emitter.
 import XCTest
-import FeroxCore
-@testable import FeroxScene
+
 @testable import FeroxAnimation
+@testable import FeroxScene
 
 final class AnimationTests: XCTestCase {
 
@@ -81,7 +82,8 @@ final class AnimationTests: XCTestCase {
         let world = World()
         let e = world.createEntity()
         world.add(Transform(position: Vec3(2, 0, 0)), to: e)
-        world.add(Tween(.position(from: Vec3(2, 0, 0), to: Vec3(12, 0, 0)), duration: 1, easing: .linear, delay: 1), to: e)
+        world.add(
+            Tween(.position(from: Vec3(2, 0, 0), to: Vec3(12, 0, 0)), duration: 1, easing: .linear, delay: 1), to: e)
         tick(TweenSystem(), world, dt: 0.5)
         XCTAssertEqual(try XCTUnwrap(world.get(Transform.self, e)).position.x, 2, accuracy: 1e-4)
     }
@@ -90,7 +92,8 @@ final class AnimationTests: XCTestCase {
     func testLoopingTweenWrapsProgress() throws {
         let world = World()
         let e = makeTransformEntity(world)
-        world.add(Tween(.position(from: Vec3(0, 0, 0), to: Vec3(10, 0, 0)), duration: 1, easing: .linear, loop: .loop), to: e)
+        world.add(
+            Tween(.position(from: Vec3(0, 0, 0), to: Vec3(10, 0, 0)), duration: 1, easing: .linear, loop: .loop), to: e)
         tick(TweenSystem(), world, dt: 1.5)
         XCTAssertEqual(try XCTUnwrap(world.get(Transform.self, e)).position.x, 5, accuracy: 1e-4)
         XCTAssertTrue(world.has(Tween.self, e))
@@ -100,7 +103,9 @@ final class AnimationTests: XCTestCase {
     func testPingPongTweenReflectsProgress() throws {
         let world = World()
         let e = makeTransformEntity(world)
-        world.add(Tween(.position(from: Vec3(0, 0, 0), to: Vec3(10, 0, 0)), duration: 1, easing: .linear, loop: .pingPong), to: e)
+        world.add(
+            Tween(.position(from: Vec3(0, 0, 0), to: Vec3(10, 0, 0)), duration: 1, easing: .linear, loop: .pingPong),
+            to: e)
         tick(TweenSystem(), world, dt: 1.25)
         XCTAssertEqual(try XCTUnwrap(world.get(Transform.self, e)).position.x, 7.5, accuracy: 1e-4)
     }

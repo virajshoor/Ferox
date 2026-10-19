@@ -1,6 +1,6 @@
-import Foundation
 import FeroxCore
 import FeroxScene
+import Foundation
 
 /// Bridges `PhysicsWorld2D` and the ECS.
 ///
@@ -31,13 +31,16 @@ public final class PhysicsSystem2D: System {
         for ev in physics.contactEvents {
             context.events.enqueue(
                 CollisionEvent2D(
-                    phase: ev.phase, entityA: Entity(physicsUserData: ev.userDataA), entityB: Entity(physicsUserData: ev.userDataB),
+                    phase: ev.phase, entityA: Entity(physicsUserData: ev.userDataA),
+                    entityB: Entity(physicsUserData: ev.userDataB),
                     isTrigger: ev.isTrigger, points: ev.points, normal: ev.normal, impulse: ev.normalImpulse))
         }
     }
 
     private func pose(of e: Entity, in world: World) -> (Vec2, Float) {
-        let m = world.parent(of: e) != nil ? world.worldMatrix(of: e) : (world.get(Transform.self, e)?.localMatrix ?? .identity)
+        let m =
+            world.parent(of: e) != nil
+            ? world.worldMatrix(of: e) : (world.get(Transform.self, e)?.localMatrix ?? .identity)
         let p = m.translation
         let angle = atan2(m.c0.y, m.c0.x)
         return (Vec2(p.x, p.y), angle)
@@ -46,7 +49,11 @@ public final class PhysicsSystem2D: System {
     /// Creates/destroys bodies so the physics world mirrors the ECS.
     public func sync(_ world: World) {
         // Remove bodies for dead entities or entities that lost their physics components.
-        for (e, id) in bodies where !world.isAlive(e) || (!world.has(RigidBody2D.self, e) && !world.has(Collider2D.self, e) && !world.has(TilemapCollider.self, e)) {
+        for (e, id) in bodies
+        where !world.isAlive(e)
+            || (!world.has(RigidBody2D.self, e) && !world.has(Collider2D.self, e)
+                && !world.has(TilemapCollider.self, e))
+        {
             physics.destroyBody(id)
             bodies[e] = nil
             if world.isAlive(e) { world.remove(PhysicsBody2DHandle.self, from: e) }
@@ -63,7 +70,8 @@ public final class PhysicsSystem2D: System {
             guard world.has(Transform.self, e), world.isActiveInHierarchy(e) else { continue }
             let rb = world.get(RigidBody2D.self, e)
             let (p, a) = pose(of: e, in: world)
-            var d = BodyDesc2D(type: rb?.type ?? .static, position: p, angle: a, shapes: world.get(Collider2D.self, e)?.shapes ?? [])
+            var d = BodyDesc2D(
+                type: rb?.type ?? .static, position: p, angle: a, shapes: world.get(Collider2D.self, e)?.shapes ?? [])
             if let rb {
                 d.linearDamping = rb.linearDamping
                 d.angularDamping = rb.angularDamping
@@ -113,11 +121,11 @@ public final class PhysicsSystem2D: System {
             let anchorB = bb.transform.apply(j.connectedLocalAnchor)
             let desc: JointDesc2D
             switch j.kind {
-            case let .revolute(speed, torque, lower, upper):
+            case .revolute(let speed, let torque, let lower, let upper):
                 desc = .revolute(
                     a: a, b: b, anchor: anchorA, motor: speed.map { (speed: $0, maxTorque: torque) },
                     limits: (lower != nil && upper != nil) ? lower!...max(lower!, upper!) : nil)
-            case let .distance(length, f, damping, minL, maxL):
+            case .distance(let length, let f, let damping, let minL, let maxL):
                 desc = .distance(
                     a: a, b: b, anchorA: anchorA, anchorB: anchorB, length: length, frequency: f, dampingRatio: damping,
                     minLength: minL, maxLength: maxL)
@@ -180,9 +188,6 @@ public final class PhysicsSystem2D: System {
                 s.material = material
                 s.filter = filter
                 shapes.append(s)
-                // Shapes per body are limited to 256 (contact key packing); split into extra
-                // rows beyond that would require multiple bodies.
-                if shapes.count >= 255 { return shapes }
             }
         }
         return shapes
@@ -219,7 +224,8 @@ public final class PhysicsSystem3D: System {
         for ev in physics.contactEvents {
             context.events.enqueue(
                 CollisionEvent3D(
-                    phase: ev.phase, entityA: Entity(physicsUserData: ev.userDataA), entityB: Entity(physicsUserData: ev.userDataB),
+                    phase: ev.phase, entityA: Entity(physicsUserData: ev.userDataA),
+                    entityB: Entity(physicsUserData: ev.userDataB),
                     isTrigger: ev.isTrigger, points: ev.points, normal: ev.normal, impulse: ev.normalImpulse))
         }
     }
@@ -250,14 +256,22 @@ public final class PhysicsSystem3D: System {
                     return nil
                 }
                 g = .mesh(mesh)
+            case .convex(let vertices):
+                guard let hull = ConvexHull3D.build(vertices) else {
+                    Log.warning("Physics", "Convex collider is degenerate and was skipped")
+                    return nil
+                }
+                g = .convex(hull)
             }
-            return Shape3D(g, localPose: Pose3D(position: d.offset * scale, rotation: d.rotation), material: d.material,
-                           filter: d.filter, isTrigger: d.isTrigger)
+            return Shape3D(
+                g, localPose: Pose3D(position: d.offset * scale, rotation: d.rotation), material: d.material,
+                filter: d.filter, isTrigger: d.isTrigger)
         }
     }
 
     public func sync(_ world: World) {
-        for (e, id) in bodies where !world.isAlive(e) || (!world.has(RigidBody3D.self, e) && !world.has(Collider3D.self, e)) {
+        for (e, id) in bodies
+        where !world.isAlive(e) || (!world.has(RigidBody3D.self, e) && !world.has(Collider3D.self, e)) {
             physics.destroyBody(id)
             bodies[e] = nil
             if world.isAlive(e) { world.remove(PhysicsBody3DHandle.self, from: e) }
@@ -272,8 +286,9 @@ public final class PhysicsSystem3D: System {
             guard let t = world.get(Transform.self, e), world.isActiveInHierarchy(e) else { continue }
             let rb = world.get(RigidBody3D.self, e)
             let (p, q) = pose(of: e, in: world)
-            var d = BodyDesc3D(type: rb?.type ?? .static, position: p, rotation: q,
-                               shapes: makeShapes(world.get(Collider3D.self, e), scale: t.scale))
+            var d = BodyDesc3D(
+                type: rb?.type ?? .static, position: p, rotation: q,
+                shapes: makeShapes(world.get(Collider3D.self, e), scale: t.scale))
             if let rb {
                 d.linearDamping = rb.linearDamping
                 d.angularDamping = rb.angularDamping
@@ -289,7 +304,8 @@ public final class PhysicsSystem3D: System {
         }
         world.forEach(PhysicsBody3DHandle.self, Transform.self) { e, h, _ in
             let (p, q) = pose(of: e, in: world)
-            if (p - h.lastPosition).lengthSquared > 1e-8 || !q.isApproximatelyEqual(to: h.lastRotation, tolerance: 1e-5) {
+            if (p - h.lastPosition).lengthSquared > 1e-8 || !q.isApproximatelyEqual(to: h.lastRotation, tolerance: 1e-5)
+            {
                 physics.setTransform(h.body, position: p, rotation: q, resetInterpolation: true)
                 h.lastPosition = p
                 h.lastRotation = q
@@ -304,10 +320,12 @@ public final class PhysicsSystem3D: System {
             let desc: JointDesc3D
             switch j.kind {
             case .ball: desc = .ball(a: a, b: b, anchor: anchorA)
-            case let .hinge(axis, speed, torque):
-                desc = .hinge(a: a, b: b, anchor: anchorA, axis: ba.pose.rotate(axis), motor: speed.map { (speed: $0, maxTorque: torque) })
+            case .hinge(let axis, let speed, let torque):
+                desc = .hinge(
+                    a: a, b: b, anchor: anchorA, axis: ba.pose.rotate(axis),
+                    motor: speed.map { (speed: $0, maxTorque: torque) })
             case .fixed: desc = .fixed(a: a, b: b)
-            case let .distance(minL, maxL):
+            case .distance(let minL, let maxL):
                 desc = .distance(a: a, b: b, anchorA: anchorA, anchorB: anchorB, minLength: minL, maxLength: maxL)
             }
             if let id = physics.createJoint(desc) { joints[e] = id }
@@ -367,7 +385,9 @@ public struct CharacterController3D: SerializableComponent, Hashable, Sendable {
 
     /// Moves by `displacement` (horizontal intent) plus gravity over `dt`. Returns the applied motion.
     @discardableResult
-    public mutating func move(_ transform: inout Transform, displacement: Vec3, dt: Float, physics: PhysicsWorld3D, jump: Float? = nil) -> Vec3 {
+    public mutating func move(
+        _ transform: inout Transform, displacement: Vec3, dt: Float, physics: PhysicsWorld3D, jump: Float? = nil
+    ) -> Vec3 {
         if let jump, isGrounded { verticalVelocity = jump }
         verticalVelocity += gravity * dt
         var motion = displacement + Vec3(0, verticalVelocity * dt, 0)
@@ -383,7 +403,8 @@ public struct CharacterController3D: SerializableComponent, Hashable, Sendable {
             let bottom = position + centerOffset
             let top = position + Vec3(0, max(height - radius, radius), 0)
             let hits = [bottom, top].compactMap {
-                physics.sphereCast(origin: $0, direction: dir, radius: radius, maxDistance: len + skinWidth, filter: filter)
+                physics.sphereCast(
+                    origin: $0, direction: dir, radius: radius, maxDistance: len + skinWidth, filter: filter)
             }
             guard let hit = hits.min(by: { $0.distance < $1.distance }) else {
                 position += motion

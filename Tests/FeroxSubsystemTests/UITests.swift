@@ -1,9 +1,10 @@
+import FeroxCore
 /// Tests for the immediate-mode UI tree: stack layout, pointer and keyboard routing into controls,
 /// list virtualisation, focus navigation, monospace text measurement and rich-text parsing. Layout is
 /// driven through `UIContext.update` with a fixed viewport; pointer input is injected through
 /// `InputSystem`, so no platform backend or CoreText is involved.
 import XCTest
-import FeroxCore
+
 @testable import FeroxInput
 @testable import FeroxUI
 

@@ -1,7 +1,8 @@
+import Ferox
 /// Tests for the CPU stages that feed the GPU: 2D tessellation, debug line collection,
 /// sprite batching and 3D scene extraction (camera choice, culling, lights).
 import XCTest
-import Ferox
+
 @testable import FeroxRender
 
 final class TessellatorTests: XCTestCase {
@@ -51,7 +52,8 @@ final class TessellatorTests: XCTestCase {
         XCTAssertEqual(Tessellator.circle(radius: 1, segments: 1).count, 3)
         XCTAssertEqual(Tessellator.circle(radius: 1, segments: 10_000).count, 256)
         for p in Tessellator.circle(radius: 2, segments: 16) { XCTAssertEqual(p.length, 2, accuracy: 1e-5) }
-        XCTAssertGreaterThan(Tessellator.signedArea(Tessellator.circle(radius: 1, segments: 32)), 0, "counter-clockwise")
+        XCTAssertGreaterThan(
+            Tessellator.signedArea(Tessellator.circle(radius: 1, segments: 32)), 0, "counter-clockwise")
     }
 
     // Rounded rectangles stay inside their size; a zero radius gives four corners.
@@ -235,8 +237,9 @@ final class SceneExtractionTests: XCTestCase {
 
     func extract(_ options: ExtractionOptions = ExtractionOptions()) -> RenderFrameData {
         TransformSystem.update(world)
-        return RenderSceneExtractor.extract(world: world, assets: assets, animations: nil, aspect: 16.0 / 9,
-                                            options: options)
+        return RenderSceneExtractor.extract(
+            world: world, assets: assets, animations: nil, aspect: 16.0 / 9,
+            options: options)
     }
 
     // Without a camera nothing is drawn.
@@ -281,7 +284,8 @@ final class SceneExtractionTests: XCTestCase {
         camera(priority: 0)
         cubeEntity(at: .zero)
         var options = ExtractionOptions()
-        let behind = Mat4(translation: Vec3(0, 0, -10), rotation: Quat(pitch: 0, yaw: .pi, roll: 0), scale: Vec3(1, 1, 1))
+        let behind = Mat4(
+            translation: Vec3(0, 0, -10), rotation: Quat(pitch: 0, yaw: .pi, roll: 0), scale: Vec3(1, 1, 1))
         options.cameraOverride = RenderCamera(entity: .null, camera: .perspective(), worldMatrix: behind, aspect: 1)
         let f = extract(options)
         XCTAssertEqual(f.camera?.entity, .null)

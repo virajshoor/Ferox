@@ -1,5 +1,5 @@
-import Foundation
 import FeroxCore
+import Foundation
 
 /// Body simulation type.
 public enum BodyType: String, Codable, Sendable, CaseIterable {
@@ -142,7 +142,8 @@ struct UnionFind {
         return r
     }
     mutating func union(_ a: Int, _ b: Int) {
-        let ra = find(a), rb = find(b)
+        let ra = find(a)
+        let rb = find(b)
         if ra != rb { parent[ra] = Int32(rb) }
     }
 }
@@ -203,9 +204,4 @@ struct SweepAndPrune {
             i += 1
         }
     }
-}
-
-func pairKey(_ a: Int, _ b: Int) -> UInt64 {
-    let lo = UInt64(Swift.min(a, b)), hi = UInt64(Swift.max(a, b))
-    return (lo << 32) | hi
 }

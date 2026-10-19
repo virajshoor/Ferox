@@ -1,8 +1,9 @@
+import Ferox
 /// Tests for the platform-independent rendering maths in `RenderMath`: temporal jitter,
 /// cascade splits and stable shadow matrices, exposure, white balance, clustered slices,
 /// LOD screen size, bounding spheres and dispatch helpers.
 import XCTest
-import Ferox
+
 @testable import FeroxRender
 
 final class RenderMathTests: XCTestCase {
@@ -23,7 +24,9 @@ final class RenderMathTests: XCTestCase {
 
     // Jitter stays within half a pixel, cycles with the phase count and is never all zero.
     func testJitterIsSubPixelAndPeriodic() {
-        let w = 1920, h = 1080, phases = 8
+        let w = 1920
+        let h = 1080
+        let phases = 8
         var seen: [Vec2] = []
         for frame in UInt64(0)..<UInt64(phases) {
             let j = RenderMath.jitter(frame: frame, phases: phases, renderWidth: w, renderHeight: h)
@@ -84,8 +87,10 @@ final class RenderMathTests: XCTestCase {
 
     // Every slice corner projects inside the light's clip volume.
     func testStableCascadeMatrixCoversCorners() {
-        let corners = [Vec3(-1, -1, -1), Vec3(1, -1, -1), Vec3(-1, 1, -1), Vec3(1, 1, -1),
-                       Vec3(-2, -2, -5), Vec3(2, -2, -5), Vec3(-2, 2, -5), Vec3(2, 2, -5)]
+        let corners = [
+            Vec3(-1, -1, -1), Vec3(1, -1, -1), Vec3(-1, 1, -1), Vec3(1, 1, -1),
+            Vec3(-2, -2, -5), Vec3(2, -2, -5), Vec3(-2, 2, -5), Vec3(2, 2, -5),
+        ]
         let towardsLight = Vec3(0.3, 1, 0.2).normalized
         let m = RenderMath.stableCascadeMatrix(corners: corners, towardsLight: towardsLight, resolution: 2048)
         for c in corners {
@@ -105,7 +110,8 @@ final class RenderMathTests: XCTestCase {
         // The origin's projection lands on the texel grid in both matrices.
         for m in [a, b] {
             let o = m * Vec4(0, 0, 0, 1)
-            let tx = o.x * Float(res) * 0.5, ty = o.y * Float(res) * 0.5
+            let tx = o.x * Float(res) * 0.5
+            let ty = o.y * Float(res) * 0.5
             XCTAssertEqual(tx, tx.rounded(), accuracy: 2e-2)
             XCTAssertEqual(ty, ty.rounded(), accuracy: 2e-2)
         }
@@ -114,8 +120,9 @@ final class RenderMathTests: XCTestCase {
     // A vertical light direction (parallel to the default up vector) still yields a matrix.
     func testStableCascadeMatrixHandlesDegenerateInput() {
         XCTAssertEqual(RenderMath.stableCascadeMatrix(corners: [], towardsLight: .up, resolution: 512), .identity)
-        let m = RenderMath.stableCascadeMatrix(corners: [Vec3(0, 0, 0), Vec3(1, 1, 1)], towardsLight: Vec3(0, 1, 0),
-                                               resolution: 512)
+        let m = RenderMath.stableCascadeMatrix(
+            corners: [Vec3(0, 0, 0), Vec3(1, 1, 1)], towardsLight: Vec3(0, 1, 0),
+            resolution: 512)
         XCTAssertTrue(m.c0.x.isFinite && m.c3.w.isFinite)
         let z = RenderMath.stableCascadeMatrix(corners: [Vec3(0, 0, 0)], towardsLight: .zero, resolution: 512)
         XCTAssertTrue(z.c0.x.isFinite)
@@ -178,7 +185,8 @@ final class RenderMathTests: XCTestCase {
     // The bounding sphere contains every transformed box corner.
     func testBoundingSphereContainsBox() {
         let box = AABB(min: Vec3(-1, -2, -0.5), max: Vec3(3, 1, 0.5))
-        let m = Mat4(translation: Vec3(5, -3, 2), rotation: Quat(pitch: 0.3, yaw: 1.1, roll: -0.4), scale: Vec3(2, 0.5, 3))
+        let m = Mat4(
+            translation: Vec3(5, -3, 2), rotation: Quat(pitch: 0.3, yaw: 1.1, roll: -0.4), scale: Vec3(2, 0.5, 3))
         let s = RenderMath.boundingSphere(box, m)
         for x in [box.min.x, box.max.x] {
             for y in [box.min.y, box.max.y] {

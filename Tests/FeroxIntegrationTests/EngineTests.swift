@@ -1,6 +1,7 @@
 /// Headless tests for `Engine`: subsystem wiring, the frame order, fixed steps, edit mode,
 /// physics integration through the ECS, and lifecycle (start/shutdown).
 import XCTest
+
 @testable import Ferox
 
 final class EngineTests: XCTestCase {
@@ -15,7 +16,10 @@ final class EngineTests: XCTestCase {
             if let setupError { throw setupError }
         }
         func fixedUpdate(engine: Engine, dt: Float) { fixedSteps += 1 }
-        func update(engine: Engine, time: FrameTime) { updates += 1; log.append("update") }
+        func update(engine: Engine, time: FrameTime) {
+            updates += 1
+            log.append("update")
+        }
         func lateUpdate(engine: Engine, time: FrameTime) { log.append("lateUpdate") }
         func shutdown(engine: Engine) { log.append("shutdown") }
     }
@@ -53,7 +57,8 @@ final class EngineTests: XCTestCase {
     func testMissingAssetRootThrows() {
         var config = EngineConfiguration(title: "Assets")
         config.enableAudio = false
-        config.assetRoot = FileManager.default.temporaryDirectory.appendingPathComponent("ferox-missing-\(UUID().uuidString)")
+        config.assetRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "ferox-missing-\(UUID().uuidString)")
         XCTAssertThrowsError(try Engine(configuration: config))
     }
 
@@ -105,7 +110,7 @@ final class EngineTests: XCTestCase {
         let engine = try makeEngine()
         let world = engine.world
         let ground = world.createEntity(named: "Ground")
-        world.add(Collider3D.box(Vec3(20, 1, 20)), to: ground) // top face at y = 0.5
+        world.add(Collider3D.box(Vec3(20, 1, 20)), to: ground)  // top face at y = 0.5
         let crate = world.createEntity(named: "Crate", transform: Transform(position: Vec3(0, 5, 0)))
         world.add(RigidBody3D(), to: crate)
         world.add(Collider3D.box(Vec3(1, 1, 1)), to: crate)
@@ -130,7 +135,8 @@ final class EngineTests: XCTestCase {
     func testWorldTransformsUpdatedEachTick() throws {
         let engine = try makeEngine()
         let parent = engine.world.createEntity(named: "Parent", transform: Transform(position: Vec3(1, 0, 0)))
-        let child = engine.world.createEntity(named: "Child", transform: Transform(position: Vec3(0, 2, 0)), parent: parent)
+        let child = engine.world.createEntity(
+            named: "Child", transform: Transform(position: Vec3(0, 2, 0)), parent: parent)
         engine.tick(delta: 1.0 / 60)
         let p = try XCTUnwrap(engine.world.get(WorldTransform.self, child)).matrix.translation
         XCTAssertEqual(p.x, 1, accuracy: 1e-5)
@@ -151,6 +157,39 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(engine.activeCamera()?.entity, high)
         world.add(Disabled(), to: high)
         XCTAssertEqual(engine.activeCamera()?.entity, low)
+    }
+
+    // A render-target camera and a disabled parent are not the screen camera, and a
+    // priority tie keeps the lowest entity index. This is the same rule the extractor uses.
+    func testActiveCameraMatchesTheScreenCamera() throws {
+        let engine = try makeEngine()
+        let world = engine.world
+        let parent = world.createEntity(named: "Parent")
+        let child = world.createEntity(named: "Child", parent: parent)
+        var hidden = Camera.perspective()
+        hidden.priority = 10
+        world.add(hidden, to: child)
+        world.add(Disabled(), to: parent)
+
+        let offscreen = world.createEntity(named: "Offscreen")
+        var target = Camera.perspective()
+        target.priority = 9
+        target.renderTarget = AssetID("rt")
+        world.add(target, to: offscreen)
+
+        let first = world.createEntity(named: "First")
+        var tied = Camera.perspective()
+        tied.priority = 1
+        world.add(tied, to: first)
+        let second = world.createEntity(named: "Second")
+        var tiedToo = Camera.perspective()
+        tiedToo.priority = 1
+        world.add(tiedToo, to: second)
+        engine.tick(delta: 1.0 / 60)
+        XCTAssertLessThan(first.index, second.index)
+        XCTAssertEqual(engine.activeCamera()?.entity, first)
+        XCTAssertEqual(RenderSceneExtractor.mainCamera(in: world)?.0, first)
+        XCTAssertNil(engine.activeCamera()?.camera.renderTarget)
     }
 
     // A pause of the clock stops fixed steps but the frame loop keeps running.
@@ -198,7 +237,7 @@ final class EngineTests: XCTestCase {
         var notifications = 0
         engine.onGraphicsChanged = { _ in notifications += 1 }
         let unchanged = engine.graphics
-        engine.graphics = unchanged // unchanged: no notification
+        engine.graphics = unchanged  // unchanged: no notification
         XCTAssertEqual(notifications, 0)
         var expected = 0
         for preset in [QualityPreset.low, .ultra, .ultra] {

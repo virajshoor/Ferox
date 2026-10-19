@@ -49,11 +49,11 @@ enum FeroxDiag {
             metalAvailable: false, capabilities: nil, presets: [], offscreenRender: nil)
 
         #if canImport(Metal)
-        if let device = try? RenderDevice() {
-            report.metalAvailable = true
-            report.capabilities = device.capabilities
-            if args.contains("--render") { report.offscreenRender = renderSmokeTest(device) }
-        }
+            if let device = try? RenderDevice() {
+                report.metalAvailable = true
+                report.capabilities = device.capabilities
+                if args.contains("--render") { report.offscreenRender = renderSmokeTest(device) }
+            }
         #endif
 
         // Without Metal, presets are resolved against the conservative baseline.
@@ -67,10 +67,12 @@ enum FeroxDiag {
             if r.rayTracedShadows { rt.append("shadows") }
             if r.rayTracedReflections { rt.append("reflections") }
             if r.rayTracedAO { rt.append("ambient occlusion") }
-            report.presets.append(PresetReport(
-                preset: preset.rawValue, antiAliasing: r.antiAliasing.rawValue, msaaSamples: r.msaaSamples,
-                upscaler: r.upscaler.rawValue, renderScale: r.renderScale, renderSizeFor1440p: "\(size.width)×\(size.height)",
-                rayTracing: rt, fallbacks: r.fallbacks.map(\.description)))
+            report.presets.append(
+                PresetReport(
+                    preset: preset.rawValue, antiAliasing: r.antiAliasing.rawValue, msaaSamples: r.msaaSamples,
+                    upscaler: r.upscaler.rawValue, renderScale: r.renderScale,
+                    renderSizeFor1440p: "\(size.width)×\(size.height)",
+                    rayTracing: rt, fallbacks: r.fallbacks.map(\.description)))
         }
 
         if args.contains("--json") {
@@ -86,15 +88,25 @@ enum FeroxDiag {
         print("Ferox \(r.ferox) diagnostics")
         print("OS: \(r.os) · \(r.processors) CPU cores · \(String(format: "%.1f", r.memoryGB)) GB RAM")
         if let c = r.capabilities {
-            print("GPU: \(c.deviceName) (Apple family \(c.appleFamily), Metal 3: \(c.supportsMetal3), unified memory: \(c.hasUnifiedMemory))")
-            print("  ray tracing: \(c.supportsRaytracing) (hardware: \(c.hasHardwareRayTracing)) · MetalFX spatial: \(c.supportsMetalFXSpatial) · temporal: \(c.supportsMetalFXTemporal)")
-            print("  MSAA sample counts: \(c.supportedSampleCounts.map(String.init).joined(separator: ", ")) · mesh shaders: \(c.supportsMeshShaders)")
-            print("  working set: \(c.recommendedMaxWorkingSetSize / 1_048_576) MB · max buffer: \(c.maxBufferLength / 1_048_576) MB")
+            print(
+                "GPU: \(c.deviceName) (Apple family \(c.appleFamily), Metal 3: \(c.supportsMetal3), unified memory: \(c.hasUnifiedMemory))"
+            )
+            print(
+                "  ray tracing: \(c.supportsRaytracing) (hardware: \(c.hasHardwareRayTracing)) · MetalFX spatial: \(c.supportsMetalFXSpatial) · temporal: \(c.supportsMetalFXTemporal)"
+            )
+            print(
+                "  MSAA sample counts: \(c.supportedSampleCounts.map(String.init).joined(separator: ", ")) · mesh shaders: \(c.supportsMeshShaders)"
+            )
+            print(
+                "  working set: \(c.recommendedMaxWorkingSetSize / 1_048_576) MB · max buffer: \(c.maxBufferLength / 1_048_576) MB"
+            )
         } else {
             print("GPU: Metal is not available on this system; presets below use the baseline capability set.")
         }
         for p in r.presets {
-            print("\n[\(p.preset)] AA \(p.antiAliasing)\(p.msaaSamples > 1 ? " ×\(p.msaaSamples)" : "") · upscaler \(p.upscaler) (scale \(p.renderScale)) · 1440p renders at \(p.renderSizeFor1440p)")
+            print(
+                "\n[\(p.preset)] AA \(p.antiAliasing)\(p.msaaSamples > 1 ? " ×\(p.msaaSamples)" : "") · upscaler \(p.upscaler) (scale \(p.renderScale)) · 1440p renders at \(p.renderSizeFor1440p)"
+            )
             if !p.rayTracing.isEmpty { print("  ray traced: \(p.rayTracing.joined(separator: ", "))") }
             for f in p.fallbacks { print("  fallback: \(f)") }
         }
@@ -102,31 +114,34 @@ enum FeroxDiag {
     }
 
     #if canImport(Metal)
-    /// Renders one frame of a tiny scene offscreen and reports whether it produced pixels.
-    static func renderSmokeTest(_ device: RenderDevice) -> String {
-        do {
-            let assets = AssetManager(database: nil)
-            let renderer = try Renderer(device: device, settings: GraphicsSettings(preset: .medium), assets: assets)
-            let world = World()
-            let mesh = AssetID("diag.cube")
-            _ = assets.registerMesh(.cube(), id: mesh)
-            let cube = world.createEntity(named: "Cube")
-            world.add(MeshRenderer(mesh: mesh), to: cube)
-            let cam = world.createEntity(named: "Camera", transform: Transform(position: Vec3(0, 0, 3)))
-            world.add(Camera.perspective(), to: cam)
-            let sun = world.createEntity(named: "Sun", transform: Transform(rotation: .lookRotation(forward: Vec3(0, -1, -1).normalized)))
-            world.add(Light.directional(), to: sun)
-            TransformSystem.update(world)
-            guard let texture = renderer.renderOffscreen(world: world, width: 256, height: 256) else {
-                return "failed (no output texture)"
+        /// Renders one frame of a tiny scene offscreen and reports whether it produced pixels.
+        static func renderSmokeTest(_ device: RenderDevice) -> String {
+            do {
+                let assets = AssetManager(database: nil)
+                let renderer = try Renderer(device: device, settings: GraphicsSettings(preset: .medium), assets: assets)
+                let world = World()
+                let mesh = AssetID("diag.cube")
+                _ = assets.registerMesh(.cube(), id: mesh)
+                let cube = world.createEntity(named: "Cube")
+                world.add(MeshRenderer(mesh: mesh), to: cube)
+                let cam = world.createEntity(named: "Camera", transform: Transform(position: Vec3(0, 0, 3)))
+                world.add(Camera.perspective(), to: cam)
+                let sun = world.createEntity(
+                    named: "Sun", transform: Transform(rotation: .lookRotation(forward: Vec3(0, -1, -1).normalized)))
+                world.add(Light.directional(), to: sun)
+                TransformSystem.update(world)
+                guard let texture = renderer.renderOffscreen(world: world, width: 256, height: 256) else {
+                    return "failed (no output texture)"
+                }
+                renderer.waitUntilIdle()
+                guard let pixels = renderer.readPixels(texture) else { return "failed (readback)" }
+                let lit = stride(from: 0, to: pixels.count, by: 4).filter {
+                    pixels[$0] > 8 || pixels[$0 + 1] > 8 || pixels[$0 + 2] > 8
+                }.count
+                return "ok (256×256, \(lit) non-black pixels, \(renderer.statistics.visibleObjects) visible objects)"
+            } catch {
+                return "failed (\(error))"
             }
-            renderer.waitUntilIdle()
-            guard let pixels = renderer.readPixels(texture) else { return "failed (readback)" }
-            let lit = stride(from: 0, to: pixels.count, by: 4).filter { pixels[$0] > 8 || pixels[$0 + 1] > 8 || pixels[$0 + 2] > 8 }.count
-            return "ok (256×256, \(lit) non-black pixels, \(renderer.statistics.visibleObjects) visible objects)"
-        } catch {
-            return "failed (\(error))"
         }
-    }
     #endif
 }

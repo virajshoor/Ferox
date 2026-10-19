@@ -1,6 +1,6 @@
-import Foundation
 import FeroxCore
 import FeroxScene
+import Foundation
 
 // MARK: - 2D
 
@@ -30,7 +30,9 @@ public struct Collider2D: SerializableComponent, Hashable, Sendable {
         s.isTrigger = isTrigger
         return Collider2D(s)
     }
-    public static func circle(_ radius: Float, material: PhysicsMaterial = .default, isTrigger: Bool = false) -> Collider2D {
+    public static func circle(_ radius: Float, material: PhysicsMaterial = .default, isTrigger: Bool = false)
+        -> Collider2D
+    {
         var s = Shape2D.circle(radius: radius)
         s.material = material
         s.isTrigger = isTrigger
@@ -97,6 +99,8 @@ public struct ColliderShape3D: Codable, Hashable, Sendable {
         case plane(normal: Vec3, distance: Float)
         /// Static triangle mesh referencing a mesh asset (resolved by the physics system).
         case mesh(AssetID)
+        /// Convex hull of these local-space vertices. Degenerate input is dropped at body creation.
+        case convex(vertices: [Vec3])
     }
     public var geometry: Geometry
     public var offset: Vec3 = .zero

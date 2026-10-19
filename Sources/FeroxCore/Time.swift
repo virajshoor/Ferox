@@ -1,25 +1,25 @@
 import Foundation
 
 #if canImport(Darwin)
-import Darwin
+    import Darwin
 #endif
 
 /// Monotonic high-resolution clock in seconds.
 public enum MonotonicClock {
     #if canImport(Darwin)
-    private static let timebase: Double = {
-        var info = mach_timebase_info_data_t()
-        mach_timebase_info(&info)
-        return Double(info.numer) / Double(info.denom) * 1e-9
-    }()
-    /// Seconds since an arbitrary fixed point.
-    @inline(__always) public static func now() -> Double { Double(mach_absolute_time()) * timebase }
+        private static let timebase: Double = {
+            var info = mach_timebase_info_data_t()
+            mach_timebase_info(&info)
+            return Double(info.numer) / Double(info.denom) * 1e-9
+        }()
+        /// Seconds since an arbitrary fixed point.
+        @inline(__always) public static func now() -> Double { Double(mach_absolute_time()) * timebase }
     #else
-    @inline(__always) public static func now() -> Double {
-        var ts = timespec()
-        clock_gettime(CLOCK_MONOTONIC, &ts)
-        return Double(ts.tv_sec) + Double(ts.tv_nsec) * 1e-9
-    }
+        @inline(__always) public static func now() -> Double {
+            var ts = timespec()
+            clock_gettime(CLOCK_MONOTONIC, &ts)
+            return Double(ts.tv_sec) + Double(ts.tv_nsec) * 1e-9
+        }
     #endif
 
     /// Nanoseconds since an arbitrary fixed point.

@@ -1,7 +1,8 @@
+import FeroxCore
 /// Behavioural tests for the 2D rigid-body world: integration, contact response, triggers,
 /// sleeping, raycasts, collision filters, contact manifolds and body lifetime.
 import XCTest
-import FeroxCore
+
 @testable import FeroxPhysics
 
 final class PhysicsWorld2DTests: XCTestCase {
@@ -16,7 +17,9 @@ final class PhysicsWorld2DTests: XCTestCase {
 
     /// Static floor whose top surface sits at y = 0.5.
     @discardableResult
-    private func makeGround(_ world: PhysicsWorld2D, filter: CollisionFilter = .default, isTrigger: Bool = false) -> BodyID {
+    private func makeGround(_ world: PhysicsWorld2D, filter: CollisionFilter = .default, isTrigger: Bool = false)
+        -> BodyID
+    {
         var shape = Shape2D.box(halfExtents: Vec2(50, 0.5))
         shape.filter = filter
         shape.isTrigger = isTrigger

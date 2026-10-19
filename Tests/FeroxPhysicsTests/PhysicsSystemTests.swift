@@ -1,9 +1,10 @@
+import FeroxCore
 /// Tests for the ECS bridge: PhysicsSystem2D creates and removes bodies to match entities, writes
 /// poses back to Transform, interpolates for rendering and publishes CollisionEvent2D on the EventBus.
 import XCTest
-import FeroxCore
-@testable import FeroxScene
+
 @testable import FeroxPhysics
+@testable import FeroxScene
 
 final class PhysicsSystemTests: XCTestCase {
 

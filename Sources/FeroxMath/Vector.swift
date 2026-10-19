@@ -73,7 +73,8 @@ extension SIMD2 where Scalar == Float {
     @inlinable public var perpendicular: Self { Self(-y, x) }
     /// Rotates by `angle` radians counter-clockwise.
     @inlinable public func rotated(by angle: Float) -> Self {
-        let c = cos(angle), s = sin(angle)
+        let c = cos(angle)
+        let s = sin(angle)
         return Self(c * x - s * y, s * x + c * y)
     }
 }
@@ -81,7 +82,11 @@ extension SIMD2 where Scalar == Float {
 extension SIMD4 where Scalar == Float {
     @inlinable public var xyz: Vec3 {
         get { Vec3(x, y, z) }
-        set { x = newValue.x; y = newValue.y; z = newValue.z }
+        set {
+            x = newValue.x
+            y = newValue.y
+            z = newValue.z
+        }
     }
     @inlinable public init(_ v: Vec3, _ w: Float) { self.init(v.x, v.y, v.z, w) }
 }

@@ -212,7 +212,9 @@ public final class UIContext {
 
         if input.wasPressed(MouseButton.left) {
             // Clicking outside an open popup dismisses it.
-            if let top = popupLayer.children.last, !top.frame.contains(p), let owner = popupOwners[ObjectIdentifier(top)] as? UIDropdown {
+            if let top = popupLayer.children.last, !top.frame.contains(p),
+                let owner = popupOwners[ObjectIdentifier(top)] as? UIDropdown
+            {
                 owner.closePopup(self)
             }
             if let t = hitTest(p) {
@@ -272,7 +274,8 @@ public final class UIContext {
         if input.isDown(.dpadRight) { nav.x += 1 }
         let stick = input.stick(true)
         if nav == .zero && stick.length > 0.6 {
-            nav = Swift.abs(stick.x) > Swift.abs(stick.y) ? Vec2(stick.x > 0 ? 1 : -1, 0) : Vec2(0, stick.y > 0 ? -1 : 1)
+            nav =
+                Swift.abs(stick.x) > Swift.abs(stick.y) ? Vec2(stick.x > 0 ? 1 : -1, 0) : Vec2(0, stick.y > 0 ? -1 : 1)
         }
         if nav != .zero {
             navRepeat -= dt
@@ -292,7 +295,11 @@ public final class UIContext {
 
     private func cancel() {
         if let top = popupLayer.children.last {
-            if let owner = popupOwners[ObjectIdentifier(top)] as? UIDropdown { owner.closePopup(self) } else { dismissPopup(top) }
+            if let owner = popupOwners[ObjectIdentifier(top)] as? UIDropdown {
+                owner.closePopup(self)
+            } else {
+                dismissPopup(top)
+            }
         } else {
             focus(nil)
         }
@@ -355,7 +362,9 @@ public final class UIContext {
                 if let t = e as? UIToggle { value = t.isOn ? "on" : "off" }
                 if let tf = e as? UITextField { value = tf.text }
                 let label = e.accessibilityLabel ?? (e as? UILabel)?.plainText ?? e.name
-                out.append(AccessibilityNode(label: label, role: e.accessibilityRole, frame: e.frame, isFocused: e.isFocused, value: value))
+                out.append(
+                    AccessibilityNode(
+                        label: label, role: e.accessibilityRole, frame: e.frame, isFocused: e.isFocused, value: value))
             }
             for c in e.drawOrder { walk(c) }
         }

@@ -32,12 +32,17 @@ public enum FrameUniformsBuilder {
     ///   - time: Elapsed time in seconds (`cameraPosition.w`, shader animation).
     ///   - frameIndex: Monotonic frame counter (noise seeds, `exposure.y`).
     ///   - environmentMips: Mip count of the prefiltered environment (`exposure.z`).
-    public static func make(camera: RenderCamera, width: Int, height: Int, jitter: Vec2, previous: History?,
-                            environment: Environment, exposure: Float, time: Double, frameIndex: UInt64,
-                            environmentMips: Int) -> FrameUniforms {
+    public static func make(
+        camera: RenderCamera, width: Int, height: Int, jitter: Vec2, previous: History?,
+        environment: Environment, exposure: Float, time: Double, frameIndex: UInt64,
+        environmentMips: Int
+    ) -> FrameUniforms {
         var u = FrameUniforms()
-        let w = Float(max(width, 1)), h = Float(max(height, 1))
-        let projection = jitter == .zero ? camera.projection
+        let w = Float(max(width, 1))
+        let h = Float(max(height, 1))
+        let projection =
+            jitter == .zero
+            ? camera.projection
             : camera.camera.projectionMatrix(aspect: camera.aspect, jitter: jitter)
         u.view = camera.view
         u.projection = projection
@@ -57,8 +62,9 @@ public enum FrameUniformsBuilder {
         u.ambient = Vec4(environment.ambientColor.rgb, max(environment.iblIntensity, 0))
         u.fog = Vec4(environment.fogColor.rgb, max(environment.fogDensity, 0))
         // Frame index modulo 2^24 stays exactly representable as a Float.
-        u.exposure = Vec4(max(exposure, 0), Float(frameIndex % (1 << 24)), Float(max(environmentMips, 1)),
-                          max(environment.skyIntensity, 0))
+        u.exposure = Vec4(
+            max(exposure, 0), Float(frameIndex % (1 << 24)), Float(max(environmentMips, 1)),
+            max(environment.skyIntensity, 0))
         return u
     }
 

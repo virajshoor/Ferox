@@ -44,6 +44,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Discrete-GPU textures are staged into private storage with a blit. Managed fallback textures are synchronized before the GPU reads them.
 - Contact keys are `(body, shape)` pairs. Shape 256 no longer aliases shape 0, and tilemaps are not capped at 255 boxes.
 - `MeshBudgetTests` declared `weak let`. Swift 5.10 (the Xcode 15.4 toolchain used by macOS CI) rejects that, so the test target failed to compile and the suite never ran. The witness is now a `weak var` assigned on the next line, which also stays warning-free on Swift 6.2+.
+- `SafePath` stores its root as a `String`. `URL` is not `Sendable` on the Swift 5.10 Linux SDK, and the floor CI job treats that warning as an error. `root` is still a `URL`.
+- The Hi-Z fallback texture is filled through a local so `FallbackTextures.init` does not capture `self` before every stored property is set. That was a macOS compile error.
 - First build with a real Swift compiler (6.1.3, Linux): fixed compile errors in `SceneManager`, `Collision3D`, `AssetDatabase`, `RenderScene`, the examples and `EngineTests`. All 491 tests pass on Linux.
 - `FrameClock.tick(delta:)` dropped the first frame's delta, and rounding error could drop a fixed step. Fixed steps are now frame-rate independent.
 - `ShadowSoftness.hard` rendered the same as `.pcf`. It now takes a single comparison.

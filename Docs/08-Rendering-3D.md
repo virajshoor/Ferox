@@ -60,7 +60,7 @@ Within `encodeFrame`, the steps are:
 8. Shadow maps are rendered for the sun, one depth pass per cascade.
 9. The compute encoder assigns lights to clusters, and runs GPU culling if enabled.
 10. GPU particles are updated.
-11. The prepass writes depth, normals with roughness, and motion vectors.
+11. The prepass writes depth, normals with roughness, and motion vectors. A scheduled pick then draws opaque meshes into an `r32Uint` instance-id target and blits one pixel into a staging buffer.
 12. If Hi-Z is enabled, the depth pyramid is built for the next frame.
 13. Ray-traced effects run if enabled. Otherwise SSAO runs if enabled.
 14. The main HDR pass draws opaque geometry, the sky for perspective cameras, transparent geometry, particles, the 2D layer and debug lines. The `afterOpaque` and `afterTransparent` hooks run inside it.

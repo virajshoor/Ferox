@@ -78,4 +78,27 @@ final class EditorPickingTests: XCTestCase {
         let ray = Camera.perspective().ray(through: Vec2(0.5, 0.5), aspect: 1, cameraToWorld: eye)
         XCTAssertEqual(session.pick(ray), light)
     }
+
+    // A finished GPU readback replaces the raycast. A miss, or a serial from an older click, does not.
+    func testGPUReadbackOverridesTheRaycast() {
+        let near = box("Near", at: Vec3(0, 0, 0))
+        let other = box("Other", at: Vec3(8, 0, 0))
+        _ = engine.tick(delta: 1.0 / 60)
+        let ray = Camera.perspective().ray(through: Vec2(0.5, 0.5), aspect: 1, cameraToWorld: eye)
+        XCTAssertEqual(session.pick(ray, pixel: (x: 12, y: 8)), near)
+        guard let serial = session.gpuPickSerial else {
+            return XCTFail("A pixel pick requests a GPU readback serial")
+        }
+        XCTAssertEqual(
+            session.completeInstancePick(serial: serial, instance: 0, entities: [other]), other)
+        XCTAssertEqual(session.pick(ray), other)
+        XCTAssertEqual(session.pick(ray, pixel: (x: 1, y: 1)), near)
+        let newer = session.gpuPickSerial
+        XCTAssertNotEqual(newer, serial)
+        XCTAssertNil(session.completeInstancePick(serial: serial, instance: 0, entities: [other]))
+        XCTAssertEqual(session.pick(ray), near)
+        XCTAssertNil(
+            session.completeInstancePick(serial: newer ?? 0, instance: InstancePickMap.miss, entities: [other]))
+        XCTAssertEqual(session.pick(ray), near)
+    }
 }

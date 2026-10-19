@@ -90,7 +90,7 @@
 
     /// Mesh pipeline flavours. The raw value is part of the pipeline cache key.
     enum MeshPassKind: String {
-        case prepass, forward, transparent, shadow
+        case prepass, forward, transparent, shadow, pick
     }
 
     final class ScenePasses {
@@ -203,6 +203,11 @@
                     d.colorAttachments[1].pixelFormat = TargetFormat.motion
                     d.depthAttachmentPixelFormat = TargetFormat.depth
                     d.stencilAttachmentPixelFormat = TargetFormat.depth
+                case .pick:
+                    d.vertexFunction = try shaders.function("meshVertex", variant: variant)
+                    d.fragmentFunction = try shaders.function("prepassPickFragment")
+                    d.colorAttachments[0].pixelFormat = .r32Uint
+                    d.depthAttachmentPixelFormat = .depth32Float
                 case .forward, .transparent:
                     d.vertexFunction = try shaders.function("meshVertex", variant: variant)
                     d.fragmentFunction = try shaders.function("forwardFragment", variant: variant)
@@ -727,6 +732,77 @@
             encodeOpaqueDraws(enc, kind: .prepass, frame: frame, state: state, resources: r, lighting: nil)
         }
 
+        /// Opaque instance ids into an `r32Uint` target, then one pixel into `staging`.
+        /// CPU instance counts: GPU culling must not drop the clicked object. The textures
+        /// are not on the alias heap. Returns false when the pass cannot be built.
+        func encodeInstancePick(
+            _ cb: any MTLCommandBuffer, frame: RenderFrameData, state: SceneFrameState,
+            resources r: SceneResources, width: Int, height: Int, pixelX: Int, pixelY: Int,
+            staging: any MTLBuffer
+        ) -> Bool {
+            let w = max(width, 1)
+            let h = max(height, 1)
+            let colorDesc = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .r32Uint, width: w, height: h, mipmapped: false)
+            colorDesc.usage = [.renderTarget, .shaderRead]
+            colorDesc.storageMode = .private
+            let depthDesc = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .depth32Float, width: w, height: h, mipmapped: false)
+            depthDesc.usage = .renderTarget
+            depthDesc.storageMode = .private
+            guard let color = device.makeTexture(descriptor: colorDesc),
+                let depth = device.makeTexture(descriptor: depthDesc)
+            else { return false }
+            color.label = "Ferox.InstancePick"
+            let pass = MTLRenderPassDescriptor()
+            pass.colorAttachments[0].texture = color
+            pass.colorAttachments[0].loadAction = .clear
+            pass.colorAttachments[0].storeAction = .store
+            pass.colorAttachments[0].clearColor = MTLClearColor(
+                red: Double(InstancePickMap.miss), green: 0, blue: 0, alpha: 0)
+            pass.depthAttachment.texture = depth
+            pass.depthAttachment.loadAction = .clear
+            pass.depthAttachment.clearDepth = 0
+            pass.depthAttachment.storeAction = .dontCare
+            guard let enc = cb.makeRenderCommandEncoder(descriptor: pass) else { return false }
+            enc.label = "Ferox.InstancePick"
+            enc.setDepthStencilState(depthState(.greater, write: true))
+            enc.setFrontFacing(frontFacing)
+            bindCommon(enc, state: state, resources: r)
+            enc.setVertexSlice(state.staticIndices, index: BufferIndex.instanceIndices)
+            var last: (any MTLRenderPipelineState)?
+            var boundVertex: ObjectIdentifier?
+            var boundSkin: ObjectIdentifier?
+            for b in frame.opaque {
+                guard let mesh = r.meshes.mesh(b.mesh, assets: r.assets, frame: r.frameIndex) else { continue }
+                let skinned = b.skinned && mesh.skinBuffer != nil
+                var variant = Self.variant(for: b, skinned: skinned, clusters: state.useClusters)
+                variant.materialArguments = false
+                guard let pso = try? meshPipeline(.pick, variant: variant, samples: 1) else { continue }
+                if pso !== last {
+                    enc.setRenderPipelineState(pso)
+                    last = pso
+                }
+                enc.setCullMode(b.doubleSided ? .none : .back)
+                draw(
+                    enc, batch: b, mesh: mesh, skinned: skinned, indirect: nil, boundVertex: &boundVertex,
+                    boundSkin: &boundSkin)
+            }
+            enc.endEncoding()
+            let pixel = InstancePickStaging.pixel(x: pixelX, y: pixelY, width: w, height: h)
+            guard let blit = cb.makeBlitCommandEncoder() else { return false }
+            blit.label = "Ferox.InstancePickReadback"
+            blit.copy(
+                from: color, sourceSlice: 0, sourceLevel: 0,
+                sourceOrigin: MTLOrigin(x: pixel.x, y: pixel.y, z: 0),
+                sourceSize: MTLSize(width: 1, height: 1, depth: 1), to: staging,
+                destinationOffset: InstancePickStaging.wordOffset,
+                destinationBytesPerRow: InstancePickStaging.byteCount,
+                destinationBytesPerImage: InstancePickStaging.byteCount)
+            blit.endEncoding()
+            return true
+        }
+
         /// Builds the Hi-Z pyramid from this frame's resolved depth for next frame's culling.
         func encodeHiZ(_ cb: any MTLCommandBuffer, state: SceneFrameState, targets: RenderTargets) {
             guard state.gpuCulling, let depth = targets.depth, !targets.hizMips.isEmpty,
@@ -1056,7 +1132,7 @@
             _ enc: any MTLRenderCommandEncoder, frame: RenderFrameData, kind: MeshPassKind,
             state: SceneFrameState, resources r: SceneResources
         ) -> MaterialArgumentBind? {
-            guard kind != .shadow,
+            guard kind != .shadow, kind != .pick,
                 DrawPolicy.useMaterialArgumentBuffers(argumentBuffersTier: capabilities.argumentBuffersTier)
             else { return nil }
             let batches = frame.opaque.map {

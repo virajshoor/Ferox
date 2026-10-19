@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `MeshBudgetTests` declared `weak let`. Swift 5.10 (the Xcode 15.4 toolchain used by macOS CI) rejects that, so the test target failed to compile and the suite never ran. The witness is now a `weak var` assigned on the next line, which also stays warning-free on Swift 6.2+.
 - First build with a real Swift compiler (6.1.3, Linux): fixed compile errors in `SceneManager`, `Collision3D`, `AssetDatabase`, `RenderScene`, the examples and `EngineTests`. All 491 tests pass on Linux.
 - `FrameClock.tick(delta:)` dropped the first frame's delta, and rounding error could drop a fixed step. Fixed steps are now frame-rate independent.
 - `ShadowSoftness.hard` rendered the same as `.pcf`. It now takes a single comparison.

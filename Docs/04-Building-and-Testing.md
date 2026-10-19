@@ -80,7 +80,7 @@ The workflow runs on pushes to `main` and on every pull request. Concurrent runs
 
 | Job | Runner | Steps |
 | --- | --- | --- |
-| `build-and-test` | `macos-15` | Requires `/Applications/Xcode_16.4.app` (`xcode-select` fails the job if it is missing). Builds in debug, runs `swift test --enable-xctest --parallel`, compiles every `.metal` module with `Scripts/compile-shaders.sh` (`xcrun metal`, Common.metal prepended, `-std=macos-metal3.0`), then builds in release. |
+| `build-and-test` | `macos-15` | Requires `/Applications/Xcode_16.4.app` (`xcode-select` fails the job if it is missing). Builds in debug, runs `swift test --enable-xctest --parallel`, compiles every `.metal` module with `Scripts/compile-shaders.sh` (`xcrun metal`, Common.metal prepended, `-std=metal3.0`), then builds in release. |
 | `linux-swift-5-10` | `ubuntu-latest`, `swift:5.10` pinned by digest | Tools-version floor. Builds `Ferox` and runs all seven test targets with `-warnings-as-errors`. Does not pass `--enable-xctest` (that flag is not in Swift 5.10). |
 | `linux-swift-6-2` | `ubuntu-latest`, `swift:6.2` pinned by digest | `swift format lint --strict` on `Sources`, `Tests` and `Package.swift`, then `swift test --enable-xctest --parallel`. |
 | `docs` | `ubuntu-latest` | Runs `lycheeverse/lychee-action` with `--offline --no-progress README.md "Docs/**/*.md"` and fails on any broken link. |

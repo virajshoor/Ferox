@@ -20,7 +20,7 @@ for file in "$src"/*.metal; do
     } >"$combined"
     # `xcrun -sdk macosx` selects the SDK. The metal driver itself rejects `-sdk`.
     xcrun -sdk macosx metal -c "$combined" -o "$out/$name.air" \
-        -std=macos-metal3.0 -fpreserve-invariance
+        -std=metal3.0 -fpreserve-invariance
     echo "compiled $name.metal"
 done
 echo "shader air files: $out"

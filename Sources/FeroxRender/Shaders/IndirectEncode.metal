@@ -20,7 +20,7 @@ kernel void encodeCulledDraws(
     const device GPUDraw *draws [[buffer(1)]],
     const device uint *drawArgs [[buffer(2)]],
     const device void *frameBuf [[buffer(3)]],
-    const device void *instances [[buffer(4)]],
+    const device void *instanceBuf [[buffer(4)]],
     const device void *instanceIndices [[buffer(5)]],
     const device void *joints [[buffer(6)]],
     const device void *materialTable [[buffer(7)]],
@@ -35,7 +35,7 @@ kernel void encodeCulledDraws(
     if (gid >= limits.x) { return; }
     uint base = gid * 8u;
     uint indexCount = drawArgs[base];
-    uint instances = drawArgs[base + 1u];
+    uint instanceCount = drawArgs[base + 1u];
     uint indexStart = drawArgs[base + 2u];
     uint baseInstance = drawArgs[base + 4u];
     uint skinned = drawArgs[base + 5u];
@@ -45,8 +45,8 @@ kernel void encodeCulledDraws(
     if (skinned != 0u) { cmd.set_vertex_buffer(draws[gid].skin, 1); }
     cmd.set_vertex_buffer(frameBuf, 2);
     cmd.set_fragment_buffer(frameBuf, 2);
-    cmd.set_vertex_buffer(instances, 3);
-    cmd.set_fragment_buffer(instances, 3);
+    cmd.set_vertex_buffer(instanceBuf, 3);
+    cmd.set_fragment_buffer(instanceBuf, 3);
     cmd.set_vertex_buffer(joints, 8);
     cmd.set_vertex_buffer(instanceIndices, 9);
     cmd.set_fragment_buffer(materialTable, 13);
@@ -58,7 +58,8 @@ kernel void encodeCulledDraws(
         cmd.set_fragment_buffer(probes, 10);
         cmd.set_fragment_buffer(localMatrices, 12);
     }
+    // MSL picks uint16 vs uint32 from the pointer type. indexStart is in indices.
+    device uint *indices = ((device uint *)draws[gid].indexBuffer) + indexStart;
     cmd.draw_indexed_primitives(
-        primitive_type::triangle, indexCount, index_type::uint32, draws[gid].indexBuffer, indexStart * 4u,
-        instances, 0, baseInstance);
+        primitive_type::triangle, indexCount, indices, instanceCount, 0u, baseInstance);
 }

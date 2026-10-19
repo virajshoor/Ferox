@@ -23,9 +23,9 @@ This document covers the requirements for building Ferox, the commands that buil
 | Toolchain | Swift 5.10, which ships with Xcode 15.3. | `Package.swift`: `swift-tools-version:5.10` |
 | Command-line tools | Installed with `xcode-select --install`. | `CONTRIBUTING.md` |
 
-`CONTRIBUTING.md` and the CI workflow ask for Xcode 15.4, which also provides Swift 5.10. Xcode 15.3 is the minimum that the package manifest requires. Use Xcode 15.4 or later if you want to match CI.
+The package manifest requires Swift 5.10 (Xcode 15.3 or later). CI also builds on Swift 6.2 and, on macOS, selects Xcode 16.4. Code must compile on both the 5.10 floor and Swift 6.2.
 
-Headless runs need a Swift toolchain on any platform, but only the portable modules are built on Linux in CI. See [04-Building-and-Testing.md](04-Building-and-Testing.md).
+Headless runs need a Swift toolchain on any platform. Linux CI builds the `Ferox` target and runs every test target; it does not execute Metal. See [04-Building-and-Testing.md](04-Building-and-Testing.md).
 
 ## 2. Building
 
@@ -179,8 +179,8 @@ Each field is described in [05-Engine-Lifecycle.md](05-Engine-Lifecycle.md). Qua
 
 - **Limitation: nothing has been built or run in this snapshot.** The commands in this document are taken from the manifest and the sources. They have not been executed. See [01-Overview.md](01-Overview.md), section 7.
 - **Limitation: windowed mode is macOS only.** The renderer and `GameHost` need AppKit and Metal.
-- **Limitation: a shader compile error appears at run time.** The Metal sources are compiled by the renderer when it starts. See [19-Shaders-and-Hot-Reload.md](19-Shaders-and-Hot-Reload.md).
-- **Limitation: Xcode version.** The manifest requires Swift 5.10. CI selects Xcode 15.4. The two are not stated consistently across the repository.
+- **Limitation: the game still compiles shaders at launch.** CI compiles every `.metal` module with `xcrun metal` on the Mac job. The running renderer still compiles from source unless a metallib is supplied. See [19-Shaders-and-Hot-Reload.md](19-Shaders-and-Hot-Reload.md).
+- **Limitation: two toolchains.** The manifest requires Swift 5.10. The Mac CI job uses Xcode 16.4, and a Linux job uses Swift 6.2. A change has to compile on both.
 
 ## 9. Related documents
 

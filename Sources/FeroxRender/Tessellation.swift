@@ -31,7 +31,9 @@ public enum Tessellator {
             (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
         }
         func inside(_ p: Vec2, _ a: Vec2, _ b: Vec2, _ c: Vec2) -> Bool {
-            let d1 = cross(a, b, p), d2 = cross(b, c, p), d3 = cross(c, a, p)
+            let d1 = cross(a, b, p)
+            let d2 = cross(b, c, p)
+            let d3 = cross(c, a, p)
             let hasNeg = d1 < 0 || d2 < 0 || d3 < 0
             let hasPos = d1 > 0 || d2 > 0 || d3 > 0
             return !(hasNeg && hasPos)
@@ -41,13 +43,20 @@ public enum Tessellator {
         var i = 0
         while remaining.count > 3 && guardCounter < remaining.count * 2 {
             let m = remaining.count
-            let ia = remaining[(i + m - 1) % m], ib = remaining[i % m], ic = remaining[(i + 1) % m]
-            let a = points[ia], b = points[ib], c = points[ic]
+            let ia = remaining[(i + m - 1) % m]
+            let ib = remaining[i % m]
+            let ic = remaining[(i + 1) % m]
+            let a = points[ia]
+            let b = points[ib]
+            let c = points[ic]
             let turn = cross(a, b, c)
             var isEar = ccw ? turn > 1e-12 : turn < -1e-12
             if isEar {
                 for k in remaining where k != ia && k != ib && k != ic {
-                    if inside(points[k], a, b, c) { isEar = false; break }
+                    if inside(points[k], a, b, c) {
+                        isEar = false
+                        break
+                    }
                 }
             }
             if isEar {
@@ -87,7 +96,9 @@ public enum Tessellator {
             return [Vec2(-h.x, -h.y), Vec2(h.x, -h.y), Vec2(h.x, h.y), Vec2(-h.x, h.y)]
         }
         let seg = max(segmentsPerCorner, 1)
-        let centres = [Vec2(h.x - r, -h.y + r), Vec2(h.x - r, h.y - r), Vec2(-h.x + r, h.y - r), Vec2(-h.x + r, -h.y + r)]
+        let centres = [
+            Vec2(h.x - r, -h.y + r), Vec2(h.x - r, h.y - r), Vec2(-h.x + r, h.y - r), Vec2(-h.x + r, -h.y + r),
+        ]
         let starts: [Float] = [-.pi / 2, 0, .pi / 2, .pi]
         var out: [Vec2] = []
         out.reserveCapacity(4 * (seg + 1))
@@ -107,7 +118,9 @@ public enum Tessellator {
         var pts: [Vec2] = []
         pts.reserveCapacity(points.count)
         for p in points where pts.last.map({ (p - $0).lengthSquared > 1e-12 }) ?? true { pts.append(p) }
-        if closed, pts.count > 2, let f = pts.first, let l = pts.last, (f - l).lengthSquared <= 1e-12 { pts.removeLast() }
+        if closed, pts.count > 2, let f = pts.first, let l = pts.last, (f - l).lengthSquared <= 1e-12 {
+            pts.removeLast()
+        }
         let n = pts.count
         guard n >= 2, width > 0 else { return ([], []) }
         let hw = width * 0.5
@@ -119,11 +132,15 @@ public enum Tessellator {
         var positions: [Vec2] = []
         positions.reserveCapacity(n * 2)
         for i in 0..<n {
-            let hasPrev = closed || i > 0, hasNext = closed || i < n - 1
-            let prev = pts[(i + n - 1) % n], cur = pts[i], next = pts[(i + 1) % n]
+            let hasPrev = closed || i > 0
+            let hasNext = closed || i < n - 1
+            let prev = pts[(i + n - 1) % n]
+            let cur = pts[i]
+            let next = pts[(i + 1) % n]
             var offset: Vec2
             if hasPrev && hasNext {
-                let n0 = normal(prev, cur), n1 = normal(cur, next)
+                let n0 = normal(prev, cur)
+                let n1 = normal(cur, next)
                 let sum = n0 + n1
                 if sum.lengthSquared < 1e-8 {
                     offset = n0 * hw  // 180° turn: no meaningful miter
@@ -144,7 +161,8 @@ public enum Tessellator {
         let segments = closed ? n : n - 1
         indices.reserveCapacity(segments * 6)
         for i in 0..<segments {
-            let a = UInt32(i * 2), b = UInt32(((i + 1) % n) * 2)
+            let a = UInt32(i * 2)
+            let b = UInt32(((i + 1) % n) * 2)
             indices += [a, a + 1, b + 1, a, b + 1, b]
         }
         return (positions, indices)

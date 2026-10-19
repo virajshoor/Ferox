@@ -43,14 +43,16 @@ public enum GameLauncher {
     /// Runs `game` according to the process arguments. Never returns normally in windowed
     /// mode until the window is closed.
     @MainActor
-    public static func main(_ game: any Game, configuration: EngineConfiguration,
-                            arguments: [String] = Array(CommandLine.arguments.dropFirst())) {
+    public static func main(
+        _ game: any Game, configuration: EngineConfiguration,
+        arguments: [String] = Array(CommandLine.arguments.dropFirst())
+    ) {
         let options = parse(arguments)
         #if canImport(AppKit) && canImport(MetalKit)
-        if !options.headless {
-            GameHost.run(game, configuration: configuration)
-            return
-        }
+            if !options.headless {
+                GameHost.run(game, configuration: configuration)
+                return
+            }
         #endif
         runHeadless(game, configuration: configuration, options: options)
     }
@@ -71,7 +73,9 @@ public enum GameLauncher {
             let wall = MonotonicClock.now() - start
             let entities = engine.world.entities.count
             engine.shutdown()
-            print("\(config.title): simulated \(frames) frames (\(String(format: "%.2f", Double(frames) * options.delta)) s game time) in \(String(format: "%.3f", wall)) s wall time; \(entities) entities")
+            print(
+                "\(config.title): simulated \(frames) frames (\(String(format: "%.2f", Double(frames) * options.delta)) s game time) in \(String(format: "%.3f", wall)) s wall time; \(entities) entities"
+            )
         } catch {
             Log.error("Engine", "Headless run failed: \(error)")
             exit(1)

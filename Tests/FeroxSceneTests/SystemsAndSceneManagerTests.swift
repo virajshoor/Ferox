@@ -3,6 +3,7 @@
 /// loading, unloading, persistence across scenes, and timed transitions.
 import FeroxCore
 import XCTest
+
 @testable import FeroxScene
 
 /// Collects the names of systems in the order they ran.
@@ -77,7 +78,8 @@ final class SystemSchedulerTests: XCTestCase {
         let world = World()
         let scheduler = SystemScheduler(world: world)
         let rec = RunRecorder()
-        scheduler.add(ClosureSystem("play", phase: .update, runsInEditMode: false) { _, _ in rec.events.append("play") })
+        scheduler.add(
+            ClosureSystem("play", phase: .update, runsInEditMode: false) { _, _ in rec.events.append("play") })
         scheduler.add(ClosureSystem("edit", phase: .update, runsInEditMode: true) { _, _ in rec.events.append("edit") })
         scheduler.run(.update, context: makeContext(editMode: true))
         XCTAssertEqual(rec.events, ["edit"])
@@ -127,12 +129,14 @@ final class SystemSchedulerTests: XCTestCase {
         let world = World()
         let scheduler = SystemScheduler(world: world)
         var seenByNext = 0
-        scheduler.add(ClosureSystem("spawn", phase: .update, order: 0) { world, _ in
-            _ = world.createEntity()
-        })
-        scheduler.add(ClosureSystem("count", phase: .update, order: 1) { world, _ in
-            seenByNext = world.entityCount
-        })
+        scheduler.add(
+            ClosureSystem("spawn", phase: .update, order: 0) { world, _ in
+                _ = world.createEntity()
+            })
+        scheduler.add(
+            ClosureSystem("count", phase: .update, order: 1) { world, _ in
+                seenByNext = world.entityCount
+            })
         scheduler.run(.update, context: makeContext())
         XCTAssertEqual(seenByNext, 1)
     }

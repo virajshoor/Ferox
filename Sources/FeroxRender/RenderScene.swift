@@ -25,7 +25,9 @@ public struct RenderCamera: Sendable {
     public init(entity: Entity, camera: Camera, worldMatrix m: Mat4, aspect: Float) {
         self.entity = entity
         self.camera = camera
-        let x = m.c0.xyz.normalized, y = m.c1.xyz.normalized, z = m.c2.xyz.normalized
+        let x = m.c0.xyz.normalized
+        let y = m.c1.xyz.normalized
+        let z = m.c2.xyz.normalized
         let rigid = Mat4(columns: Vec4(x, 0), Vec4(y, 0), Vec4(z, 0), Vec4(m.translation, 1))
         world = rigid
         view = rigid.affineInverse
@@ -160,8 +162,10 @@ public enum RenderSceneExtractor {
     }
 
     /// Extracts a frame from `world`. `aspect` is the output aspect ratio.
-    public static func extract(world: World, assets: AssetManager, animations: AnimationLibrary?,
-                               aspect: Float, options: ExtractionOptions = ExtractionOptions()) -> RenderFrameData {
+    public static func extract(
+        world: World, assets: AssetManager, animations: AnimationLibrary?,
+        aspect: Float, options: ExtractionOptions = ExtractionOptions()
+    ) -> RenderFrameData {
         var frame = RenderFrameData()
         if let env = world.entities(with: Environment.self).first.flatMap({ world.get(Environment.self, $0) }) {
             frame.environment = env
@@ -182,8 +186,10 @@ public enum RenderSceneExtractor {
         var items: [Item] = []
         items.reserveCapacity(rendererCount)
         frame.instances.reserveCapacity(rendererCount)
-        func addRenderer(_ e: Entity, mesh meshID: AssetID, materials: [AssetID], castsShadows: Bool,
-                         receivesShadows: Bool, isStatic: Bool, skinned: SkinnedMeshRenderer?) {
+        func addRenderer(
+            _ e: Entity, mesh meshID: AssetID, materials: [AssetID], castsShadows: Bool,
+            receivesShadows: Bool, isStatic: Bool, skinned: SkinnedMeshRenderer?
+        ) {
             guard world.isActiveInHierarchy(e), cam.cullingMask.contains(layerMask(world, e)) else { return }
             let wt = world.get(WorldTransform.self, e)
             let model = wt?.matrix ?? world.worldMatrix(of: e)
@@ -197,8 +203,9 @@ public enum RenderSceneExtractor {
 
             if let lod = world.get(LODGroup.self, e), !lod.levels.isEmpty {
                 let ortho: Float? = cam.projection == .orthographic ? cam.orthographicSize : nil
-                let h = RenderMath.screenHeightFraction(radius: sphere.radius, distance: max(distance, cam.near),
-                                                        fovY: cam.fieldOfView, orthoSize: ortho)
+                let h = RenderMath.screenHeightFraction(
+                    radius: sphere.radius, distance: max(distance, cam.near),
+                    fovY: cam.fieldOfView, orthoSize: ortho)
                 guard let level = lod.select(screenHeight: h, bias: options.lodBias) else {
                     frame.culledObjects += 1
                     return
@@ -231,7 +238,8 @@ public enum RenderSceneExtractor {
             inst.emissiveAdd.w = receivesShadows ? 0 : 1
             var isSkinned = false
             if let s = skinned, mesh.isSkinned, let skeleton = animations?.skeletons[s.skin],
-               s.joints.count == skeleton.inverseBindMatrices.count, !s.joints.isEmpty {
+                s.joints.count == skeleton.inverseBindMatrices.count, !s.joints.isEmpty
+            {
                 let inverseModel = model.inverse
                 inst.params.w = Float(frame.joints.count)
                 for (j, je) in s.joints.enumerated() {
@@ -252,28 +260,34 @@ public enum RenderSceneExtractor {
                     RayTracingInstance(mesh: chosenMesh, transform: model, material: rt, isStatic: isStatic))
             }
 
-            let submeshes = mesh.submeshes.isEmpty
+            let submeshes =
+                mesh.submeshes.isEmpty
                 ? [MeshData.Submesh(indexOffset: 0, indexCount: mesh.indices.count, materialIndex: 0)] : mesh.submeshes
             for (si, sub) in submeshes.enumerated() where sub.indexCount > 0 {
-                let matID: AssetID? = materials.isEmpty ? nil
+                let matID: AssetID? =
+                    materials.isEmpty
+                    ? nil
                     : materials[min(max(sub.materialIndex, 0), materials.count - 1)]
                 let mat = matID.flatMap { assets.loadedMaterial($0) }
-                items.append(Item(
-                    mesh: chosenMesh, submesh: si, material: matID, instance: index, skinned: isSkinned,
-                    alphaTest: mat?.alphaMode == .mask, doubleSided: mat?.doubleSided ?? false,
-                    unlit: mat?.unlit ?? false, transparent: mat?.alphaMode == .blend,
-                    castsShadows: shadowRelevant && mat?.alphaMode != .blend,
-                    visible: inFrustum || !options.frustumCull, depth: distance))
+                items.append(
+                    Item(
+                        mesh: chosenMesh, submesh: si, material: matID, instance: index, skinned: isSkinned,
+                        alphaTest: mat?.alphaMode == .mask, doubleSided: mat?.doubleSided ?? false,
+                        unlit: mat?.unlit ?? false, transparent: mat?.alphaMode == .blend,
+                        castsShadows: shadowRelevant && mat?.alphaMode != .blend,
+                        visible: inFrustum || !options.frustumCull, depth: distance))
             }
         }
 
         world.read(MeshRenderer.self) { e, r in
-            addRenderer(e, mesh: r.mesh, materials: r.materials, castsShadows: r.castsShadows,
-                        receivesShadows: r.receivesShadows, isStatic: r.isStatic, skinned: nil)
+            addRenderer(
+                e, mesh: r.mesh, materials: r.materials, castsShadows: r.castsShadows,
+                receivesShadows: r.receivesShadows, isStatic: r.isStatic, skinned: nil)
         }
         world.read(SkinnedMeshRenderer.self) { e, r in
-            addRenderer(e, mesh: r.mesh, materials: r.materials, castsShadows: r.castsShadows,
-                        receivesShadows: r.receivesShadows, isStatic: false, skinned: r)
+            addRenderer(
+                e, mesh: r.mesh, materials: r.materials, castsShadows: r.castsShadows,
+                receivesShadows: r.receivesShadows, isStatic: false, skinned: r)
         }
 
         buildBatches(items, into: &frame)
@@ -287,7 +301,8 @@ public enum RenderSceneExtractor {
 
     /// Strict weak ordering by render state: material, mesh, submesh, then pipeline flags.
     static func batchOrder(_ a: Item, _ b: Item) -> Bool {
-        let am = a.material?.rawValue ?? "", bm = b.material?.rawValue ?? ""
+        let am = a.material?.rawValue ?? ""
+        let bm = b.material?.rawValue ?? ""
         if am != bm { return am < bm }
         if a.mesh.rawValue != b.mesh.rawValue { return a.mesh.rawValue < b.mesh.rawValue }
         if a.submesh != b.submesh { return a.submesh < b.submesh }
@@ -322,13 +337,16 @@ public enum RenderSceneExtractor {
                 if let d = current?.depth { current?.depth = min(d, it.depth) }
             } else {
                 flush()
-                current = DrawBatch(mesh: it.mesh, submesh: it.submesh, material: it.material,
-                                    firstInstance: frame.instanceIndices.count, instanceCount: 1, skinned: it.skinned,
-                                    alphaTest: it.alphaTest, doubleSided: it.doubleSided, unlit: it.unlit, depth: it.depth)
+                current = DrawBatch(
+                    mesh: it.mesh, submesh: it.submesh, material: it.material,
+                    firstInstance: frame.instanceIndices.count, instanceCount: 1, skinned: it.skinned,
+                    alphaTest: it.alphaTest, doubleSided: it.doubleSided, unlit: it.unlit, depth: it.depth)
             }
             frame.instanceIndices.append(UInt32(it.instance))
             // Records the first batch only. `CullingPlan` lists every submesh.
-            if frame.instanceBatch[it.instance] == .max { frame.instanceBatch[it.instance] = UInt32(frame.opaque.count) }
+            if frame.instanceBatch[it.instance] == .max {
+                frame.instanceBatch[it.instance] = UInt32(frame.opaque.count)
+            }
             currentItem = it
         }
         flush()
@@ -336,10 +354,13 @@ public enum RenderSceneExtractor {
         // Transparent: back to front, one draw each (order matters for blending).
         let transparent = items.filter { $0.transparent && $0.visible }.sorted { $0.depth > $1.depth }
         for it in transparent {
-            frame.transparent.append(DrawBatch(
-                mesh: it.mesh, submesh: it.submesh, material: it.material, firstInstance: frame.instanceIndices.count,
-                instanceCount: 1, skinned: it.skinned, alphaTest: false, doubleSided: it.doubleSided, unlit: it.unlit,
-                depth: it.depth))
+            frame.transparent.append(
+                DrawBatch(
+                    mesh: it.mesh, submesh: it.submesh, material: it.material,
+                    firstInstance: frame.instanceIndices.count,
+                    instanceCount: 1, skinned: it.skinned, alphaTest: false, doubleSided: it.doubleSided,
+                    unlit: it.unlit,
+                    depth: it.depth))
             frame.instanceIndices.append(UInt32(it.instance))
         }
 
@@ -352,9 +373,10 @@ public enum RenderSceneExtractor {
                 current?.instanceCount += 1
             } else {
                 if let b = current { frame.shadowCasters.append(b) }
-                current = DrawBatch(mesh: it.mesh, submesh: it.submesh, material: it.material,
-                                    firstInstance: frame.instanceIndices.count, instanceCount: 1, skinned: it.skinned,
-                                    alphaTest: it.alphaTest, doubleSided: it.doubleSided, unlit: false, depth: it.depth)
+                current = DrawBatch(
+                    mesh: it.mesh, submesh: it.submesh, material: it.material,
+                    firstInstance: frame.instanceIndices.count, instanceCount: 1, skinned: it.skinned,
+                    alphaTest: it.alphaTest, doubleSided: it.doubleSided, unlit: false, depth: it.depth)
             }
             frame.instanceIndices.append(UInt32(it.instance))
             currentItem = it
@@ -362,14 +384,17 @@ public enum RenderSceneExtractor {
         if let b = current { frame.shadowCasters.append(b) }
     }
 
-    static func extractLights(world: World, camera: RenderCamera, frustum: Frustum, options: ExtractionOptions,
-                              into frame: inout RenderFrameData) {
+    static func extractLights(
+        world: World, camera: RenderCamera, frustum: Frustum, options: ExtractionOptions,
+        into frame: inout RenderFrameData
+    ) {
         var directional: [(Light, Vec3)] = []
         // Punctual lights with whether each requests a shadow.
         var punctual: [(data: LightData, shadowed: Bool)] = []
         world.read(Light.self) { e, l in
             guard !l.is2D, l.intensity > 0, world.isActiveInHierarchy(e),
-                  camera.camera.cullingMask.contains(layerMask(world, e)) else { return }
+                camera.camera.cullingMask.contains(layerMask(world, e))
+            else { return }
             let m = worldMatrix(world, e)
             let forward = m.transformDirection(.forward).normalized
             switch l.type {
@@ -390,10 +415,12 @@ public enum RenderSceneExtractor {
         }
         // The sun: the first shadow-casting directional light, else the brightest one.
         if let si = directional.firstIndex(where: { $0.0.castsShadows })
-            ?? directional.indices.max(by: { directional[$0].0.intensity < directional[$1].0.intensity }) {
+            ?? directional.indices.max(by: { directional[$0].0.intensity < directional[$1].0.intensity })
+        {
             directional.swapAt(0, si)
             let (l, fwd) = directional[0]
-            frame.sun = SunLight(towardsLight: -fwd, color: l.color.rgb, intensity: l.intensity, castsShadows: l.castsShadows)
+            frame.sun = SunLight(
+                towardsLight: -fwd, color: l.color.rgb, intensity: l.intensity, castsShadows: l.castsShadows)
         }
         for (l, fwd) in directional {
             var d = LightData()
@@ -414,7 +441,8 @@ public enum RenderSceneExtractor {
         // Each distance is computed once; equal distances keep ascending index order.
         let shadowed = punctual.indices.filter { punctual[$0].shadowed }
             .map { (index: $0, distance: distance2(punctual[$0].data)) }
-        frame.shadowedLights = shadowed
+        frame.shadowedLights =
+            shadowed
             .sorted { $0.distance != $1.distance ? $0.distance < $1.distance : $0.index < $1.index }
             .map { first + $0.index }
     }

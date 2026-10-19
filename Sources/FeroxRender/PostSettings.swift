@@ -54,23 +54,28 @@ public enum PostUniformsBuilder {
         }
     }
 
-    public static func make(_ s: PostProcessSettings, antiAliasing: AntiAliasingSettings, camera: Camera?,
-                            frameIndex: UInt64, deltaTime: Float) -> PostUniforms {
+    public static func make(
+        _ s: PostProcessSettings, antiAliasing: AntiAliasingSettings, camera: Camera?,
+        frameIndex: UInt64, deltaTime: Float
+    ) -> PostUniforms {
         var p = PostUniforms()
         let g = s.colorGrading
         // Bloom knee at half the threshold gives a soft transition into the glow.
-        p.bloom = Vec4(max(s.bloom.threshold, 0), max(s.bloom.threshold, 0) * 0.5,
-                       s.bloom.enabled ? max(s.bloom.intensity, 0) : 0, max(s.bloom.radius, 0.1))
+        p.bloom = Vec4(
+            max(s.bloom.threshold, 0), max(s.bloom.threshold, 0) * 0.5,
+            s.bloom.enabled ? max(s.bloom.intensity, 0) : 0, max(s.bloom.radius, 0.1))
         p.tonemap = Vec4(operatorIndex(s.toneMapper), pow(2, g.exposure), max(g.contrast, 0), max(g.saturation, 0))
-        p.whiteBalance = Vec4(RenderMath.whiteBalanceLMS(temperature: g.temperature, tint: g.tint),
-                              min(max(g.vignette, 0), 1))
+        p.whiteBalance = Vec4(
+            RenderMath.whiteBalanceLMS(temperature: g.temperature, tint: g.tint),
+            min(max(g.vignette, 0), 1))
         p.lift = Vec4(g.lift.x, g.lift.y, g.lift.z, s.autoExposure ? 1 : 0)
         p.gamma = Vec4(g.gamma.x, g.gamma.y, g.gamma.z, 1)
         p.gain = Vec4(g.gain.x, g.gain.y, g.gain.z, 0)
         let fov = camera?.fieldOfView ?? (60 * .pi / 180)
         let dof = s.depthOfField
-        p.dof = Vec4(max(dof.focusDistance, 0.01), max(dof.aperture, 0.1), focalLength(fovY: fov),
-                     min(max(dof.maxBlurRadius, 0), 32))
+        p.dof = Vec4(
+            max(dof.focusDistance, 0.01), max(dof.aperture, 0.1), focalLength(fovY: fov),
+            min(max(dof.maxBlurRadius, 0), 32))
         let mb = s.motionBlur
         p.motionBlur = Vec4(min(max(mb.shutter, 0), 1), Float(min(max(mb.samples, 2), 32)), 32, 0)
         p.taa = Vec4(min(max(antiAliasing.taaFeedback, 0.02), 1), 0, min(max(antiAliasing.sharpness, 0), 1), 0)
@@ -114,7 +119,8 @@ public struct DynamicResolutionController: Sendable {
             cooldown -= 1
             return scale
         }
-        let lo = min(settings.minScale, settings.maxScale), hi = max(settings.minScale, settings.maxScale)
+        let lo = min(settings.minScale, settings.maxScale)
+        let hi = max(settings.minScale, settings.maxScale)
         var next = scale
         if let t = smoothedMs, t > target * 1.05 {
             // GPU cost scales roughly with pixel count (scale²): jump towards the estimate.

@@ -1,8 +1,9 @@
+import FeroxCore
 /// Tests for the platform-independent audio model: distance attenuation formulas, decibel conversion,
 /// voice slot allocation, bus settings, and the SilentAudioBackend playback lifecycle. No AVFoundation
 /// or audio hardware is involved.
 import XCTest
-import FeroxCore
+
 @testable import FeroxAudio
 
 final class AudioTests: XCTestCase {

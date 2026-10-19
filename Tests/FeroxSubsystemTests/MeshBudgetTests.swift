@@ -1,18 +1,19 @@
+import FeroxCore
 /// Tests for `MemoryBudget.meshBytes`: cached models are evicted LRU when unreferenced,
 /// registered meshes never are.
 import XCTest
-import FeroxCore
+
 @testable import FeroxAssets
 
 final class MeshBudgetTests: XCTestCase {
     /// One triangle with an embedded base64 position buffer.
     static let triangleGLTF = #"""
-    {"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
-     "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],
-     "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]}],
-     "bufferViews":[{"buffer":0,"byteLength":36}],
-     "buffers":[{"byteLength":36,"uri":"data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA"}]}
-    """#
+        {"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+         "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],
+         "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]}],
+         "bufferViews":[{"buffer":0,"byteLength":36}],
+         "buffers":[{"byteLength":36,"uri":"data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA"}]}
+        """#
 
     func testUnreferencedModelIsEvictedOverMeshBudget() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("MeshBudgetTests-\(UUID().uuidString)")
@@ -22,7 +23,8 @@ final class MeshBudgetTests: XCTestCase {
         let database = AssetDatabase(root: root)
         _ = database.refresh()
         let id = try XCTUnwrap(database.id(forPath: "tri.gltf"))
-        let manager = AssetManager(database: database, budget: MemoryBudget(textureBytes: 1 << 30, meshBytes: 1, audioBytes: 1 << 20))
+        let manager = AssetManager(
+            database: database, budget: MemoryBudget(textureBytes: 1 << 30, meshBytes: 1, audioBytes: 1 << 20))
 
         var handle: AssetHandle<LoadedModel>? = manager.model(id)
         manager.waitForPendingLoads()
@@ -42,7 +44,8 @@ final class MeshBudgetTests: XCTestCase {
     }
 
     func testRegisteredMeshesAreNeverEvicted() {
-        let manager = AssetManager(database: nil, budget: MemoryBudget(textureBytes: 1 << 30, meshBytes: 1, audioBytes: 1 << 20))
+        let manager = AssetManager(
+            database: nil, budget: MemoryBudget(textureBytes: 1 << 30, meshBytes: 1, audioBytes: 1 << 20))
         manager.registerMesh(.cube(), id: AssetID("test/cube"))
         manager.update()
         XCTAssertNotNil(manager.mesh(AssetID("test/cube"))?.value)

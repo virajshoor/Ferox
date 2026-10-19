@@ -1,5 +1,5 @@
-import Foundation
 import FeroxCore
+import Foundation
 
 /// Rigid pose used by the 3D narrowphase.
 public struct Pose3D: Sendable, Hashable {
@@ -67,7 +67,9 @@ public final class TriangleMesh: @unchecked Sendable, Hashable {
             let (a, b, c) = triangle(t)
             centroids[t] = (a + b + c) / 3
             var bb = AABB.empty
-            bb.expand(a); bb.expand(b); bb.expand(c)
+            bb.expand(a)
+            bb.expand(b)
+            bb.expand(c)
             triBounds[t] = bb
         }
         nodes.reserveCapacity(2 * n)
@@ -222,12 +224,14 @@ public struct Shape3D: Sendable, Hashable {
             let e = m.c0.absolute * h.x + m.c1.absolute * h.y + m.c2.absolute * h.z
             return AABB(center: pose.position, extents: e)
         case .capsule(let hh, let r):
-            let a = pose.apply(Vec3(0, -hh, 0)), b = pose.apply(Vec3(0, hh, 0))
+            let a = pose.apply(Vec3(0, -hh, 0))
+            let b = pose.apply(Vec3(0, hh, 0))
             return AABB(min: pointwiseMin(a, b) - r, max: pointwiseMax(a, b) + r)
         case .plane:
             return AABB(min: Vec3(repeating: -1e9), max: Vec3(repeating: 1e9))
         case .mesh(let mesh):
-            return mesh.bounds.transformed(by: Mat4(translation: pose.position, rotation: pose.rotation, scale: Vec3(1, 1, 1)))
+            return mesh.bounds.transformed(
+                by: Mat4(translation: pose.position, rotation: pose.rotation, scale: Vec3(1, 1, 1)))
         }
     }
 }
@@ -247,39 +251,40 @@ struct Manifold3D {
 /// Narrow-phase routines (world space).
 enum Collide3D {
     static func manifold(_ a: Shape3D, _ pa: Pose3D, _ b: Shape3D, _ pb: Pose3D, margin: Float) -> Manifold3D {
-        let wa = pa * a.localPose, wb = pb * b.localPose
+        let wa = pa * a.localPose
+        let wb = pb * b.localPose
         switch (a.geometry, b.geometry) {
-        case let (.sphere(ra), .sphere(rb)):
+        case (.sphere(let ra), .sphere(let rb)):
             return spheres(wa.position, ra, wb.position, rb, margin)
-        case let (.sphere(ra), .box(hb)):
+        case (.sphere(let ra), .box(let hb)):
             return flip(boxSphere(hb, wb, wa.position, ra, margin))
-        case let (.box(ha), .sphere(rb)):
+        case (.box(let ha), .sphere(let rb)):
             return boxSphere(ha, wa, wb.position, rb, margin)
-        case let (.box(ha), .box(hb)):
+        case (.box(let ha), .box(let hb)):
             return boxes(ha, wa, hb, wb, margin)
-        case let (.capsule(hh, r), .sphere(rb)):
+        case (.capsule(let hh, let r), .sphere(let rb)):
             let (s0, s1) = segment(hh, wa)
             return spheres(closestOnSegment(s0, s1, wb.position), r, wb.position, rb, margin)
-        case let (.sphere(ra), .capsule(hh, r)):
+        case (.sphere(let ra), .capsule(let hh, let r)):
             let (s0, s1) = segment(hh, wb)
             return spheres(wa.position, ra, closestOnSegment(s0, s1, wa.position), r, margin)
-        case let (.capsule(ha, ra), .capsule(hb, rb)):
+        case (.capsule(let ha, let ra), .capsule(let hb, let rb)):
             return capsules(segment(ha, wa), ra, segment(hb, wb), rb, margin)
-        case let (.capsule(hh, r), .box(hb)):
+        case (.capsule(let hh, let r), .box(let hb)):
             return flip(boxCapsule(hb, wb, segment(hh, wa), r, margin))
-        case let (.box(ha), .capsule(hh, r)):
+        case (.box(let ha), .capsule(let hh, let r)):
             return boxCapsule(ha, wa, segment(hh, wb), r, margin)
-        case let (.plane(n, d), _):
+        case (.plane(let n, let d), _):
             let wn = pa.rotate(n)
             let wd = d + wn.dot(pa.position)
             return planeShape(wn, wd, b, wb, margin)
-        case let (_, .plane(n, d)):
+        case (_, .plane(let n, let d)):
             let wn = pb.rotate(n)
             let wd = d + wn.dot(pb.position)
             return flip(planeShape(wn, wd, a, wa, margin))
-        case let (.mesh(mesh), _):
+        case (.mesh(let mesh), _):
             return meshShape(mesh, wa, b, wb, margin)
-        case let (_, .mesh(mesh)):
+        case (_, .mesh(let mesh)):
             return flip(meshShape(mesh, wb, a, wa, margin))
         }
     }
@@ -343,9 +348,14 @@ enum Collide3D {
 
     /// Closest points between segments (Ericson RTCD 5.1.9).
     static func closestSegmentSegment(_ p1: Vec3, _ q1: Vec3, _ p2: Vec3, _ q2: Vec3) -> (Vec3, Vec3) {
-        let d1 = q1 - p1, d2 = q2 - p2, r = p1 - p2
-        let a = d1.dot(d1), e = d2.dot(d2), f = d2.dot(r)
-        var s: Float = 0, t: Float = 0
+        let d1 = q1 - p1
+        let d2 = q2 - p2
+        let r = p1 - p2
+        let a = d1.dot(d1)
+        let e = d2.dot(d2)
+        let f = d2.dot(r)
+        var s: Float = 0
+        var t: Float = 0
         if a <= 1e-12 && e <= 1e-12 { return (p1, p2) }
         if a <= 1e-12 {
             t = (f / e).saturated
@@ -370,8 +380,11 @@ enum Collide3D {
         return (p1 + d1 * s, p2 + d2 * t)
     }
 
-    static func capsules(_ sa: (Vec3, Vec3), _ ra: Float, _ sb: (Vec3, Vec3), _ rb: Float, _ margin: Float) -> Manifold3D {
-        let da = sa.1 - sa.0, db = sb.1 - sb.0
+    static func capsules(_ sa: (Vec3, Vec3), _ ra: Float, _ sb: (Vec3, Vec3), _ rb: Float, _ margin: Float)
+        -> Manifold3D
+    {
+        let da = sa.1 - sa.0
+        let db = sb.1 - sb.0
         if da.lengthSquared > 1e-8 && db.lengthSquared > 1e-8 && da.normalized.cross(db.normalized).length < 0.05 {
             // Near-parallel: up to two points from B's endpoints for stable resting contact.
             var m = Manifold3D()
@@ -411,7 +424,8 @@ enum Collide3D {
         candidates.sort { $0.0.separation < $1.0.separation }
         var out = Manifold3D(normal: candidates[0].1, points: [candidates[0].0])
         // Add a second point when it shares the normal (flat resting capsule).
-        for c in candidates.dropFirst() where c.1.dot(out.normal) > 0.95 && (c.0.point - out.points[0].point).lengthSquared > 1e-4 {
+        for c in candidates.dropFirst()
+        where c.1.dot(out.normal) > 0.95 && (c.0.point - out.points[0].point).lengthSquared > 1e-4 {
             out.points.append(c.0)
             break
         }
@@ -423,7 +437,9 @@ enum Collide3D {
         var m = Manifold3D(normal: n)
         func add(_ p: Vec3, _ r: Float, _ id: UInt32) {
             let sep = n.dot(p) - d - r
-            if sep <= margin { m.points.append(ContactPoint3D(point: p - n * (r + sep * 0.5), separation: sep, id: id)) }
+            if sep <= margin {
+                m.points.append(ContactPoint3D(point: p - n * (r + sep * 0.5), separation: sep, id: id))
+            }
         }
         switch b.geometry {
         case .sphere(let r): add(pose.position, r, 0)
@@ -460,11 +476,13 @@ enum Collide3D {
         let b = pts.max { ($0.point - a.point).lengthSquared < ($1.point - a.point).lengthSquared }!
         chosen.append(b)
         let c = pts.max {
-            (($0.point - a.point).cross($0.point - b.point)).dot(normal) < (($1.point - a.point).cross($1.point - b.point)).dot(normal)
+            (($0.point - a.point).cross($0.point - b.point)).dot(normal)
+                < (($1.point - a.point).cross($1.point - b.point)).dot(normal)
         }!
         chosen.append(c)
         let dPt = pts.min {
-            (($0.point - a.point).cross($0.point - b.point)).dot(normal) < (($1.point - a.point).cross($1.point - b.point)).dot(normal)
+            (($0.point - a.point).cross($0.point - b.point)).dot(normal)
+                < (($1.point - a.point).cross($1.point - b.point)).dot(normal)
         }!
         if !chosen.contains(where: { $0.id == dPt.id }) { chosen.append(dPt) }
         return chosen
@@ -473,8 +491,10 @@ enum Collide3D {
     // MARK: Box-box (SAT + clipping)
 
     static func boxes(_ ha: Vec3, _ pa: Pose3D, _ hb: Vec3, _ pb: Pose3D, _ margin: Float) -> Manifold3D {
-        let ra = Mat3(pa.rotation), rb = Mat3(pb.rotation)
-        let axA = [ra.c0, ra.c1, ra.c2], axB = [rb.c0, rb.c1, rb.c2]
+        let ra = Mat3(pa.rotation)
+        let rb = Mat3(pb.rotation)
+        let axA = [ra.c0, ra.c1, ra.c2]
+        let axB = [rb.c0, rb.c1, rb.c2]
         let t = pb.position - pa.position
 
         func projectedRadius(_ axes: [Vec3], _ h: Vec3, _ n: Vec3) -> Float {
@@ -524,14 +544,19 @@ enum Collide3D {
             let eb = supportEdge(axB, hb, pb.position, -n, j)
             let (ca, cb) = closestSegmentSegment(ea.0, ea.1, eb.0, eb.1)
             let sep = (cb - ca).dot(n)
-            return Manifold3D(normal: n, points: [ContactPoint3D(point: (ca + cb) * 0.5, separation: sep, id: 0xE000 | UInt32(i * 3 + j))])
+            return Manifold3D(
+                normal: n,
+                points: [ContactPoint3D(point: (ca + cb) * 0.5, separation: sep, id: 0xE000 | UInt32(i * 3 + j))])
         }
 
         // Face contact: reference box/face and incident box.
         let refIsA = bestType == 0
-        let refAxes = refIsA ? axA : axB, incAxes = refIsA ? axB : axA
-        let refH = refIsA ? ha : hb, incH = refIsA ? hb : ha
-        let refC = refIsA ? pa.position : pb.position, incC = refIsA ? pb.position : pa.position
+        let refAxes = refIsA ? axA : axB
+        let incAxes = refIsA ? axB : axA
+        let refH = refIsA ? ha : hb
+        let incH = refIsA ? hb : ha
+        let refC = refIsA ? pa.position : pb.position
+        let incC = refIsA ? pb.position : pa.position
         let refN = refIsA ? n : -n  // reference face normal, pointing towards the incident box
         let fi = bestIndex.0
 
@@ -547,7 +572,8 @@ enum Collide3D {
         }
         let incSign: Float = incAxes[incAxis].dot(refN) > 0 ? -1 : 1
         let incCenter = incC + incAxes[incAxis] * (incH[incAxis] * incSign)
-        let u = (incAxis + 1) % 3, v = (incAxis + 2) % 3
+        let u = (incAxis + 1) % 3
+        let v = (incAxis + 2) % 3
         var poly: [Vec3] = [
             incCenter + incAxes[u] * incH[u] + incAxes[v] * incH[v],
             incCenter - incAxes[u] * incH[u] + incAxes[v] * incH[v],
@@ -556,7 +582,8 @@ enum Collide3D {
         ]
 
         // Clip against the four side planes of the reference face.
-        let ru = (fi + 1) % 3, rv = (fi + 2) % 3
+        let ru = (fi + 1) % 3
+        let rv = (fi + 2) % 3
         let refFaceCenter = refC + refN * refH[fi]
         for (axis, extent) in [(refAxes[ru], refH[ru]), (refAxes[rv], refH[rv])] {
             for s in [Float(1), -1] {
@@ -585,8 +612,10 @@ enum Collide3D {
         var out: [Vec3] = []
         out.reserveCapacity(poly.count + 2)
         for i in poly.indices {
-            let a = poly[i], b = poly[(i + 1) % poly.count]
-            let da = n.dot(a) - offset, db = n.dot(b) - offset
+            let a = poly[i]
+            let b = poly[(i + 1) % poly.count]
+            let da = n.dot(a) - offset
+            let db = n.dot(b) - offset
             if da <= 0 { out.append(a) }
             if da * db < 0 { out.append(a + (b - a) * (da / (da - db))) }
         }
@@ -597,16 +626,21 @@ enum Collide3D {
 
     static func closestOnTriangle(_ p: Vec3, _ a: Vec3, _ b: Vec3, _ c: Vec3) -> Vec3 {
         // Ericson RTCD 5.1.5.
-        let ab = b - a, ac = c - a, ap = p - a
-        let d1 = ab.dot(ap), d2 = ac.dot(ap)
+        let ab = b - a
+        let ac = c - a
+        let ap = p - a
+        let d1 = ab.dot(ap)
+        let d2 = ac.dot(ap)
         if d1 <= 0 && d2 <= 0 { return a }
         let bp = p - b
-        let d3 = ab.dot(bp), d4 = ac.dot(bp)
+        let d3 = ab.dot(bp)
+        let d4 = ac.dot(bp)
         if d3 >= 0 && d4 <= d3 { return b }
         let vc = d1 * d4 - d3 * d2
         if vc <= 0 && d1 >= 0 && d3 <= 0 { return a + ab * (d1 / (d1 - d3)) }
         let cp = p - c
-        let d5 = ab.dot(cp), d6 = ac.dot(cp)
+        let d5 = ab.dot(cp)
+        let d6 = ac.dot(cp)
         if d6 >= 0 && d5 <= d6 { return c }
         let vb = d5 * d2 - d1 * d6
         if vb <= 0 && d2 >= 0 && d6 <= 0 { return a + ac * (d2 / (d2 - d6)) }
@@ -617,8 +651,11 @@ enum Collide3D {
     }
 
     /// Mesh (A) vs sphere or capsule (B). Box/mesh contact is not supported (see docs).
-    static func meshShape(_ mesh: TriangleMesh, _ meshPose: Pose3D, _ b: Shape3D, _ pose: Pose3D, _ margin: Float) -> Manifold3D {
-        let core: (Vec3, Vec3), r: Float
+    static func meshShape(_ mesh: TriangleMesh, _ meshPose: Pose3D, _ b: Shape3D, _ pose: Pose3D, _ margin: Float)
+        -> Manifold3D
+    {
+        let core: (Vec3, Vec3)
+        let r: Float
         switch b.geometry {
         case .sphere(let rr):
             core = (pose.position, pose.position)
@@ -639,7 +676,8 @@ enum Collide3D {
         default:
             return Manifold3D()
         }
-        let lc0 = meshPose.invApply(core.0), lc1 = meshPose.invApply(core.1)
+        let lc0 = meshPose.invApply(core.0)
+        let lc1 = meshPose.invApply(core.1)
         let pad = Vec3(repeating: r + margin)
         let qb = AABB(min: pointwiseMin(lc0, lc1) - pad, max: pointwiseMax(lc0, lc1) + pad)
         var best: [(ContactPoint3D, Vec3)] = []
@@ -683,7 +721,8 @@ enum Collide3D {
 
     static func rayTriangle(_ o: Vec3, _ d: Vec3, _ a: Vec3, _ b: Vec3, _ c: Vec3) -> Float? {
         // Möller–Trumbore, two-sided.
-        let e1 = b - a, e2 = c - a
+        let e1 = b - a
+        let e2 = c - a
         let p = d.cross(e2)
         let det = e1.dot(p)
         if Swift.abs(det) < 1e-10 { return nil }
@@ -718,7 +757,8 @@ enum Collide3D {
         let len2 = ab.lengthSquared
         if len2 > 1e-10 {
             let ao = o - a
-            let abd = ab.dot(d), abao = ab.dot(ao)
+            let abd = ab.dot(d)
+            let abao = ab.dot(ao)
             let qa = len2 - abd * abd
             let qb = len2 * ao.dot(d) - abao * abd
             let qc = len2 * ao.lengthSquared - abao * abao - r * r * len2
@@ -738,7 +778,9 @@ enum Collide3D {
         return best
     }
 
-    static func rayShape(_ s: Shape3D, _ bodyPose: Pose3D, _ o: Vec3, _ d: Vec3, _ maxT: Float, inflate: Float) -> (Float, Vec3)? {
+    static func rayShape(_ s: Shape3D, _ bodyPose: Pose3D, _ o: Vec3, _ d: Vec3, _ maxT: Float, inflate: Float) -> (
+        Float, Vec3
+    )? {
         let pose = bodyPose * s.localPose
         switch s.geometry {
         case .sphere(let r):
@@ -748,7 +790,8 @@ enum Collide3D {
             return rayCapsule(o, d, a, b, r + inflate, maxT)
         case .box(let h):
             // Inflated boxes approximate rounded-box sweeps conservatively at the corners.
-            let lo = pose.invApply(o), ld = pose.invRotate(d)
+            let lo = pose.invApply(o)
+            let ld = pose.invRotate(d)
             let box = AABB(center: .zero, extents: h + inflate)
             guard let t = box.intersect(Ray(origin: lo, direction: ld), maxDistance: maxT) else { return nil }
             let hit = lo + ld * t
@@ -767,7 +810,8 @@ enum Collide3D {
             guard t >= 0 && t <= maxT else { return nil }
             return (t, wn)
         case .mesh(let mesh):
-            let lo = pose.invApply(o), ld = pose.invRotate(d)
+            let lo = pose.invApply(o)
+            let ld = pose.invRotate(d)
             guard let hit = mesh.raycast(origin: lo, direction: ld, maxT: maxT) else { return nil }
             let (t, nl) = hit
             // Sphere sweeps against meshes are approximated by pulling the hit back along the ray.

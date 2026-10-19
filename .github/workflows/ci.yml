@@ -15,32 +15,40 @@ concurrency:
 jobs:
   build-and-test:
     name: macOS build and test
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
 
-      - name: Select Xcode 15.4
+      - name: Select Xcode 16.4
         run: |
-          if [ -d /Applications/Xcode_15.4.app ]; then
-            sudo xcode-select -s /Applications/Xcode_15.4.app
+          set -euo pipefail
+          xcode="/Applications/Xcode_16.4.app"
+          if [ ! -d "$xcode" ]; then
+            echo "Required Xcode is missing: $xcode" >&2
+            ls /Applications | grep -i Xcode || true
+            exit 1
           fi
-
-      - name: Show Swift version
-        run: swift --version
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+          swift --version
 
       - name: Build (debug)
         run: swift build -c debug
 
       - name: Test
-        run: swift test --parallel
+        # Swift 6 runs Swift Testing by default and would exit 0 with zero XCTest cases.
+        run: swift test --enable-xctest --parallel
+
+      - name: Compile shaders
+        run: bash Scripts/compile-shaders.sh
 
       - name: Build (release)
         run: swift build -c release
 
-  linux-portable:
-    name: Linux portable modules
+  linux-swift-5-10:
+    name: Linux Swift 5.10
     runs-on: ubuntu-latest
-    container: swift:5.10
+    container: swift:5.10@sha256:ffc42e399ad0cad324f68d58f65e4d5f2c22eb9df73c4dfa249e898d497254b3
     steps:
       - uses: actions/checkout@v7
 
@@ -48,10 +56,29 @@ jobs:
         run: swift --version
 
       - name: Build the engine without Metal
-        run: swift build --target Ferox
+        # Warnings are errors on the tools-version floor so a 5.10-only failure
+        # cannot hide behind a clean Swift 6 build.
+        run: swift build --target Ferox -Xswiftc -warnings-as-errors
 
       - name: Test platform-independent modules
-        run: swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests|FeroxSubsystemTests|FeroxRenderTests|FeroxIntegrationTests"
+        # `--enable-xctest` does not exist on Swift 5.10; XCTest is the only runner.
+        run: swift test -Xswiftc -warnings-as-errors --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests|FeroxSubsystemTests|FeroxRenderTests|FeroxIntegrationTests"
+
+  linux-swift-6-2:
+    name: Linux Swift 6.2
+    runs-on: ubuntu-latest
+    container: swift:6.2@sha256:d6f8f6112e9a63da0a4a151d6b93acd16699d35c0b82531ac1a245f5af210197
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Lint
+        run: swift format lint --strict --recursive Sources Tests Package.swift
+
+      - name: Test
+        run: swift test --enable-xctest --parallel
 
   docs:
     name: Markdown links

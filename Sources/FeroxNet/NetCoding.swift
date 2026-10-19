@@ -12,7 +12,7 @@ public enum NetDecodeError: Error, Equatable, CustomStringConvertible {
     public var description: String {
         switch self {
         case .truncated: return "packet truncated"
-        case let .lengthExceeded(n, m): return "length \(n) exceeds maximum \(m)"
+        case .lengthExceeded(let n, let m): return "length \(n) exceeds maximum \(m)"
         case .invalidValue(let s): return "invalid value: \(s)"
         case .unknownMessage(let id): return "unknown message type \(id)"
         }
@@ -26,7 +26,10 @@ public struct NetWriter: Sendable {
 
     public mutating func write(_ v: UInt8) { bytes.append(v) }
     public mutating func write(_ v: Bool) { bytes.append(v ? 1 : 0) }
-    public mutating func write(_ v: UInt16) { bytes.append(UInt8(v & 0xFF)); bytes.append(UInt8(v >> 8)) }
+    public mutating func write(_ v: UInt16) {
+        bytes.append(UInt8(v & 0xFF))
+        bytes.append(UInt8(v >> 8))
+    }
     public mutating func write(_ v: UInt32) { for i in 0..<4 { bytes.append(UInt8((v >> (8 * UInt32(i))) & 0xFF)) } }
     public mutating func write(_ v: UInt64) { for i in 0..<8 { bytes.append(UInt8((v >> (8 * UInt64(i))) & 0xFF)) } }
     public mutating func write(_ v: Float) { write(v.bitPattern) }
@@ -158,11 +161,16 @@ public struct NetReader: Sendable {
         return Array(bytes[offset..<(offset + n)])
     }
     public mutating func readVec3() throws -> Vec3 {
-        let x = try readFloat(), y = try readFloat(), z = try readFloat()
+        let x = try readFloat()
+        let y = try readFloat()
+        let z = try readFloat()
         return Vec3(x, y, z)
     }
     public mutating func readQuat() throws -> Quat {
-        let x = try readFloat(), y = try readFloat(), z = try readFloat(), w = try readFloat()
+        let x = try readFloat()
+        let y = try readFloat()
+        let z = try readFloat()
+        let w = try readFloat()
         return Quat(x: x, y: y, z: z, w: w).normalized
     }
     public mutating func readQuantized(lo: Float, hi: Float, bits: Int = 16) throws -> Float {

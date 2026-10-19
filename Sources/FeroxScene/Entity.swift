@@ -47,9 +47,15 @@ extension CodingUserInfoKey {
 extension Entity: Codable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.singleValueContainer()
-        if c.decodeNil() { self = .null; return }
+        if c.decodeNil() {
+            self = .null
+            return
+        }
         let local = try c.decode(Int.self)
-        if local < 0 { self = .null; return }
+        if local < 0 {
+            self = .null
+            return
+        }
         if let table = decoder.userInfo[.feroxEntityRemap] as? EntityRemapTable {
             self = table.fromLocal[local] ?? .null
         } else {
@@ -59,7 +65,10 @@ extension Entity: Codable {
 
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.singleValueContainer()
-        if isNull { try c.encode(-1); return }
+        if isNull {
+            try c.encode(-1)
+            return
+        }
         if let table = encoder.userInfo[.feroxEntityRemap] as? EntityRemapTable, let local = table.toLocal[self] {
             try c.encode(local)
         } else {

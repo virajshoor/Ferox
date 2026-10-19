@@ -1,8 +1,9 @@
+import FeroxCore
 /// Tests for the input layer: action evaluation through maps and contexts, edge detection across
 /// frames, vector normalisation, gamepad and mouse bindings, rebinding, serialisation and dead zones.
 /// Input is injected through `InputSystem.enqueue`, so no platform backend is involved.
 import XCTest
-import FeroxCore
+
 @testable import FeroxInput
 
 final class InputTests: XCTestCase {
@@ -139,7 +140,8 @@ final class InputTests: XCTestCase {
         XCTAssertFalse(input.isRebinding)
         XCTAssertEqual(completions.count, 1)
         XCTAssertEqual(completions[0], InputBinding.key(.j))
-        XCTAssertEqual(input.maps["Gameplay"]?.actions.first { $0.name == "Jump" }?.bindings.first, InputBinding.key(.j))
+        XCTAssertEqual(
+            input.maps["Gameplay"]?.actions.first { $0.name == "Jump" }?.bindings.first, InputBinding.key(.j))
 
         runFrame(input, down(.space))
         XCTAssertFalse(input.isPressed("Jump"))

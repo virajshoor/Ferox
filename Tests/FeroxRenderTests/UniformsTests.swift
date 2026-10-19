@@ -1,20 +1,26 @@
+import Ferox
 /// Tests for the CPU-side uniform builders (`FrameUniformsBuilder`, `PostUniformsBuilder`)
 /// and the dynamic resolution controller. None of these touch Metal.
 import XCTest
-import Ferox
+
 @testable import FeroxRender
 
 final class FrameUniformsTests: XCTestCase {
     func makeCamera() -> RenderCamera {
-        let world = Mat4(translation: Vec3(1, 2, 3), rotation: Quat(pitch: -0.2, yaw: 0.5, roll: 0), scale: Vec3(1, 1, 1))
-        return RenderCamera(entity: .null, camera: .perspective(fov: 70, near: 0.1, far: 300), worldMatrix: world, aspect: 16.0 / 9)
+        let world = Mat4(
+            translation: Vec3(1, 2, 3), rotation: Quat(pitch: -0.2, yaw: 0.5, roll: 0), scale: Vec3(1, 1, 1))
+        return RenderCamera(
+            entity: .null, camera: .perspective(fov: 70, near: 0.1, far: 300), worldMatrix: world, aspect: 16.0 / 9)
     }
 
-    func make(_ camera: RenderCamera, jitter: Vec2 = .zero, previous: FrameUniformsBuilder.History? = nil,
-              time: Double = 1, frame: UInt64 = 7) -> FrameUniforms {
-        FrameUniformsBuilder.make(camera: camera, width: 1280, height: 720, jitter: jitter, previous: previous,
-                                  environment: Environment(), exposure: 0.5, time: time, frameIndex: frame,
-                                  environmentMips: 8)
+    func make(
+        _ camera: RenderCamera, jitter: Vec2 = .zero, previous: FrameUniformsBuilder.History? = nil,
+        time: Double = 1, frame: UInt64 = 7
+    ) -> FrameUniforms {
+        FrameUniformsBuilder.make(
+            camera: camera, width: 1280, height: 720, jitter: jitter, previous: previous,
+            environment: Environment(), exposure: 0.5, time: time, frameIndex: frame,
+            environmentMips: 8)
     }
 
     // Without jitter or history, the jittered and unjittered matrices coincide and the
@@ -46,8 +52,9 @@ final class FrameUniformsTests: XCTestCase {
     func testJitterAndHistory() {
         let cam = makeCamera()
         let j = Vec2(0.0005, -0.0007)
-        let history = FrameUniformsBuilder.History(viewProjection: .identity, unjitteredViewProjection: .identity,
-                                                   jitter: Vec2(0.0001, 0.0002))
+        let history = FrameUniformsBuilder.History(
+            viewProjection: .identity, unjitteredViewProjection: .identity,
+            jitter: Vec2(0.0001, 0.0002))
         let u = make(cam, jitter: j, previous: history)
         XCTAssertFalse(u.projection.isApproximatelyEqual(to: cam.projection, tolerance: 1e-6))
         XCTAssertTrue(u.unjitteredViewProjection.isApproximatelyEqual(to: cam.viewProjection))
@@ -72,8 +79,9 @@ final class FrameUniformsTests: XCTestCase {
         env.fogDensity = -1
         env.iblIntensity = -2
         env.skyIntensity = -3
-        let u = FrameUniformsBuilder.make(camera: makeCamera(), width: 0, height: 0, jitter: .zero, previous: nil,
-                                          environment: env, exposure: -1, time: 0, frameIndex: 0, environmentMips: 0)
+        let u = FrameUniformsBuilder.make(
+            camera: makeCamera(), width: 0, height: 0, jitter: .zero, previous: nil,
+            environment: env, exposure: -1, time: 0, frameIndex: 0, environmentMips: 0)
         XCTAssertEqual(u.viewport, Vec4(1, 1, 1, 1))
         XCTAssertEqual(u.fog.w, 0)
         XCTAssertEqual(u.ambient.w, 0)
@@ -164,18 +172,25 @@ final class PostUniformsTests: XCTestCase {
     func testMotionBlurSampleClamp() {
         var s = PostProcessSettings()
         s.motionBlur.samples = 500
-        XCTAssertEqual(PostUniformsBuilder.make(s, antiAliasing: AntiAliasingSettings(), camera: nil,
-                                                frameIndex: 0, deltaTime: 0.016).motionBlur.y, 32)
+        XCTAssertEqual(
+            PostUniformsBuilder.make(
+                s, antiAliasing: AntiAliasingSettings(), camera: nil,
+                frameIndex: 0, deltaTime: 0.016
+            ).motionBlur.y, 32)
         s.motionBlur.samples = 0
-        XCTAssertEqual(PostUniformsBuilder.make(s, antiAliasing: AntiAliasingSettings(), camera: nil,
-                                                frameIndex: 0, deltaTime: 0.016).motionBlur.y, 2)
+        XCTAssertEqual(
+            PostUniformsBuilder.make(
+                s, antiAliasing: AntiAliasingSettings(), camera: nil,
+                frameIndex: 0, deltaTime: 0.016
+            ).motionBlur.y, 2)
     }
 
     // Depth of field uses the camera's field of view when one is given.
     func testDepthOfFieldUsesCameraFOV() {
         let cam = Camera.perspective(fov: 30)
-        let p = PostUniformsBuilder.make(PostProcessSettings(), antiAliasing: AntiAliasingSettings(), camera: cam,
-                                         frameIndex: 0, deltaTime: 0)
+        let p = PostUniformsBuilder.make(
+            PostProcessSettings(), antiAliasing: AntiAliasingSettings(), camera: cam,
+            frameIndex: 0, deltaTime: 0)
         XCTAssertEqual(p.dof.z, PostUniformsBuilder.focalLength(fovY: cam.fieldOfView), accuracy: 1e-6)
     }
 }
@@ -241,7 +256,7 @@ final class DynamicResolutionTests: XCTestCase {
         var s = enabledSettings()
         s.targetGPUMilliseconds = 30
         var c = DynamicResolutionController(settings: s)
-        c.update(gpuMilliseconds: 20, budgetMs: 10) // within the 30 ms target
+        c.update(gpuMilliseconds: 20, budgetMs: 10)  // within the 30 ms target
         XCTAssertEqual(c.scale, 1)
     }
 }

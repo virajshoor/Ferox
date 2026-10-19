@@ -2,6 +2,7 @@
 /// length and normalisation, 2D helpers) and the scalar helpers on `Float`.
 import Foundation
 import XCTest
+
 @testable import FeroxMath
 
 private func assertVec3(
@@ -15,7 +16,8 @@ private func assertVec3(
 final class VectorTests: XCTestCase {
     // Addition, subtraction and scalar multiplication act per component.
     func testArithmeticIsComponentWise() {
-        let a = Vec3(1, 2, 3), b = Vec3(4, 5, 6)
+        let a = Vec3(1, 2, 3)
+        let b = Vec3(4, 5, 6)
         XCTAssertEqual(a + b, Vec3(5, 7, 9))
         XCTAssertEqual(b - a, Vec3(3, 3, 3))
         XCTAssertEqual(a * 2, Vec3(2, 4, 6))
@@ -34,7 +36,8 @@ final class VectorTests: XCTestCase {
 
     // The cross product is orthogonal to both of its operands.
     func testCrossProductIsPerpendicularToOperands() {
-        let a = Vec3(1, 2, 3), b = Vec3(-2, 0, 5)
+        let a = Vec3(1, 2, 3)
+        let b = Vec3(-2, 0, 5)
         let c = a.cross(b)
         XCTAssertEqual(c.dot(a), 0, accuracy: 1e-4)
         XCTAssertEqual(c.dot(b), 0, accuracy: 1e-4)

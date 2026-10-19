@@ -68,7 +68,7 @@ swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsT
                                             # what the Linux CI job runs
 ```
 
-`CONTRIBUTING.md` requires that a pull request includes tests for new behaviour and that `swift test` passes locally. Pass `--enable-xctest` so a Swift 6.2 runner cannot report success after executing zero tests. The workflow in this tree still invokes `swift test` without that flag; that is called out with the CI job below.
+`CONTRIBUTING.md` requires that a pull request includes tests for new behaviour and that `swift test` passes locally. Pass `--enable-xctest` on Swift 6 so the runner cannot report success after executing zero tests. Swift 5.10 does not have that flag; XCTest is its only runner. `swift format lint --strict --recursive Sources Tests Package.swift` matches the Swift 6.2 CI job (configuration in `.swift-format`).
 
 ## 5. Continuous integration
 
@@ -80,8 +80,9 @@ The workflow runs on pushes to `main` and on every pull request. Concurrent runs
 
 | Job | Runner | Steps |
 | --- | --- | --- |
-| `build-and-test` | `macos-14` | Selects Xcode 15.4 if present, prints the Swift version, builds in debug, runs `swift test --parallel`, then builds in release. |
-| `linux-portable` | `ubuntu-latest`, container `swift:5.10` | Builds the `Ferox` target without Metal, then runs all seven test targets by filter. |
+| `build-and-test` | `macos-15` | Requires `/Applications/Xcode_16.4.app` (`xcode-select` fails the job if it is missing). Builds in debug, runs `swift test --enable-xctest --parallel`, compiles every `.metal` module with `Scripts/compile-shaders.sh` (`xcrun metal`, Common.metal prepended, `-std=macos-metal3.0`), then builds in release. |
+| `linux-swift-5-10` | `ubuntu-latest`, `swift:5.10` pinned by digest | Tools-version floor. Builds `Ferox` and runs all seven test targets with `-warnings-as-errors`. Does not pass `--enable-xctest` (that flag is not in Swift 5.10). |
+| `linux-swift-6-2` | `ubuntu-latest`, `swift:6.2` pinned by digest | `swift format lint --strict` on `Sources`, `Tests` and `Package.swift`, then `swift test --enable-xctest --parallel`. |
 | `docs` | `ubuntu-latest` | Runs `lycheeverse/lychee-action` with `--offline --no-progress README.md "Docs/**/*.md"` and fails on any broken link. |
 
 One point follows from the file as written:
@@ -90,7 +91,7 @@ One point follows from the file as written:
 
 ### 5.2 `benchmarks.yml`
 
-The workflow is started by hand (`workflow_dispatch`). It runs `swift run -c release FeroxBenchmarks --quick --output BenchmarkResults/ci.json` on `macos-14` and uploads the JSON as an artifact.
+The workflow is started by hand (`workflow_dispatch`). It runs `swift run -c release FeroxBenchmarks --quick --output BenchmarkResults/ci.json` on `macos-15` with Xcode 16.4 required, and uploads the JSON as an artifact.
 
 The workflow's own comment states that hosted macOS runners use virtualised GPUs, and that the numbers "are useful for spotting large regressions and trends only. They are not representative of Apple Silicon hardware." Performance claims must come from local release runs. See section 7.
 
@@ -179,7 +180,7 @@ The steps for adding a shader are in [19-Shaders-and-Hot-Reload.md](19-Shaders-a
 
 - **Limitation: the current suite is verified on Linux.** 515 XCTest tests pass on Swift 6.2.3. An earlier suite of 504 tests passed on an M1 Max, macOS 27, Swift 6.4. No other Mac result is cited for this tree.
 - **Limitation: no GPU tests.** Shaders and render passes are exercised only by running the examples or `FeroxDiag --render` on a Mac.
-- **Limitation: shader errors are found at run time.** There is no offline shader compile step in CI.
+- **Limitation: shader compile is not a GPU run.** The macOS job compiles every module with `xcrun metal`. It does not execute the shaders, and it does not construct a `Renderer` unless a later test does.
 - **Limitation: no benchmark figures are published here.** Use the tool, in release configuration, on the machine of interest.
 - **Limitation: CI benchmarks run on virtualised GPUs.** The workflow says so itself.
 

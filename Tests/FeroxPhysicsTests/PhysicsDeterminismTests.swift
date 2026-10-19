@@ -1,8 +1,9 @@
+import FeroxCore
 /// Determinism and settling tests for the 2D and 3D rigid-body worlds: the same pile built twice
 /// in fresh worlds must produce bit-identical body state, and every body must come to rest above
 /// the static ground.
 import XCTest
-import FeroxCore
+
 @testable import FeroxPhysics
 
 final class PhysicsDeterminismTests: XCTestCase {
@@ -23,7 +24,8 @@ final class PhysicsDeterminismTests: XCTestCase {
             BodyDesc2D(type: .static, position: .zero, shapes: [Shape2D.box(halfExtents: Vec2(50, 0.5))]))
         var boxes: [BodyID] = []
         for i in 0..<boxCount {
-            let column = Float(i % 6), row = Float(i / 6)
+            let column = Float(i % 6)
+            let row = Float(i / 6)
             let position = Vec2(column * 1.2 - 3, 2 + row * 1.2)
             let id = world.createBody(
                 BodyDesc2D(type: .dynamic, position: position, shapes: [Shape2D.box(halfExtents: Vec2(0.5, 0.5))]))
@@ -71,7 +73,8 @@ final class PhysicsDeterminismTests: XCTestCase {
             BodyDesc3D(type: .static, position: .zero, shapes: [Shape3D.box(Vec3(50, 0.5, 50))]))
         var boxes: [BodyID] = []
         for i in 0..<boxCount {
-            let column = Float(i % 6), row = Float(i / 6)
+            let column = Float(i % 6)
+            let row = Float(i / 6)
             let position = Vec3(column * 1.2 - 3, 2 + row * 1.2, 0)
             let id = world.createBody(
                 BodyDesc3D(type: .dynamic, position: position, shapes: [Shape3D.box(Vec3(0.5, 0.5, 0.5))]))

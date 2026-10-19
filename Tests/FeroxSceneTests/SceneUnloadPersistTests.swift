@@ -1,6 +1,7 @@
 /// Regression test: a `PersistAcrossScenes` entity parented under an entity of the unloaded
 /// scene must be detached before the scene's entities are destroyed, so it survives the unload.
 import XCTest
+
 @testable import FeroxScene
 
 final class SceneUnloadPersistTests: XCTestCase {

@@ -114,7 +114,8 @@ public final class Profiler: @unchecked Sendable {
     public func recordGPU(name: String, start: Double = 0, duration: Double) {
         guard isEnabled else { return }
         lock.locked {
-            current.append(ProfileSample(name: name, domain: .gpu, start: start, duration: duration, depth: 0, thread: "gpu"))
+            current.append(
+                ProfileSample(name: name, domain: .gpu, start: start, duration: duration, depth: 0, thread: "gpu"))
         }
     }
 

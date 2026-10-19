@@ -54,21 +54,25 @@ public enum LocalShadowPlanner {
     /// The view-projection of one point-light cube face.
     public static func pointFaceMatrix(position: Vec3, range: Float, face: Int, resolution: Int) -> Mat4 {
         let f = pointFaces[min(max(face, 0), 5)]
-        let projection = Mat4.perspective(fovY: pointFieldOfView(resolution: resolution), aspect: 1,
-                                          near: nearPlane(range: range), far: max(range, 0.05), reverseZ: false)
+        let projection = Mat4.perspective(
+            fovY: pointFieldOfView(resolution: resolution), aspect: 1,
+            near: nearPlane(range: range), far: max(range, 0.05), reverseZ: false)
         return projection * Mat4.lookAt(eye: position, target: position + f.direction, up: f.up)
     }
 
     /// The view-projection of a spot light whose cone has half-angle `acos(cosOuter)`.
-    public static func spotMatrix(position: Vec3, direction: Vec3, cosOuter: Float, range: Float,
-                                  resolution: Int) -> Mat4 {
+    public static func spotMatrix(
+        position: Vec3, direction: Vec3, cosOuter: Float, range: Float,
+        resolution: Int
+    ) -> Mat4 {
         let halfAngle = acos(min(max(cosOuter, 0.0), 1))
         // A small margin keeps the kernel inside the map at the cone's rim.
         let fov = min(2 * halfAngle + 8 / Float(max(resolution, 1)), .pi * 0.95)
         let dir = direction.lengthSquared > 1e-8 ? direction.normalized : Vec3.forward
         let up = abs(dir.y) > 0.99 ? Vec3(0, 0, 1) : Vec3.up
-        let projection = Mat4.perspective(fovY: fov, aspect: 1, near: nearPlane(range: range),
-                                          far: max(range, 0.05), reverseZ: false)
+        let projection = Mat4.perspective(
+            fovY: fov, aspect: 1, near: nearPlane(range: range),
+            far: max(range, 0.05), reverseZ: false)
         return projection * Mat4.lookAt(eye: position, target: position + dir, up: up)
     }
 
@@ -81,8 +85,10 @@ public enum LocalShadowPlanner {
     /// budget runs out, writes each served light's first slice, texel size and bias into
     /// `LightData.extra`, and returns the slices in slice order. A point light that does not
     /// fit in the remaining slices is skipped, and a smaller spot light may still fit.
-    public static func plan(lights: inout [LightData], candidates: [Int], budget: Int, resolution: Int,
-                            normalBias: Float) -> [LocalShadowSlice] {
+    public static func plan(
+        lights: inout [LightData], candidates: [Int], budget: Int, resolution: Int,
+        normalBias: Float
+    ) -> [LocalShadowSlice] {
         let limit = min(max(budget, 0), maxSlices)
         let res = min(max(resolution, 64), 4096)
         var slices: [LocalShadowSlice] = []
@@ -99,18 +105,22 @@ public enum LocalShadowPlanner {
             if isPoint {
                 fov = pointFieldOfView(resolution: res)
                 for face in 0..<6 {
-                    slices.append(LocalShadowSlice(
-                        light: index, face: face,
-                        viewProjection: pointFaceMatrix(position: position, range: range, face: face, resolution: res),
-                        position: position, range: range))
+                    slices.append(
+                        LocalShadowSlice(
+                            light: index, face: face,
+                            viewProjection: pointFaceMatrix(
+                                position: position, range: range, face: face, resolution: res),
+                            position: position, range: range))
                 }
             } else {
                 fov = 2 * acos(min(max(l.direction.w, 0), 1))
-                slices.append(LocalShadowSlice(
-                    light: index, face: 0,
-                    viewProjection: spotMatrix(position: position, direction: l.direction.xyz, cosOuter: l.direction.w,
-                                               range: range, resolution: res),
-                    position: position, range: range))
+                slices.append(
+                    LocalShadowSlice(
+                        light: index, face: 0,
+                        viewProjection: spotMatrix(
+                            position: position, direction: l.direction.xyz, cosOuter: l.direction.w,
+                            range: range, resolution: res),
+                        position: position, range: range))
             }
             l.extra.z = 1 / Float(res)
             // Offset along the normal by about 1.5 texels at the surface's distance (the

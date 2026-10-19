@@ -1,8 +1,9 @@
+import Ferox
 /// Tests that the CPU sorts behind 2D batching and shadowed-light selection keep their order:
 /// sprites by sorting layer, then order in layer, then creation; lights by distance with
 /// equal distances kept in index order.
 import XCTest
-import Ferox
+
 @testable import FeroxRender
 
 final class SpriteBatchingOrderTests: XCTestCase {
@@ -45,7 +46,8 @@ final class SpriteBatchingOrderTests: XCTestCase {
         sprite("zero", at: .zero, layer: 0, order: 0)
         sprite("early", at: .zero, layer: 0, order: -4)
         let f = build()
-        XCTAssertEqual(f.batches.map { $0.texture?.rawValue }, ["neg", "early", "zero", "same-a", "same-b", "late-high"])
+        XCTAssertEqual(
+            f.batches.map { $0.texture?.rawValue }, ["neg", "early", "zero", "same-a", "same-b", "late-high"])
         XCTAssertEqual(f.drawnObjects, 6)
     }
 

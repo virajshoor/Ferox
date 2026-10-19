@@ -1,5 +1,5 @@
-import Foundation
 import FeroxCore
+import Foundation
 
 /// Computes `WorldTransform` for every entity with a `Transform`.
 ///
@@ -63,7 +63,9 @@ public enum TransformSystem {
     private static func updateSubtree(_ world: World, _ e: Entity, parentMatrix: Mat4, parentChanged: Bool) {
         guard var t = world.get(Transform.self, e) else {
             // Entities without a Transform still propagate their parent's matrix.
-            for c in world.children(of: e) { updateSubtree(world, c, parentMatrix: parentMatrix, parentChanged: parentChanged) }
+            for c in world.children(of: e) {
+                updateSubtree(world, c, parentMatrix: parentMatrix, parentChanged: parentChanged)
+            }
             return
         }
         var w = world.get(WorldTransform.self, e) ?? WorldTransform()

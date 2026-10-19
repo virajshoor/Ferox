@@ -26,7 +26,8 @@ public struct NetStats: Sendable, Hashable {
 }
 
 enum PacketType: UInt8 {
-    case connectRequest = 0, challenge, challengeResponse, accept, deny, payload, disconnect, keepAlive
+    case connectRequest = 0
+    case challenge, challengeResponse, accept, deny, payload, disconnect, keepAlive
 }
 
 /// Wrap-around aware sequence comparison (RFC 1982 style, 16-bit).
@@ -136,7 +137,8 @@ public final class NetConnection {
         }
         var unreliable = outgoingUnreliable
         outgoingUnreliable.removeAll(keepingCapacity: true)
-        while !reliableToSend.isEmpty || !unreliable.isEmpty || (now - lastSend >= keepAliveInterval && packets.isEmpty) {
+        while !reliableToSend.isEmpty || !unreliable.isEmpty || (now - lastSend >= keepAliveInterval && packets.isEmpty)
+        {
             var w = NetWriter(capacity: 1200)
             let seq = localSeq
             localSeq &+= 1
@@ -172,7 +174,10 @@ public final class NetConnection {
         }
         // Forget very old send times and update the loss estimate.
         if sentTimes.count > 2048 {
-            for k in sentTimes.keys where now - (sentTimes[k] ?? now) > 5 { sentTimes[k] = nil; packetMessages[k] = nil }
+            for k in sentTimes.keys where now - (sentTimes[k] ?? now) > 5 {
+                sentTimes[k] = nil
+                packetMessages[k] = nil
+            }
         }
         ackWindow.removeAll { now - $0.0 > 3 }
         let old = ackWindow.filter { now - $0.0 > 1 }
@@ -224,7 +229,9 @@ public final class NetConnection {
 
         // Messages
         while !r.isAtEnd {
-            guard let channel = NetChannel(rawValue: try r.readUInt8()) else { throw NetDecodeError.invalidValue("channel") }
+            guard let channel = NetChannel(rawValue: try r.readUInt8()) else {
+                throw NetDecodeError.invalidValue("channel")
+            }
             let type = try r.readUInt16()
             switch channel {
             case .reliableOrdered:

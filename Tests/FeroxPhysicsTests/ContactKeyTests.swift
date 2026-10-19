@@ -1,8 +1,9 @@
-/// Contact keys must not alias when a body has more than 256 shapes.
-import XCTest
 import FeroxCore
 import FeroxMath
 import FeroxScene
+/// Contact keys must not alias when a body has more than 256 shapes.
+import XCTest
+
 @testable import FeroxPhysics
 
 final class ContactKeyTests: XCTestCase {

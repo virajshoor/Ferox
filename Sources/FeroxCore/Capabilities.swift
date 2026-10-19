@@ -157,7 +157,8 @@ public struct ResolvedGraphics: Sendable, Hashable {
 ///    shadow maps, AO to SSAO, and reflections to probes/IBL. On non-hardware RT devices the
 ///    ray budget is reduced (rays per pixel = 1, resolution ≤ 0.5, bounces = 1).
 public enum GraphicsFeatureResolver {
-    public static func resolve(_ requested: GraphicsSettings, capabilities caps: DeviceCapabilities) -> ResolvedGraphics {
+    public static func resolve(_ requested: GraphicsSettings, capabilities caps: DeviceCapabilities) -> ResolvedGraphics
+    {
         var s = requested
         var fallbacks: [GraphicsFallback] = []
         func note(_ f: GraphicsFallback.Feature, _ req: String, _ eff: String, _ why: String) {
@@ -173,12 +174,15 @@ public enum GraphicsFeatureResolver {
         case .metalFXSpatial:
             upscaler = caps.supportsMetalFXSpatial ? .metalFXSpatial : .feroxSpatial
             if !caps.supportsMetalFXSpatial {
-                note(.upscaling, "metalFXSpatial", "feroxSpatial", "MetalFX spatial scaler not supported on this device")
+                note(
+                    .upscaling, "metalFXSpatial", "feroxSpatial", "MetalFX spatial scaler not supported on this device")
             }
         case .metalFXTemporal:
             upscaler = caps.supportsMetalFXTemporal ? .metalFXTemporal : .feroxTemporal
             if !caps.supportsMetalFXTemporal {
-                note(.upscaling, "metalFXTemporal", "feroxTemporal", "MetalFX temporal scaler not supported on this device")
+                note(
+                    .upscaling, "metalFXTemporal", "feroxTemporal",
+                    "MetalFX temporal scaler not supported on this device")
             }
         case .automaticSpatial: upscaler = caps.supportsMetalFXSpatial ? .metalFXSpatial : .feroxSpatial
         case .automaticTemporal: upscaler = caps.supportsMetalFXTemporal ? .metalFXTemporal : .feroxTemporal
@@ -221,16 +225,21 @@ public enum GraphicsFeatureResolver {
         }
 
         // --- Ray tracing
-        var rtShadows = false, rtReflections = false, rtAO = false
+        var rtShadows = false
+        var rtReflections = false
+        var rtAO = false
         if s.rayTracing.enabled {
             if caps.supportsRaytracing {
                 rtShadows = s.rayTracing.shadows
                 rtReflections = s.rayTracing.reflections
                 rtAO = s.rayTracing.ambientOcclusion
                 if !caps.hasHardwareRayTracing {
-                    if s.rayTracing.raysPerPixel > 1 || s.rayTracing.resolutionScale > 0.5 || s.rayTracing.maxBounces > 1 {
-                        note(.rayTracing, "rpp \(s.rayTracing.raysPerPixel), scale \(s.rayTracing.resolutionScale)",
-                             "rpp 1, scale 0.5, 1 bounce", "no dedicated ray-tracing hardware; budget reduced")
+                    if s.rayTracing.raysPerPixel > 1 || s.rayTracing.resolutionScale > 0.5
+                        || s.rayTracing.maxBounces > 1
+                    {
+                        note(
+                            .rayTracing, "rpp \(s.rayTracing.raysPerPixel), scale \(s.rayTracing.resolutionScale)",
+                            "rpp 1, scale 0.5, 1 bounce", "no dedicated ray-tracing hardware; budget reduced")
                     }
                     s.rayTracing.raysPerPixel = 1
                     s.rayTracing.resolutionScale = min(s.rayTracing.resolutionScale, 0.5)
@@ -239,7 +248,9 @@ public enum GraphicsFeatureResolver {
             } else {
                 note(.rayTracing, "enabled", "disabled", "Metal ray tracing is not supported on this device")
                 if s.rayTracing.shadows { note(.rayTracedShadows, "ray traced", "shadow maps", "fallback") }
-                if s.rayTracing.reflections { note(.rayTracedReflections, "ray traced", "reflection probes + IBL", "fallback") }
+                if s.rayTracing.reflections {
+                    note(.rayTracedReflections, "ray traced", "reflection probes + IBL", "fallback")
+                }
                 if s.rayTracing.ambientOcclusion { note(.rayTracedAO, "ray traced", "SSAO", "fallback") }
                 s.rayTracing.enabled = false
             }
@@ -252,7 +263,9 @@ public enum GraphicsFeatureResolver {
         // --- Shadows
         if s.shadows.enabled {
             let clamped = min(max(s.shadows.cascades, 1), 4)
-            if clamped != s.shadows.cascades { note(.shadows, "\(s.shadows.cascades) cascades", "\(clamped)", "range 1–4") }
+            if clamped != s.shadows.cascades {
+                note(.shadows, "\(s.shadows.cascades) cascades", "\(clamped)", "range 1–4")
+            }
             s.shadows.cascades = clamped
             let res = min(max(s.shadows.resolution, 256), 8192)
             if res != s.shadows.resolution { note(.shadows, "\(s.shadows.resolution)px", "\(res)px", "range 256–8192") }
@@ -267,7 +280,9 @@ public enum GraphicsFeatureResolver {
             s.anisotropy = a
         }
         let mfi = min(max(s.frame.maxFramesInFlight, 1), 3)
-        if mfi != s.frame.maxFramesInFlight { note(.framePacing, "\(s.frame.maxFramesInFlight) frames in flight", "\(mfi)", "range 1–3") }
+        if mfi != s.frame.maxFramesInFlight {
+            note(.framePacing, "\(s.frame.maxFramesInFlight) frames in flight", "\(mfi)", "range 1–3")
+        }
         s.frame.maxFramesInFlight = mfi
         if s.dynamicResolution.enabled {
             s.dynamicResolution.minScale = min(max(s.dynamicResolution.minScale, 0.25), 1)

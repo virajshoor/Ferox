@@ -18,7 +18,9 @@ public struct Prefab: Hashable, Sendable {
     }
 
     /// Captures `root` and its descendants as a prefab.
-    public static func capture(_ root: Entity, in world: World, id: AssetID = AssetID(), name: String? = nil) throws -> Prefab {
+    public static func capture(_ root: Entity, in world: World, id: AssetID = AssetID(), name: String? = nil) throws
+        -> Prefab
+    {
         let n = name ?? world.get(Name.self, root)?.value ?? "Prefab"
         let doc = try SceneSerializer().encode(world: world, name: n, roots: [root])
         return Prefab(id: id, document: doc)
@@ -81,7 +83,8 @@ public final class SceneManager {
     // Transition state
     public private(set) var fadeAlpha: Float = 0
     public private(set) var fadeColor: Color = .black
-    private var pending: (name: String, mode: SceneLoadMode, transition: SceneTransition, elapsed: Double, swapped: Bool)?
+    private var pending:
+        (name: String, mode: SceneLoadMode, transition: SceneTransition, elapsed: Double, swapped: Bool)?
 
     /// Called after a scene finishes loading.
     public var onSceneLoaded: ((SceneHandle) -> Void)?
@@ -118,7 +121,8 @@ public final class SceneManager {
         loaded.append(LoadedScene(handle: handle, name: document.name, source: source, loadTime: dt))
         if activeScene == nil || mode == .single { activeScene = handle }
         Profiler.shared.count("scene.loadMs", dt * 1000)
-        Log.info("Scene", "Loaded '\(document.name)' (\(created.count) entities) in \(String(format: "%.2f", dt * 1000)) ms")
+        Log.info(
+            "Scene", "Loaded '\(document.name)' (\(created.count) entities) in \(String(format: "%.2f", dt * 1000)) ms")
         onSceneLoaded?(handle)
         return handle
     }
@@ -141,7 +145,9 @@ public final class SceneManager {
         }
         // Persistent entities nested under doomed ones are detached first (destroy is recursive).
         world.read(PersistAcrossScenes.self) { e, _ in
-            if world.get(SceneMember.self, e)?.scene == handle, world.parent(of: e) != nil { world.deferStructural { [world] in world.setParent(e, .null, keepWorldTransform: true) } }
+            if world.get(SceneMember.self, e)?.scene == handle, world.parent(of: e) != nil {
+                world.deferStructural { [world] in world.setParent(e, .null, keepWorldTransform: true) }
+            }
         }
         world.flushDeferred()
         // Only destroy subtree roots among the doomed set (destroy is recursive).
@@ -177,7 +183,9 @@ public final class SceneManager {
     }
 
     /// Starts a faded transition to `name`; the swap happens at the midpoint.
-    public func transition(to name: String, mode: SceneLoadMode = .single, transition: SceneTransition = SceneTransition()) {
+    public func transition(
+        to name: String, mode: SceneLoadMode = .single, transition: SceneTransition = SceneTransition()
+    ) {
         guard transition.duration > 0 else {
             do { try load(name, mode: mode) } catch { Log.error("Scene", "Failed to load '\(name)': \(error)") }
             return

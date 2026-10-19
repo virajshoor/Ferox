@@ -1,6 +1,6 @@
-import Foundation
 import FeroxCore
 import FeroxScene
+import Foundation
 
 // MARK: - 2D
 
@@ -30,7 +30,9 @@ public struct Collider2D: SerializableComponent, Hashable, Sendable {
         s.isTrigger = isTrigger
         return Collider2D(s)
     }
-    public static func circle(_ radius: Float, material: PhysicsMaterial = .default, isTrigger: Bool = false) -> Collider2D {
+    public static func circle(_ radius: Float, material: PhysicsMaterial = .default, isTrigger: Bool = false)
+        -> Collider2D
+    {
         var s = Shape2D.circle(radius: radius)
         s.material = material
         s.isTrigger = isTrigger

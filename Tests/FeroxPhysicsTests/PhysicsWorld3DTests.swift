@@ -1,7 +1,8 @@
+import FeroxCore
 /// Behavioural tests for the 3D rigid-body world: resting contacts on planes, boxes and triangle
 /// meshes, raycasts, teleporting, triggers and sleeping.
 import XCTest
-import FeroxCore
+
 @testable import FeroxPhysics
 
 final class PhysicsWorld3DTests: XCTestCase {
@@ -34,7 +35,8 @@ final class PhysicsWorld3DTests: XCTestCase {
     /// A sphere dropped onto an infinite plane at y = 0 comes to rest with its centre at the radius.
     func testSphereRestsOnPlane() throws {
         let world = PhysicsWorld3D()
-        _ = world.createBody(BodyDesc3D(type: .static, position: .zero, shapes: [Shape3D.plane(normal: .up, distance: 0)]))
+        _ = world.createBody(
+            BodyDesc3D(type: .static, position: .zero, shapes: [Shape3D.plane(normal: .up, distance: 0)]))
         let sphere = makeSphere(world, at: Vec3(0, 3, 0))
         advance(world, seconds: 2)
         let body = try XCTUnwrap(world.body(sphere))
@@ -46,7 +48,8 @@ final class PhysicsWorld3DTests: XCTestCase {
     func testBoxRestsOnStaticBox() throws {
         let world = PhysicsWorld3D()
         _ = world.createBody(BodyDesc3D(type: .static, position: .zero, shapes: [Shape3D.box(Vec3(5, 0.5, 5))]))
-        let box = world.createBody(BodyDesc3D(type: .dynamic, position: Vec3(0, 3, 0), shapes: [Shape3D.box(Vec3(0.5, 0.5, 0.5))]))
+        let box = world.createBody(
+            BodyDesc3D(type: .dynamic, position: Vec3(0, 3, 0), shapes: [Shape3D.box(Vec3(0.5, 0.5, 0.5))]))
         advance(world, seconds: 2)
         let body = try XCTUnwrap(world.body(box))
         XCTAssertEqual(body.position.x, 0, accuracy: 0.05)
@@ -107,8 +110,9 @@ final class PhysicsWorld3DTests: XCTestCase {
     /// A trigger box reports overlap events and does not stop a sphere falling through it.
     func testTriggerReportsOverlapWithoutContactResponse() throws {
         let world = PhysicsWorld3D()
-        _ = world.createBody(BodyDesc3D(
-            type: .static, position: .zero, shapes: [Shape3D.box(Vec3(5, 0.5, 5)).withTrigger()]))
+        _ = world.createBody(
+            BodyDesc3D(
+                type: .static, position: .zero, shapes: [Shape3D.box(Vec3(5, 0.5, 5)).withTrigger()]))
         let sphere = makeSphere(world, at: Vec3(0, 5, 0))
         var events: [ContactEvent<Vec3>] = []
         world.onContact = { events.append($0) }
@@ -121,16 +125,17 @@ final class PhysicsWorld3DTests: XCTestCase {
     /// A resting sphere on a plane falls asleep once it has been still long enough.
     func testRestingSphereFallsAsleep() throws {
         let world = PhysicsWorld3D()
-        _ = world.createBody(BodyDesc3D(type: .static, position: .zero, shapes: [Shape3D.plane(normal: .up, distance: 0)]))
+        _ = world.createBody(
+            BodyDesc3D(type: .static, position: .zero, shapes: [Shape3D.plane(normal: .up, distance: 0)]))
         let sphere = makeSphere(world, at: Vec3(0, 2, 0))
         advance(world, seconds: 3)
         XCTAssertFalse(try XCTUnwrap(world.body(sphere)).isAwake)
     }
 }
 
-private extension Shape3D {
+extension Shape3D {
     /// Returns a copy of the shape flagged as a trigger.
-    func withTrigger() -> Shape3D {
+    fileprivate func withTrigger() -> Shape3D {
         var s = self
         s.isTrigger = true
         return s

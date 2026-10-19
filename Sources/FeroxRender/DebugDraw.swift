@@ -22,7 +22,10 @@ public final class DebugDraw {
     }
 
     public func line(_ a: Vec3, _ b: Vec3, _ color: Color = .white) {
-        guard lineCount < maxLines else { droppedLines += 1; return }
+        guard lineCount < maxLines else {
+            droppedLines += 1
+            return
+        }
         vertices.append(LineVertex(a, color))
         vertices.append(LineVertex(b, color))
     }
@@ -40,11 +43,13 @@ public final class DebugDraw {
     /// Box edges of `box` transformed by `m`.
     public func box(_ box: AABB, transform m: Mat4 = .identity, _ color: Color = .green) {
         guard !box.isEmpty else { return }
-        let lo = box.min, hi = box.max
+        let lo = box.min
+        let hi = box.max
         var c: [Vec3] = []
         c.reserveCapacity(8)
         for i in 0..<8 {
-            c.append(m.transformPoint(Vec3(i & 1 == 0 ? lo.x : hi.x, i & 2 == 0 ? lo.y : hi.y, i & 4 == 0 ? lo.z : hi.z)))
+            c.append(
+                m.transformPoint(Vec3(i & 1 == 0 ? lo.x : hi.x, i & 2 == 0 ? lo.y : hi.y, i & 4 == 0 ? lo.z : hi.z)))
         }
         for (a, b) in [(0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7)] {
             line(c[a], c[b], color)
@@ -54,7 +59,8 @@ public final class DebugDraw {
     public func circle(center: Vec3, normal: Vec3, radius: Float, segments: Int = 32, _ color: Color = .white) {
         let n = normal.lengthSquared > 1e-8 ? normal.normalized : Vec3.up
         let helper = abs(n.y) < 0.99 ? Vec3.up : Vec3(1, 0, 0)
-        let u = n.cross(helper).normalized, v = n.cross(u)
+        let u = n.cross(helper).normalized
+        let v = n.cross(u)
         let s = min(max(segments, 3), 256)
         var prev = center + u * radius
         for i in 1...s {

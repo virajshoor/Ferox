@@ -114,7 +114,7 @@ public enum DecodeLimitError: Error, Equatable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case let .fileTooLarge(path, size, limit): "\(path) is \(size) bytes, over the \(limit)-byte limit"
+        case .fileTooLarge(let path, let size, let limit): "\(path) is \(size) bytes, over the \(limit)-byte limit"
         }
     }
 }

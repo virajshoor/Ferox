@@ -1,5 +1,5 @@
-import Foundation
 import FeroxCore
+import Foundation
 
 /// 2D rigid transform (rotation stored as cos/sin to avoid repeated trig).
 public struct Transform2D: Sendable, Hashable {
@@ -51,15 +51,20 @@ public struct Polygon2D: Codable, Sendable, Hashable {
         guard pts.count >= 3 else { return [] }
         // Andrew's monotone chain → CCW hull.
         pts.sort { $0.x != $1.x ? $0.x < $1.x : $0.y < $1.y }
-        var lower: [Vec2] = [], upper: [Vec2] = []
+        var lower: [Vec2] = []
+        var upper: [Vec2] = []
         for p in pts {
-            while lower.count >= 2 && (lower[lower.count - 1] - lower[lower.count - 2]).cross(p - lower[lower.count - 2]) <= 1e-9 {
+            while lower.count >= 2
+                && (lower[lower.count - 1] - lower[lower.count - 2]).cross(p - lower[lower.count - 2]) <= 1e-9
+            {
                 lower.removeLast()
             }
             lower.append(p)
         }
         for p in pts.reversed() {
-            while upper.count >= 2 && (upper[upper.count - 1] - upper[upper.count - 2]).cross(p - upper[upper.count - 2]) <= 1e-9 {
+            while upper.count >= 2
+                && (upper[upper.count - 1] - upper[upper.count - 2]).cross(p - upper[upper.count - 2]) <= 1e-9
+            {
                 upper.removeLast()
             }
             upper.append(p)
@@ -74,7 +79,8 @@ public struct Polygon2D: Codable, Sendable, Hashable {
         var area: Float = 0
         let o = v[0]
         for i in 1..<(v.count - 1) {
-            let e1 = v[i] - o, e2 = v[i + 1] - o
+            let e1 = v[i] - o
+            let e2 = v[i + 1] - o
             let a = 0.5 * e1.cross(e2)
             c += a * (e1 + e2) / 3
             area += a
@@ -85,9 +91,11 @@ public struct Polygon2D: Codable, Sendable, Hashable {
     /// Mass properties for unit density: (area, centroid, rotational inertia about the centroid).
     public func massProperties() -> (area: Float, centroid: Vec2, inertia: Float) {
         let o = centroid
-        var area: Float = 0, inertia: Float = 0
+        var area: Float = 0
+        var inertia: Float = 0
         for i in 0..<vertices.count {
-            let e1 = vertices[i] - o, e2 = vertices[(i + 1) % vertices.count] - o
+            let e1 = vertices[i] - o
+            let e2 = vertices[(i + 1) % vertices.count] - o
             let d = e1.cross(e2)
             let triArea = 0.5 * d
             area += triArea
@@ -123,7 +131,9 @@ public struct Shape2D: Codable, Sendable, Hashable {
         self.isTrigger = isTrigger
     }
 
-    public static func circle(radius: Float, center: Vec2 = .zero) -> Shape2D { Shape2D(.circle(center: center, radius: radius)) }
+    public static func circle(radius: Float, center: Vec2 = .zero) -> Shape2D {
+        Shape2D(.circle(center: center, radius: radius))
+    }
     public static func box(halfExtents: Vec2, center: Vec2 = .zero, angle: Float = 0) -> Shape2D {
         Shape2D(.polygon(.box(halfExtents: halfExtents, center: center, angle: angle)))
     }
@@ -160,7 +170,8 @@ public struct Shape2D: Codable, Sendable, Hashable {
             let p = xf.apply(c)
             return (p - r, p + r)
         case .polygon(let poly):
-            var lo = Vec2(repeating: .infinity), hi = Vec2(repeating: -.infinity)
+            var lo = Vec2(repeating: .infinity)
+            var hi = Vec2(repeating: -.infinity)
             for v in poly.vertices {
                 let w = xf.apply(v)
                 lo = pointwiseMin(lo, w)
@@ -168,7 +179,8 @@ public struct Shape2D: Codable, Sendable, Hashable {
             }
             return (lo, hi)
         case .capsule(let a, let b, let r):
-            let wa = xf.apply(a), wb = xf.apply(b)
+            let wa = xf.apply(a)
+            let wb = xf.apply(b)
             return (pointwiseMin(wa, wb) - r, pointwiseMax(wa, wb) + r)
         }
     }
@@ -189,29 +201,30 @@ struct Manifold2D {
 
 /// Narrow-phase collision routines. All inputs are in world space.
 enum Collide2D {
-    static func manifold(_ a: Shape2D, _ xa: Transform2D, _ b: Shape2D, _ xb: Transform2D, margin: Float) -> Manifold2D {
+    static func manifold(_ a: Shape2D, _ xa: Transform2D, _ b: Shape2D, _ xb: Transform2D, margin: Float) -> Manifold2D
+    {
         switch (a.geometry, b.geometry) {
-        case let (.circle(ca, ra), .circle(cb, rb)):
+        case (.circle(let ca, let ra), .circle(let cb, let rb)):
             return circles(xa.apply(ca), ra, xb.apply(cb), rb, margin: margin)
-        case let (.polygon(pa), .circle(cb, rb)):
+        case (.polygon(let pa), .circle(let cb, let rb)):
             return polygonCircle(pa, xa, xb.apply(cb), rb, margin: margin)
-        case let (.circle(ca, ra), .polygon(pb)):
+        case (.circle(let ca, let ra), .polygon(let pb)):
             var m = polygonCircle(pb, xb, xa.apply(ca), ra, margin: margin)
             m.normal = -m.normal
             return m
-        case let (.polygon(pa), .polygon(pb)):
+        case (.polygon(let pa), .polygon(let pb)):
             return polygons(pa, xa, pb, xb, margin: margin)
-        case let (.capsule(a0, a1, ra), .circle(cb, rb)):
+        case (.capsule(let a0, let a1, let ra), .circle(let cb, let rb)):
             return segmentCircle(xa.apply(a0), xa.apply(a1), ra, xb.apply(cb), rb, margin: margin)
-        case let (.circle(ca, ra), .capsule(b0, b1, rb)):
+        case (.circle(let ca, let ra), .capsule(let b0, let b1, let rb)):
             var m = segmentCircle(xb.apply(b0), xb.apply(b1), rb, xa.apply(ca), ra, margin: margin)
             m.normal = -m.normal
             return m
-        case let (.capsule(a0, a1, ra), .capsule(b0, b1, rb)):
+        case (.capsule(let a0, let a1, let ra), .capsule(let b0, let b1, let rb)):
             return capsules(xa.apply(a0), xa.apply(a1), ra, xb.apply(b0), xb.apply(b1), rb, margin: margin)
-        case let (.polygon(pa), .capsule(b0, b1, rb)):
+        case (.polygon(let pa), .capsule(let b0, let b1, let rb)):
             return polygonCapsule(pa, xa, xb.apply(b0), xb.apply(b1), rb, margin: margin)
-        case let (.capsule(a0, a1, ra), .polygon(pb)):
+        case (.capsule(let a0, let a1, let ra), .polygon(let pb)):
             var m = polygonCapsule(pb, xb, xa.apply(a0), xa.apply(a1), ra, margin: margin)
             m.normal = -m.normal
             return m
@@ -240,9 +253,14 @@ enum Collide2D {
 
     /// Closest points between segments p1q1 and p2q2 (Ericson, RTCD 5.1.9).
     static func closestSegmentSegment(_ p1: Vec2, _ q1: Vec2, _ p2: Vec2, _ q2: Vec2) -> (Vec2, Vec2) {
-        let d1 = q1 - p1, d2 = q2 - p2, r = p1 - p2
-        let a = d1.dot(d1), e = d2.dot(d2), f = d2.dot(r)
-        var s: Float = 0, t: Float = 0
+        let d1 = q1 - p1
+        let d2 = q2 - p2
+        let r = p1 - p2
+        let a = d1.dot(d1)
+        let e = d2.dot(d2)
+        let f = d2.dot(r)
+        var s: Float = 0
+        var t: Float = 0
         if a <= 1e-12 && e <= 1e-12 { return (p1, p2) }
         if a <= 1e-12 {
             t = (f / e).saturated
@@ -267,9 +285,12 @@ enum Collide2D {
         return (p1 + d1 * s, p2 + d2 * t)
     }
 
-    static func capsules(_ a0: Vec2, _ a1: Vec2, _ ra: Float, _ b0: Vec2, _ b1: Vec2, _ rb: Float, margin: Float) -> Manifold2D {
+    static func capsules(_ a0: Vec2, _ a1: Vec2, _ ra: Float, _ b0: Vec2, _ b1: Vec2, _ rb: Float, margin: Float)
+        -> Manifold2D
+    {
         // Parallel overlapping capsules need two points for stability.
-        let da = a1 - a0, db = b1 - b0
+        let da = a1 - a0
+        let db = b1 - b0
         if Swift.abs(da.normalized.cross(db.normalized)) < 0.05 && da.lengthSquared > 1e-8 && db.lengthSquared > 1e-8 {
             var m = Manifold2D()
             var pts: [ManifoldPoint2D] = []
@@ -290,11 +311,14 @@ enum Collide2D {
         return circles(ca, ra, cb, rb, margin: margin)
     }
 
-    static func polygonCircle(_ poly: Polygon2D, _ xf: Transform2D, _ center: Vec2, _ r: Float, margin: Float) -> Manifold2D {
+    static func polygonCircle(_ poly: Polygon2D, _ xf: Transform2D, _ center: Vec2, _ r: Float, margin: Float)
+        -> Manifold2D
+    {
         let c = xf.invApply(center)
         var bestSep = -Float.infinity
         var best = 0
-        let v = poly.vertices, n = poly.normals
+        let v = poly.vertices
+        let n = poly.normals
         for i in v.indices {
             let s = n[i].dot(c - v[i])
             if s > r + margin { return Manifold2D() }
@@ -303,7 +327,8 @@ enum Collide2D {
                 best = i
             }
         }
-        let v1 = v[best], v2 = v[(best + 1) % v.count]
+        let v1 = v[best]
+        let v2 = v[(best + 1) % v.count]
         var localNormal: Vec2
         var localPoint: Vec2
         var sep: Float
@@ -326,7 +351,9 @@ enum Collide2D {
             points: [ManifoldPoint2D(point: xf.apply(localPoint), separation: sep, id: UInt32(best))])
     }
 
-    static func polygonCapsule(_ poly: Polygon2D, _ xf: Transform2D, _ s0: Vec2, _ s1: Vec2, _ r: Float, margin: Float) -> Manifold2D {
+    static func polygonCapsule(_ poly: Polygon2D, _ xf: Transform2D, _ s0: Vec2, _ s1: Vec2, _ r: Float, margin: Float)
+        -> Manifold2D
+    {
         // Treat the capsule's core segment as a degenerate polygon with radius.
         guard let seg = Polygon2D(points: [s0, s1, s0 + (s1 - s0).perpendicular.normalized * 1e-4]) else {
             return polygonCircle(poly, xf, s0, r, margin: margin)
@@ -341,9 +368,13 @@ enum Collide2D {
     }
 
     /// Polygon-polygon via SAT with reference-face clipping (Box2D style).
-    static func polygons(_ pa: Polygon2D, _ xa: Transform2D, _ pb: Polygon2D, _ xb: Transform2D, margin: Float) -> Manifold2D {
-        let va = pa.vertices.map(xa.apply), na = pa.normals.map(xa.rotate)
-        let vb = pb.vertices.map(xb.apply), nb = pb.normals.map(xb.rotate)
+    static func polygons(_ pa: Polygon2D, _ xa: Transform2D, _ pb: Polygon2D, _ xb: Transform2D, margin: Float)
+        -> Manifold2D
+    {
+        let va = pa.vertices.map(xa.apply)
+        let na = pa.normals.map(xa.rotate)
+        let vb = pb.vertices.map(xb.apply)
+        let nb = pb.normals.map(xb.rotate)
 
         func maxSeparation(_ v1: [Vec2], _ n1: [Vec2], _ v2: [Vec2]) -> (Int, Float) {
             var bestI = 0
@@ -365,14 +396,25 @@ enum Collide2D {
         if sepB > margin { return Manifold2D() }
 
         let flip: Bool
-        let refV: [Vec2], refN: [Vec2], incV: [Vec2], incN: [Vec2]
+        let refV: [Vec2]
+        let refN: [Vec2]
+        let incV: [Vec2]
+        let incN: [Vec2]
         let refEdge: Int
         if sepB > sepA + 0.1 * 0.005 {
             flip = true
-            refV = vb; refN = nb; incV = va; incN = na; refEdge = edgeB
+            refV = vb
+            refN = nb
+            incV = va
+            incN = na
+            refEdge = edgeB
         } else {
             flip = false
-            refV = va; refN = na; incV = vb; incN = nb; refEdge = edgeA
+            refV = va
+            refN = na
+            incV = vb
+            incN = nb
+            refEdge = edgeA
         }
 
         // Incident edge: most anti-parallel to the reference normal.
@@ -386,15 +428,18 @@ enum Collide2D {
                 incEdge = i
             }
         }
-        let i1 = incEdge, i2 = (incEdge + 1) % incV.count
+        let i1 = incEdge
+        let i2 = (incEdge + 1) % incV.count
         var clip: [(Vec2, UInt32)] = [(incV[i1], UInt32(i1)), (incV[i2], UInt32(i2))]
 
-        let r1 = refV[refEdge], r2 = refV[(refEdge + 1) % refV.count]
+        let r1 = refV[refEdge]
+        let r2 = refV[(refEdge + 1) % refV.count]
         let tangent = (r2 - r1).normalized
 
         func clipSegment(_ pts: [(Vec2, UInt32)], _ n: Vec2, _ offset: Float, _ clipID: UInt32) -> [(Vec2, UInt32)] {
             var out: [(Vec2, UInt32)] = []
-            let d0 = n.dot(pts[0].0) - offset, d1 = n.dot(pts[1].0) - offset
+            let d0 = n.dot(pts[0].0) - offset
+            let d1 = n.dot(pts[1].0) - offset
             if d0 <= 0 { out.append(pts[0]) }
             if d1 <= 0 { out.append(pts[1]) }
             if d0 * d1 < 0 {
@@ -427,7 +472,9 @@ enum Collide2D {
     // MARK: Ray casts
 
     /// Ray cast against a shape; returns (fraction along `d`, normal).
-    static func raycast(_ shape: Shape2D, _ xf: Transform2D, origin o: Vec2, delta d: Vec2, inflate: Float = 0) -> (Float, Vec2)? {
+    static func raycast(_ shape: Shape2D, _ xf: Transform2D, origin o: Vec2, delta d: Vec2, inflate: Float = 0) -> (
+        Float, Vec2
+    )? {
         switch shape.geometry {
         case .circle(let c, let r):
             return rayCircle(o, d, xf.apply(c), r + inflate)
@@ -488,8 +535,10 @@ enum Collide2D {
     }
 
     static func rayPolygon(_ o: Vec2, _ d: Vec2, _ poly: Polygon2D, _ xf: Transform2D) -> (Float, Vec2)? {
-        let lo = xf.invApply(o), ld = xf.invRotate(d)
-        var lower: Float = 0, upper: Float = 1
+        let lo = xf.invApply(o)
+        let ld = xf.invRotate(d)
+        var lower: Float = 0
+        var upper: Float = 1
         var index = -1
         for i in poly.vertices.indices {
             let num = poly.normals[i].dot(poly.vertices[i] - lo)

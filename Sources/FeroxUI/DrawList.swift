@@ -7,7 +7,8 @@ import Foundation
 public struct UIDrawList: Sendable {
     public enum Command: Sendable {
         /// Rounded rectangle with optional vertical gradient and border.
-        case rect(frame: Rect, color: Color, bottomColor: Color?, cornerRadius: Float, borderWidth: Float, borderColor: Color)
+        case rect(
+            frame: Rect, color: Color, bottomColor: Color?, cornerRadius: Float, borderWidth: Float, borderColor: Color)
         /// Textured quad (`texture` resolved by the renderer's asset bridge).
         case image(frame: Rect, texture: AssetID, uv: Rect, tint: Color, cornerRadius: Float)
         /// Glyph quads referencing the font atlas page `atlas`.
@@ -19,10 +20,15 @@ public struct UIDrawList: Sendable {
     private var clipStack: [Rect] = []
     public init() {}
 
-    public mutating func rect(_ r: Rect, _ c: Color, bottom: Color? = nil, radius: Float = 0, border: Float = 0, borderColor: Color = .clear) {
+    public mutating func rect(
+        _ r: Rect, _ c: Color, bottom: Color? = nil, radius: Float = 0, border: Float = 0, borderColor: Color = .clear
+    ) {
         guard c.a > 0.001 || (border > 0 && borderColor.a > 0.001) || (bottom?.a ?? 0) > 0.001 else { return }
         guard currentClip.map({ $0.intersects(r) }) ?? true else { return }
-        commands.append(.rect(frame: r, color: c, bottomColor: bottom, cornerRadius: radius, borderWidth: border, borderColor: borderColor))
+        commands.append(
+            .rect(
+                frame: r, color: c, bottomColor: bottom, cornerRadius: radius, borderWidth: border,
+                borderColor: borderColor))
     }
     public mutating func image(_ r: Rect, _ tex: AssetID, uv: Rect = .unit, tint: Color = .white, radius: Float = 0) {
         guard currentClip.map({ $0.intersects(r) }) ?? true else { return }
@@ -105,6 +111,7 @@ public struct UIFontDescriptor: Sendable, Hashable {
         self.italic = italic
     }
     public func with(size: Float? = nil, bold: Bool? = nil, italic: Bool? = nil) -> UIFontDescriptor {
-        UIFontDescriptor(family: family, size: size ?? self.size, bold: bold ?? self.bold, italic: italic ?? self.italic)
+        UIFontDescriptor(
+            family: family, size: size ?? self.size, bold: bold ?? self.bold, italic: italic ?? self.italic)
     }
 }

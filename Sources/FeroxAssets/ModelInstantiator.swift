@@ -30,7 +30,9 @@ extension AssetManager {
         registerMesh(quad, id: BuiltinAssets.quad)
         registerTexture(.solid(.white), id: BuiltinAssets.whiteTexture)
         registerTexture(.checkerboard(), id: BuiltinAssets.checkerTexture)
-        registerTexture(ImageData(width: 1, height: 1, format: .rgba8Unorm, pixels: Data([128, 128, 255, 255])), id: BuiltinAssets.flatNormalTexture)
+        registerTexture(
+            ImageData(width: 1, height: 1, format: .rgba8Unorm, pixels: Data([128, 128, 255, 255])),
+            id: BuiltinAssets.flatNormalTexture)
         registerMaterial(.default)
     }
 }
@@ -61,7 +63,8 @@ public struct ModelInstantiator {
     /// - Parameter playFirstAnimation: adds an `Animator` playing the first clip, if any.
     @discardableResult
     public func instantiate(
-        _ model: LoadedModel, id: AssetID, into world: World, transform: Transform = Transform(), parent: Entity = .null,
+        _ model: LoadedModel, id: AssetID, into world: World, transform: Transform = Transform(),
+        parent: Entity = .null,
         playFirstAnimation: Bool = true
     ) -> Entity {
         register(model, id: id)
@@ -77,7 +80,8 @@ public struct ModelInstantiator {
             if let mi = node.mesh, data.meshes.indices.contains(mi) {
                 let mesh = data.meshes[mi]
                 let mats = mesh.submeshes.map { s in
-                    data.materials.indices.contains(s.materialIndex) ? data.materials[s.materialIndex].id : MaterialData.default.id
+                    data.materials.indices.contains(s.materialIndex)
+                        ? data.materials[s.materialIndex].id : MaterialData.default.id
                 }
                 if let si = node.skin, data.skins.indices.contains(si), mesh.isSkinned {
                     world.add(SkinnedMeshRenderer(mesh: meshID(id, mi), materials: mats, skin: skinID(id, si)), to: e)
@@ -98,7 +102,10 @@ public struct ModelInstantiator {
             world.modify(SkinnedMeshRenderer.self, entities[n]) { $0.joints = joints }
         }
         if let first = data.skins.first {
-            world.add(SkeletonBinding(skeleton: skinID(id, 0), joints: first.joints.map { $0 < entities.count ? entities[$0] : .null }), to: root)
+            world.add(
+                SkeletonBinding(
+                    skeleton: skinID(id, 0), joints: first.joints.map { $0 < entities.count ? entities[$0] : .null }),
+                to: root)
         }
         if playFirstAnimation, let clip = data.animations.first {
             world.add(Animator(clip: clip.id), to: root)

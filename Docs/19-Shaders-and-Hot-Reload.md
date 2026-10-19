@@ -185,7 +185,7 @@ let skinned = try shaders.function("meshVertex", variant: ShaderVariant(skinning
 
 This document was written from the source. No macOS machine or Swift toolchain was available while the engine was written, so none of the ten modules has been compiled, and no compiler diagnostics, pipeline counts or reload timings are reported here. The function names quoted above are taken from the source and have not been resolved against a compiled library.
 
-The `Tests/` directory contains a `FeroxRenderTests` target with one file, `RenderMathTests.swift`. It does not exercise `ShaderLibrary`, any shader, or hot reload. The CI workflow builds on macOS and runs `swift test`, but no test covers shader compilation. Whether the shaders compile, whether the reload path behaves as described, and how the Metal and MetalFX paths perform are all unverified on hardware.
+`FeroxRenderTests` covers the CPU side of rendering, including a source check that `Culling.metal` declares `access::read` and an 8-uint indirect stride. The macOS CI job compiles every shader module with `Scripts/compile-shaders.sh` (`xcrun metal`, `Common.metal` prepended). That is a compile, not a GPU run. Hot reload, `ShaderLibrary` pipeline caches and MetalFX have not been executed on hardware in CI.
 
 ## 12. Related documents
 

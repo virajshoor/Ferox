@@ -21,14 +21,16 @@ public struct TRS: Hashable, Codable, Sendable {
     /// Interpolates position/scale linearly and rotation with nlerp — used for render-time
     /// interpolation between fixed simulation steps.
     @inlinable public func interpolated(to b: TRS, _ t: Float) -> TRS {
-        TRS(position: position.lerp(to: b.position, t), rotation: rotation.nlerp(to: b.rotation, t),
+        TRS(
+            position: position.lerp(to: b.position, t), rotation: rotation.nlerp(to: b.rotation, t),
             scale: scale.lerp(to: b.scale, t))
     }
 
     /// Composition `parent * child` (exact when scales are uniform; non-uniform scale with
     /// rotation produces shear that TRS cannot represent, so use matrices for that case).
     @inlinable public static func * (p: TRS, c: TRS) -> TRS {
-        TRS(position: p.position + p.rotation.act(p.scale * c.position), rotation: p.rotation * c.rotation,
+        TRS(
+            position: p.position + p.rotation.act(p.scale * c.position), rotation: p.rotation * c.rotation,
             scale: p.scale * c.scale)
     }
 

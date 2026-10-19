@@ -123,7 +123,8 @@ public enum SceneError: Error, CustomStringConvertible, Equatable {
 
     public var description: String {
         switch self {
-        case .unsupportedVersion(let v): return "Scene format version \(v) is not supported (max \(SceneDocument.currentVersion))"
+        case .unsupportedVersion(let v):
+            return "Scene format version \(v) is not supported (max \(SceneDocument.currentVersion))"
         case .unknownComponent(let n): return "Unknown component type '\(n)'"
         case .invalidParent(let e, let p): return "Entity \(e) references missing parent \(p)"
         case .duplicateID(let i): return "Duplicate entity id \(i) in scene document"
@@ -171,7 +172,9 @@ public struct SceneDocument: Codable, Hashable, Sendable {
     /// Parses and validates a document. Validation rejects unsupported versions, duplicate
     /// ids, dangling or cyclic parents, oversized documents and pathological nesting.
     public static func load(from data: Data, limits: DecodeLimits = .default) throws -> SceneDocument {
-        guard data.count <= limits.maxFileBytes else { throw SceneError.malformed("file exceeds \(limits.maxFileBytes) bytes") }
+        guard data.count <= limits.maxFileBytes else {
+            throw SceneError.malformed("file exceeds \(limits.maxFileBytes) bytes")
+        }
         let doc: SceneDocument
         do {
             doc = try JSONDecoder().decode(SceneDocument.self, from: data)
@@ -201,7 +204,9 @@ public struct SceneDocument: Codable, Hashable, Sendable {
             var seen = Set<Int>()
             var cursor = r.parent
             while let c = cursor {
-                if c == r.id || !seen.insert(c).inserted { throw SceneError.malformed("parent cycle at entity \(r.id)") }
+                if c == r.id || !seen.insert(c).inserted {
+                    throw SceneError.malformed("parent cycle at entity \(r.id)")
+                }
                 cursor = parentOf[c] ?? nil
             }
         }

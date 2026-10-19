@@ -9,7 +9,10 @@ public struct Color: Hashable, Codable, Sendable {
     public var r: Float, g: Float, b: Float, a: Float
 
     @inlinable public init(_ r: Float, _ g: Float, _ b: Float, _ a: Float = 1) {
-        self.r = r; self.g = g; self.b = b; self.a = a
+        self.r = r
+        self.g = g
+        self.b = b
+        self.a = a
     }
     @inlinable public init(_ v: Vec4) { self.init(v.x, v.y, v.z, v.w) }
     @inlinable public var vector: Vec4 { Vec4(r, g, b, a) }
@@ -51,7 +54,9 @@ public struct Color: Hashable, Codable, Sendable {
         let hh = (h - h.rounded(.down)) * 6
         let i = Int(hh)
         let f = hh - Float(i)
-        let p = v * (1 - s), q = v * (1 - s * f), t = v * (1 - s * (1 - f))
+        let p = v * (1 - s)
+        let q = v * (1 - s * f)
+        let t = v * (1 - s * (1 - f))
         let (r, g, b): (Float, Float, Float)
         switch i {
         case 0: (r, g, b) = (v, t, p)
@@ -84,7 +89,10 @@ public struct Gradient: Hashable, Codable, Sendable {
     public struct Stop: Hashable, Codable, Sendable {
         public var position: Float
         public var color: Color
-        public init(_ position: Float, _ color: Color) { self.position = position; self.color = color }
+        public init(_ position: Float, _ color: Color) {
+            self.position = position
+            self.color = color
+        }
     }
     public var stops: [Stop]
 
@@ -96,7 +104,8 @@ public struct Gradient: Hashable, Codable, Sendable {
         if t <= first.position { return first.color }
         if t >= last.position { return last.color }
         for i in 1..<stops.count where t <= stops[i].position {
-            let a = stops[i - 1], b = stops[i]
+            let a = stops[i - 1]
+            let b = stops[i]
             let span = b.position - a.position
             return a.color.lerp(to: b.color, span > 0 ? (t - a.position) / span : 0)
         }

@@ -1,5 +1,5 @@
-import Foundation
 import FeroxCore
+import Foundation
 
 // Render-facing component *data*. These live in FeroxScene (not FeroxRender) so that
 // scenes can be authored, serialized and tested without Metal; the renderer reads them.
@@ -54,7 +54,8 @@ public struct Camera: Component, Codable, Hashable, Sendable {
         case .perspective:
             p = .perspective(fovY: fieldOfView, aspect: aspect, near: near, far: far)
         case .orthographic:
-            let h = orthographicSize, w = h * aspect
+            let h = orthographicSize
+            let w = h * aspect
             p = .orthographic(left: -w, right: w, bottom: -h, top: h, near: near, far: far)
         }
         if jitter != .zero {
@@ -73,7 +74,8 @@ public struct Camera: Component, Codable, Hashable, Sendable {
     /// origin), for a camera whose world matrix is `cameraToWorld`. Works for both projections.
     public func ray(through point: Vec2, aspect: Float, cameraToWorld: Mat4) -> Ray {
         let unproject = cameraToWorld * projectionMatrix(aspect: aspect).inverse
-        let x = point.x * 2 - 1, y = 1 - point.y * 2
+        let x = point.x * 2 - 1
+        let y = 1 - point.y * 2
         // Reverse-Z: NDC depth 1 is the near plane. 0.5 stays finite even with an infinite far plane.
         let near = unproject.transformPoint(Vec3(x, y, 1))
         let mid = unproject.transformPoint(Vec3(x, y, 0.5))
@@ -186,7 +188,9 @@ public struct LODGroup: Component, Codable, Hashable, Sendable {
     }
 }
 
-public enum SpriteBlendMode: String, Codable, Sendable, CaseIterable { case alpha, additive, multiply, premultiplied, opaque }
+public enum SpriteBlendMode: String, Codable, Sendable, CaseIterable {
+    case alpha, additive, multiply, premultiplied, opaque
+}
 public enum TextureFilter: String, Codable, Sendable, CaseIterable { case nearest, linear }
 
 /// A textured quad rendered by the 2D batcher.
@@ -287,7 +291,8 @@ public struct Tilemap: Component, Codable, Hashable, Sendable {
     public func uvRect(for tile: Int32) -> Rect {
         let col = Int(tile) % tilesetColumns
         let row = Int(tile) / tilesetColumns
-        let w = 1 / Float(tilesetColumns), h = 1 / Float(tilesetRows)
+        let w = 1 / Float(tilesetColumns)
+        let h = 1 / Float(tilesetRows)
         return Rect(x: Float(col) * w, y: Float(row) * h, width: w, height: h)
     }
 }

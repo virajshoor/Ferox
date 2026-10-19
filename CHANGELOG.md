@@ -18,6 +18,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- CI pins `swift:5.10` and `swift:6.2` by digest, adds a Swift 6.2 job that lints with `swift format` and runs `swift test --enable-xctest`, treats warnings as errors on the Swift 5.10 job, and moves the Mac job to `macos-15` with a required Xcode 16.4. That job compiles every shader with `Scripts/compile-shaders.sh`.
+- Sources and tests are formatted with `swift format` (`.swift-format`).
+
+### Fixed
+
 - **Breaking:** `UDPTransport(listenOn:dtls:)` and `UDPTransport(connectingTo:dtls:)` are replaced by `init(listenOn:security:)` and `init(connectingTo:security:)`. Both throw on an invalid security configuration.
 - CPU hot paths fetch component stores once per pass, reuse scratch buffers, gather active physics contacts in one pass, and give 2D drawables and shadowed lights a total sort order. Results are unchanged; no timings have been measured. See [section 10 of Docs/21-Performance.md](Docs/21-Performance.md#10-cpu-hot-paths).
 

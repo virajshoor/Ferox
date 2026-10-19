@@ -1,5 +1,5 @@
-import Foundation
 import FeroxCore
+import Foundation
 
 public struct BodyDesc3D: Sendable {
     public var type: BodyType = .dynamic
@@ -58,7 +58,9 @@ public struct Body3D: Sendable {
         (previousPosition.lerp(to: position, alpha), previousRotation.nlerp(to: rotation, alpha))
     }
 
-    public func velocity(at worldPoint: Vec3) -> Vec3 { linearVelocity + angularVelocity.cross(worldPoint - worldCenter) }
+    public func velocity(at worldPoint: Vec3) -> Vec3 {
+        linearVelocity + angularVelocity.cross(worldPoint - worldCenter)
+    }
 
     mutating func updateWorldInertia() {
         let r = Mat3(rotation)
@@ -127,7 +129,8 @@ public final class PhysicsWorld3D {
             type: d.type, position: d.position, rotation: d.rotation.normalized, linearVelocity: d.linearVelocity,
             angularVelocity: d.angularVelocity, previousPosition: d.position, previousRotation: d.rotation.normalized,
             shapes: d.shapes, linearDamping: d.linearDamping, angularDamping: d.angularDamping,
-            gravityScale: d.gravityScale, angularFactor: d.angularFactor, allowSleep: d.allowSleep, userData: d.userData)
+            gravityScale: d.gravityScale, angularFactor: d.angularFactor, allowSleep: d.allowSleep, userData: d.userData
+        )
         let index: Int
         if let i = freeBodies.popLast() {
             index = Int(i)
@@ -207,7 +210,9 @@ public final class PhysicsWorld3D {
             if let point { b.angularVelocity += b.invInertiaWorld * (point - b.worldCenter).cross(j) }
         }
     }
-    public func applyAngularImpulse(_ id: BodyID, _ j: Vec3) { mutate(id) { $0.angularVelocity += $0.invInertiaWorld * j } }
+    public func applyAngularImpulse(_ id: BodyID, _ j: Vec3) {
+        mutate(id) { $0.angularVelocity += $0.invInertiaWorld * j }
+    }
     public func setType(_ id: BodyID, _ t: BodyType) {
         mutate(id) { $0.type = t }
         if isValid(id) { recomputeMass(Int(id.index)) }
@@ -260,7 +265,8 @@ public final class PhysicsWorld3D {
             if m > 0 {
                 c /= m
                 // Shift the inertia tensor from the body origin to the centre of mass.
-                let shift = Mat3(diagonal: Vec3(repeating: c.lengthSquared)) + Mat3(columns: c * -c.x, c * -c.y, c * -c.z)
+                let shift =
+                    Mat3(diagonal: Vec3(repeating: c.lengthSquared)) + Mat3(columns: c * -c.x, c * -c.y, c * -c.z)
                 inertia = inertia + shift * -m
                 b.mass = m
                 b.invMass = 1 / m
@@ -409,10 +415,13 @@ public final class PhysicsWorld3D {
         var best = len
         for j in bodies.indices where j != i {
             guard let o = bodies[j], o.type != .dynamic, !jointsDisableCollision(i, j),
-                  o.aabb.inflated(by: core).intersect(ray, maxDistance: len) != nil else { continue }
+                o.aabb.inflated(by: core).intersect(ray, maxDistance: len) != nil
+            else { continue }
             let pose = o.pose
             for s in o.shapes where !s.isTrigger && filter.shouldCollide(with: s.filter) {
-                guard let (t, n) = Collide3D.rayShape(s, pose, c, d, best, inflate: core), t > 0, n.dot(d) < 0 else { continue }
+                guard let (t, n) = Collide3D.rayShape(s, pose, c, d, best, inflate: core), t > 0, n.dot(d) < 0 else {
+                    continue
+                }
                 best = t
             }
         }
@@ -440,18 +449,23 @@ public final class PhysicsWorld3D {
                 return
             }
             guard a.aabb.intersects(b.aabb), !jointsDisableCollision(ia, ib) else { return }
-            let pa = a.pose, pb = b.pose
+            let pa = a.pose
+            let pb = b.pose
             for (sa, shapeA) in a.shapes.enumerated() {
                 let boxA = shapeA.aabb(pa).inflated(by: settings.speculativeDistance)
                 for (sb, shapeB) in b.shapes.enumerated() {
-                    guard shapeA.filter.shouldCollide(with: shapeB.filter), boxA.intersects(shapeB.aabb(pb)) else { continue }
-                    let ka = ShapeRef(body: ia, shape: sa), kb = ShapeRef(body: ib, shape: sb)
+                    guard shapeA.filter.shouldCollide(with: shapeB.filter), boxA.intersects(shapeB.aabb(pb)) else {
+                        continue
+                    }
+                    let ka = ShapeRef(body: ia, shape: sa)
+                    let kb = ShapeRef(body: ib, shape: sb)
                     let flip = ka > kb
                     let (bi, bj, si, sj) = flip ? (ib, ia, sb, sa) : (ia, ib, sa, sb)
                     let (s1, s2) = flip ? (shapeB, shapeA) : (shapeA, shapeB)
                     let (p1, p2) = flip ? (pb, pa) : (pa, pb)
                     let trigger = s1.isTrigger || s2.isTrigger
-                    let manifold = Collide3D.manifold(s1, p1, s2, p2, margin: trigger ? 0 : settings.speculativeDistance)
+                    let manifold = Collide3D.manifold(
+                        s1, p1, s2, p2, margin: trigger ? 0 : settings.speculativeDistance)
                     let key = ContactKey(ka, kb)
                     seen.insert(key)
                     var c = contacts[key] ?? Contact3D(bodyA: bi, bodyB: bj, shapeA: si, shapeB: sj, isTrigger: trigger)
@@ -478,7 +492,9 @@ public final class PhysicsWorld3D {
 
     func jointsDisableCollision(_ a: Int, _ b: Int) -> Bool {
         for j in joints {
-            if let j, !j.collideConnected, (j.bodyA == a && j.bodyB == b) || (j.bodyA == b && j.bodyB == a) { return true }
+            if let j, !j.collideConnected, (j.bodyA == a && j.bodyB == b) || (j.bodyA == b && j.bodyB == a) {
+                return true
+            }
         }
         return false
     }
@@ -507,7 +523,9 @@ public final class PhysicsWorld3D {
             if bodies[c.bodyA]?.type == .dynamic && bodies[c.bodyB]?.type == .dynamic { uf.union(c.bodyA, c.bodyB) }
         }
         for j in joints {
-            if let j, bodies[j.bodyA]?.type == .dynamic, bodies[j.bodyB]?.type == .dynamic { uf.union(j.bodyA, j.bodyB) }
+            if let j, bodies[j.bodyA]?.type == .dynamic, bodies[j.bodyB]?.type == .dynamic {
+                uf.union(j.bodyA, j.bodyB)
+            }
         }
         let lin2 = settings.sleepLinearThreshold * settings.sleepLinearThreshold
         let ang2 = settings.sleepAngularThreshold * settings.sleepAngularThreshold
@@ -553,7 +571,10 @@ public final class PhysicsWorld3D {
         includeTriggers: Bool = false
     ) -> RaycastHit3D? {
         var best: RaycastHit3D?
-        raycastAll(origin: origin, direction: direction, maxDistance: maxDistance, filter: filter, includeTriggers: includeTriggers) {
+        raycastAll(
+            origin: origin, direction: direction, maxDistance: maxDistance, filter: filter,
+            includeTriggers: includeTriggers
+        ) {
             if $0.distance < (best?.distance ?? .infinity) { best = $0 }
             return true
         }
@@ -598,7 +619,9 @@ public final class PhysicsWorld3D {
     }
 
     /// Bodies with a shape overlapping the sphere.
-    public func overlapSphere(center: Vec3, radius: Float, filter: CollisionFilter = .default, includeTriggers: Bool = true) -> [BodyID] {
+    public func overlapSphere(
+        center: Vec3, radius: Float, filter: CollisionFilter = .default, includeTriggers: Bool = true
+    ) -> [BodyID] {
         let probe = Shape3D.sphere(radius)
         let pp = Pose3D(position: center)
         let box = AABB(center: center, extents: Vec3(repeating: radius))
@@ -616,7 +639,9 @@ public final class PhysicsWorld3D {
     }
 
     /// Bodies with a shape overlapping an oriented box.
-    public func overlapBox(center: Vec3, halfExtents: Vec3, rotation: Quat = .identity, filter: CollisionFilter = .default) -> [BodyID] {
+    public func overlapBox(
+        center: Vec3, halfExtents: Vec3, rotation: Quat = .identity, filter: CollisionFilter = .default
+    ) -> [BodyID] {
         let probe = Shape3D.box(halfExtents)
         let pp = Pose3D(position: center, rotation: rotation)
         let box = probe.aabb(pp)
@@ -652,8 +677,11 @@ public final class PhysicsWorld3D {
         func circle(_ c: Vec3, _ u: Vec3, _ v: Vec3, _ r: Float, _ kind: DebugLine<Vec3>.Kind) {
             let n = 20
             for k in 0..<n {
-                let a0 = Float(k) / Float(n) * 2 * .pi, a1 = Float(k + 1) / Float(n) * 2 * .pi
-                lines.append(DebugLine(a: c + (u * cos(a0) + v * sin(a0)) * r, b: c + (u * cos(a1) + v * sin(a1)) * r, kind: kind))
+                let a0 = Float(k) / Float(n) * 2 * .pi
+                let a1 = Float(k + 1) / Float(n) * 2 * .pi
+                lines.append(
+                    DebugLine(
+                        a: c + (u * cos(a0) + v * sin(a0)) * r, b: c + (u * cos(a1) + v * sin(a1)) * r, kind: kind))
             }
         }
         for b in bodies {
@@ -671,14 +699,19 @@ public final class PhysicsWorld3D {
                 case .box(let h):
                     var corners: [Vec3] = []
                     for i in 0..<8 {
-                        let sx: Float = (i & 1) != 0 ? 1 : -1, sy: Float = (i & 2) != 0 ? 1 : -1, sz: Float = (i & 4) != 0 ? 1 : -1
+                        let sx: Float = (i & 1) != 0 ? 1 : -1
+                        let sy: Float = (i & 2) != 0 ? 1 : -1
+                        let sz: Float = (i & 4) != 0 ? 1 : -1
                         corners.append(pose.apply(Vec3(sx * h.x, sy * h.y, sz * h.z)))
                     }
-                    for (a, c) in [(0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7)] {
+                    for (a, c) in [
+                        (0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7),
+                    ] {
                         lines.append(DebugLine(a: corners[a], b: corners[c], kind: kind))
                     }
                 case .capsule(let hh, let rad):
-                    let top = pose.apply(Vec3(0, hh, 0)), bottom = pose.apply(Vec3(0, -hh, 0))
+                    let top = pose.apply(Vec3(0, hh, 0))
+                    let bottom = pose.apply(Vec3(0, -hh, 0))
                     circle(top, r.c0, r.c2, rad, kind)
                     circle(bottom, r.c0, r.c2, rad, kind)
                     for side in [r.c0, -r.c0, r.c2, -r.c2] {
@@ -687,7 +720,8 @@ public final class PhysicsWorld3D {
                 case .plane(let n, let d):
                     let wn = b.pose.rotate(n)
                     let c = wn * (d + wn.dot(b.position))
-                    let u = wn.anyPerpendicular, v = wn.cross(u)
+                    let u = wn.anyPerpendicular
+                    let v = wn.cross(u)
                     for k in -5...5 {
                         let f = Float(k) * 2
                         lines.append(DebugLine(a: c + u * f - v * 10, b: c + u * f + v * 10, kind: kind))
@@ -697,7 +731,9 @@ public final class PhysicsWorld3D {
                     let limit = min(mesh.triangleCount, 20000)
                     for t in 0..<limit {
                         let (a, bb, c) = mesh.triangle(t)
-                        let wa = pose.apply(a), wb = pose.apply(bb), wc = pose.apply(c)
+                        let wa = pose.apply(a)
+                        let wb = pose.apply(bb)
+                        let wc = pose.apply(c)
                         lines.append(DebugLine(a: wa, b: wb, kind: kind))
                         lines.append(DebugLine(a: wb, b: wc, kind: kind))
                         lines.append(DebugLine(a: wc, b: wa, kind: kind))
@@ -707,7 +743,9 @@ public final class PhysicsWorld3D {
         }
         if includeContacts {
             for c in contacts.values where c.touching && !c.isTrigger {
-                for p in c.points { lines.append(DebugLine(a: p.point, b: p.point + c.normal * 0.25, kind: .contactNormal)) }
+                for p in c.points {
+                    lines.append(DebugLine(a: p.point, b: p.point + c.normal * 0.25, kind: .contactNormal))
+                }
             }
         }
         for j in joints {
@@ -782,21 +820,26 @@ struct Contact3D {
     }
 
     static func effectiveMass(_ a: Body3D, _ b: Body3D, _ rA: Vec3, _ rB: Vec3, _ dir: Vec3) -> Float {
-        let ra = rA.cross(dir), rb = rB.cross(dir)
+        let ra = rA.cross(dir)
+        let rb = rB.cross(dir)
         let k = a.invMass + b.invMass + ra.dot(a.invInertiaWorld * ra) + rb.dot(b.invInertiaWorld * rb)
         return k > 0 ? 1 / k : 0
     }
 
     mutating func prepare(_ bodies: [Body3D?], settings: SolverSettings, invDt: Float) {
-        let a = bodies[bodyA]!, b = bodies[bodyB]!
-        let ca = a.worldCenter, cb = b.worldCenter
+        let a = bodies[bodyA]!
+        let b = bodies[bodyB]!
+        let ca = a.worldCenter
+        let cb = b.worldCenter
         for i in points.indices {
             var p = points[i]
             p.rA = p.point - ca
             p.rB = p.point - cb
             p.normalMass = Contact3D.effectiveMass(a, b, p.rA, p.rB, normal)
-            p.tangentMass = Vec2(Contact3D.effectiveMass(a, b, p.rA, p.rB, t1), Contact3D.effectiveMass(a, b, p.rA, p.rB, t2))
-            p.bias = p.separation > 0
+            p.tangentMass = Vec2(
+                Contact3D.effectiveMass(a, b, p.rA, p.rB, t1), Contact3D.effectiveMass(a, b, p.rA, p.rB, t2))
+            p.bias =
+                p.separation > 0
                 ? -p.separation * invDt
                 : settings.baumgarte * invDt * Swift.max(0, -(p.separation + settings.linearSlop))
             let vn = (b.velocity(at: p.point) - a.velocity(at: p.point)).dot(normal)
@@ -821,11 +864,14 @@ struct Contact3D {
     }
 
     func warmStart(_ bodies: inout [Body3D?]) {
-        for p in points { apply(&bodies, p, normal * p.normalImpulse + t1 * p.tangentImpulse.x + t2 * p.tangentImpulse.y) }
+        for p in points {
+            apply(&bodies, p, normal * p.normalImpulse + t1 * p.tangentImpulse.x + t2 * p.tangentImpulse.y)
+        }
     }
 
     func relativeVelocity(_ bodies: [Body3D?], _ p: Point) -> Vec3 {
-        let a = bodies[bodyA]!, b = bodies[bodyB]!
+        let a = bodies[bodyA]!
+        let b = bodies[bodyB]!
         return (b.linearVelocity + b.angularVelocity.cross(p.rB)) - (a.linearVelocity + a.angularVelocity.cross(p.rA))
     }
 
@@ -897,14 +943,14 @@ struct JointState3D {
 
     init?(_ d: JointDesc3D, world: PhysicsWorld3D) {
         switch d {
-        case let .ball(a, b, anchor):
+        case .ball(let a, let b, let anchor):
             guard let ba = world.body(a), let bb = world.body(b) else { return nil }
             kind = .ball
             bodyA = Int(a.index)
             bodyB = Int(b.index)
             localAnchorA = ba.pose.invApply(anchor)
             localAnchorB = bb.pose.invApply(anchor)
-        case let .hinge(a, b, anchor, axis, motor):
+        case .hinge(let a, let b, let anchor, let axis, let motor):
             guard let ba = world.body(a), let bb = world.body(b) else { return nil }
             kind = .hinge
             bodyA = Int(a.index)
@@ -918,7 +964,7 @@ struct JointState3D {
                 motorSpeed = motor.speed
                 maxMotorTorque = motor.maxTorque
             }
-        case let .fixed(a, b):
+        case .fixed(let a, let b):
             guard let ba = world.body(a), let bb = world.body(b) else { return nil }
             kind = .fixed
             bodyA = Int(a.index)
@@ -927,7 +973,7 @@ struct JointState3D {
             localAnchorA = ba.pose.invApply(mid)
             localAnchorB = bb.pose.invApply(mid)
             relativeRotation = ba.rotation.conjugate * bb.rotation
-        case let .distance(a, b, anchorA, anchorB, minL, maxL):
+        case .distance(let a, let b, let anchorA, let anchorB, let minL, let maxL):
             guard let ba = world.body(a), let bb = world.body(b) else { return nil }
             kind = .distance
             bodyA = Int(a.index)
@@ -943,7 +989,8 @@ struct JointState3D {
 
     /// K = (mA + mB) I - [rA]× IA⁻¹ [rA]× - [rB]× IB⁻¹ [rB]× for a point constraint.
     static func pointMass(_ a: Body3D, _ b: Body3D, _ rA: Vec3, _ rB: Vec3) -> Mat3 {
-        let sa = Mat3.skew(rA), sb = Mat3.skew(rB)
+        let sa = Mat3.skew(rA)
+        let sb = Mat3.skew(rB)
         let m = a.invMass + b.invMass
         var k = Mat3(diagonal: Vec3(repeating: m))
         k = k + (sa * a.invInertiaWorld * sa) * -1
@@ -957,7 +1004,8 @@ struct JointState3D {
         invDt = 1 / dt
         rA = a.rotation.act(localAnchorA - a.localCenter)
         rB = b.rotation.act(localAnchorB - b.localCenter)
-        let pA = a.worldCenter + rA, pB = b.worldCenter + rB
+        let pA = a.worldCenter + rA
+        let pB = b.worldCenter + rB
         switch kind {
         case .ball, .hinge, .fixed:
             linearMass = JointState3D.pointMass(a, b, rA, rB)
@@ -965,7 +1013,8 @@ struct JointState3D {
             let iSum = a.invInertiaWorld + b.invInertiaWorld
             angularMass = iSum.inverse
             if kind == .hinge {
-                let axA = a.rotation.act(localAxisA), axB = b.rotation.act(localAxisB)
+                let axA = a.rotation.act(localAxisA)
+                let axB = b.rotation.act(localAxisB)
                 hingeAxis = axA
                 perp1 = axA.anyPerpendicular
                 perp2 = axA.cross(perp1)
@@ -983,7 +1032,8 @@ struct JointState3D {
             let d = pB - pA
             currentLength = d.length
             axis = currentLength > 1e-6 ? d / currentLength : .up
-            let ra = rA.cross(axis), rb = rB.cross(axis)
+            let ra = rA.cross(axis)
+            let rb = rB.cross(axis)
             let k = a.invMass + b.invMass + ra.dot(a.invInertiaWorld * ra) + rb.dot(b.invInertiaWorld * rb)
             axialMass = k > 0 ? 1 / k : 0
         }
@@ -1026,7 +1076,8 @@ struct JointState3D {
     mutating func solve(_ bodies: inout [Body3D?], dt: Float) {
         guard bodies[bodyA] != nil, bodies[bodyB] != nil else { return }
         func pointVelocity() -> Vec3 {
-            let a = bodies[bodyA]!, b = bodies[bodyB]!
+            let a = bodies[bodyA]!
+            let b = bodies[bodyB]!
             return (b.linearVelocity + b.angularVelocity.cross(rB)) - (a.linearVelocity + a.angularVelocity.cross(rA))
         }
         func relativeAngular() -> Vec3 { bodies[bodyB]!.angularVelocity - bodies[bodyA]!.angularVelocity }

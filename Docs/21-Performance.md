@@ -137,7 +137,7 @@ Nothing is sent over the network. The report goes to standard output only.
 
 ## 7. The CI benchmark workflow
 
-`.github/workflows/benchmarks.yml` runs only when started by hand (`workflow_dispatch`). It runs on a `macos-14` runner, selects Xcode 15.4 if it is present, and then runs:
+`.github/workflows/benchmarks.yml` runs only when started by hand (`workflow_dispatch`). It runs on a `macos-15` runner, requires Xcode 16.4, and then runs:
 
 ```bash
 swift run -c release FeroxBenchmarks --quick --output BenchmarkResults/ci.json
@@ -145,7 +145,7 @@ swift run -c release FeroxBenchmarks --quick --output BenchmarkResults/ci.json
 
 The JSON file is uploaded as the artifact `ferox-benchmarks-ci`. The workflow's own comment says that hosted macOS runners use virtualised GPUs, so the numbers are useful only for spotting large regressions and trends. They are not representative of Apple Silicon hardware, and performance claims should come from local release runs.
 
-The main CI workflow does not run benchmarks. It builds in debug and release on macOS, runs `swift test`, and on Linux builds the engine target and runs a filtered set of portable tests.
+The main CI workflow does not run benchmarks. It builds in debug and release on macOS (`macos-15`, Xcode 16.4), runs `swift test --enable-xctest`, compiles shaders, and on Linux builds the engine on Swift 5.10 (warnings as errors) and Swift 6.2.
 
 ## 8. Measuring on your own machine
 

@@ -16,7 +16,10 @@ public struct Attenuation: Codable, Sendable, Hashable {
     public var referenceDistance: Float = 1
     public var maximumDistance: Float = 100
     public var rolloff: Float = 1
-    public init(model: AttenuationModel = .inverse, referenceDistance: Float = 1, maximumDistance: Float = 100, rolloff: Float = 1) {
+    public init(
+        model: AttenuationModel = .inverse, referenceDistance: Float = 1, maximumDistance: Float = 100,
+        rolloff: Float = 1
+    ) {
         self.model = model
         self.referenceDistance = referenceDistance
         self.maximumDistance = maximumDistance
@@ -123,7 +126,8 @@ public enum VoiceAllocator {
 public enum AudioMemoryPolicy {
     /// Bytes a clip of `frames` frames and `channels` channels occupies once decoded.
     public static func decodedBytes(frames: Int64, channels: Int) -> Int {
-        let f = max(frames, 0), c = Int64(max(channels, 0))
+        let f = max(frames, 0)
+        let c = Int64(max(channels, 0))
         let (bytes, overflow) = f.multipliedReportingOverflow(by: c * 4)
         return overflow || bytes > Int64(Int.max) ? Int.max : Int(bytes)
     }
@@ -202,8 +206,9 @@ public final class SilentAudioBackend: AudioBackend {
     public func loadClip(_ data: Data, name: String, stream: Bool) throws -> AudioClipID {
         let id = nextClip
         nextClip += 1
-        let streamed = AudioMemoryPolicy.shouldStream(requested: stream, bytes: data.count, resident: decodedBytes,
-                                                      budget: memoryBudgetBytes)
+        let streamed = AudioMemoryPolicy.shouldStream(
+            requested: stream, bytes: data.count, resident: decodedBytes,
+            budget: memoryBudgetBytes)
         clips[id] = AudioClipInfo(name: name, duration: 1, sampleRate: 48000, channels: 1, isStreamed: streamed)
         if !streamed {
             clipBytes[id] = data.count
@@ -244,7 +249,11 @@ public final class SilentAudioBackend: AudioBackend {
         for (k, v) in voices where v.playing {
             let t = v.time + dt
             let dur = clips[v.clip]?.duration ?? 0
-            if t >= dur && !v.loops { voices[k] = nil } else { voices[k]?.time = v.loops && dur > 0 ? t.truncatingRemainder(dividingBy: dur) : t }
+            if t >= dur && !v.loops {
+                voices[k] = nil
+            } else {
+                voices[k]?.time = v.loops && dur > 0 ? t.truncatingRemainder(dividingBy: dur) : t
+            }
         }
     }
     public var activeVoiceCount: Int { voices.values.filter(\.playing).count }

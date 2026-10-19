@@ -283,28 +283,29 @@ public final class Engine {
     private func updateAudioListener() {
         guard let cam = activeCamera() else { return }
         let m = cam.transform.matrix
-        audio.setListener(position: m.translation, forward: m.transformDirection(.forward).normalized,
-                          up: m.transformDirection(.up).normalized)
+        audio.setListener(
+            position: m.translation, forward: m.transformDirection(.forward).normalized,
+            up: m.transformDirection(.up).normalized)
     }
 
     private static func makeAudioBackend(enabled: Bool) -> any AudioBackend {
         #if canImport(AVFoundation)
-        if enabled {
-            do {
-                return try AVAudioBackend()
-            } catch {
-                Log.warning("Audio", "Audio output unavailable (\(error)); continuing without sound")
+            if enabled {
+                do {
+                    return try AVAudioBackend()
+                } catch {
+                    Log.warning("Audio", "Audio output unavailable (\(error)); continuing without sound")
+                }
             }
-        }
         #endif
         return SilentAudioBackend()
     }
 
     private static func makeFontProvider() -> any UIFontProvider {
         #if canImport(CoreText)
-        return CoreTextFontProvider()
+            return CoreTextFontProvider()
         #else
-        return MonospaceFontProvider()
+            return MonospaceFontProvider()
         #endif
     }
 }

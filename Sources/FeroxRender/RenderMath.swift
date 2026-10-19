@@ -9,7 +9,9 @@ public enum RenderMath {
     /// Radical inverse of `index` in `base` (Halton sequence), in [0, 1).
     public static func halton(_ index: Int, base: Int) -> Float {
         precondition(base >= 2, "Halton base must be at least 2")
-        var f: Float = 1, r: Float = 0, i = max(index, 0)
+        var f: Float = 1
+        var r: Float = 0
+        var i = max(index, 0)
         while i > 0 {
             f /= Float(base)
             r += f * Float(i % base)
@@ -35,7 +37,9 @@ public enum RenderMath {
     /// blend of logarithmic and uniform splits. Returns `count + 1` values from `near` to
     /// `far`.
     public static func cascadeSplits(near: Float, far: Float, count: Int, lambda: Float = 0.75) -> [Float] {
-        let n = max(near, 1e-3), f = max(far, n + 1e-3), c = min(max(count, 1), 4)
+        let n = max(near, 1e-3)
+        let f = max(far, n + 1e-3)
+        let c = min(max(count, 1), 4)
         var splits = [n]
         for i in 1...c {
             let p = Float(i) / Float(c)
@@ -52,10 +56,13 @@ public enum RenderMath {
     /// `inverseViewProjection` must be the (unjittered) camera matrix; `near`/`far` are the
     /// camera's clip distances. Corners on one frustum edge are interpolated linearly in view
     /// depth, which is exact for both perspective and orthographic projections.
-    public static func frustumSliceCorners(inverseViewProjection inv: Mat4, near: Float, far: Float,
-                                           from d0: Float, to d1: Float) -> [Vec3] {
+    public static func frustumSliceCorners(
+        inverseViewProjection inv: Mat4, near: Float, far: Float,
+        from d0: Float, to d1: Float
+    ) -> [Vec3] {
         let range = max(far - near, 1e-4)
-        let t0 = (d0 - near) / range, t1 = (d1 - near) / range
+        let t0 = (d0 - near) / range
+        let t1 = (d1 - near) / range
         var out: [Vec3] = []
         out.reserveCapacity(8)
         for y in [Float(-1), 1] {
@@ -78,8 +85,10 @@ public enum RenderMath {
     /// - Parameters:
     ///   - towardsLight: unit vector pointing from the scene towards the light.
     ///   - casterDistance: extra depth behind the slice so off-screen casters still cast.
-    public static func stableCascadeMatrix(corners: [Vec3], towardsLight: Vec3, resolution: Int,
-                                           casterDistance: Float = 100) -> Mat4 {
+    public static func stableCascadeMatrix(
+        corners: [Vec3], towardsLight: Vec3, resolution: Int,
+        casterDistance: Float = 100
+    ) -> Mat4 {
         guard !corners.isEmpty else { return .identity }
         var center = Vec3.zero
         for c in corners { center += c }
@@ -92,8 +101,9 @@ public enum RenderMath {
         let up = abs(dir.dot(.up)) > 0.99 ? Vec3(0, 0, 1) : Vec3.up
         let eye = center + dir * (radius + casterDistance)
         let view = Mat4.lookAt(eye: eye, target: center, up: up)
-        let proj = Mat4.orthographic(left: -radius, right: radius, bottom: -radius, top: radius,
-                                     near: 0, far: 2 * radius + casterDistance, reverseZ: false)
+        let proj = Mat4.orthographic(
+            left: -radius, right: radius, bottom: -radius, top: radius,
+            near: 0, far: 2 * radius + casterDistance, reverseZ: false)
         var vp = proj * view
 
         // Snap the world origin to the texel grid.
@@ -142,7 +152,8 @@ public enum RenderMath {
     /// `slice = log(depth) * z - w`, so slice 0 starts at `near` and slice `slices` ends at
     /// `far`.
     public static func clusterParams(near: Float, far: Float, slices: Int) -> Vec4 {
-        let n = max(near, 1e-3), f = max(far, n * 1.001)
+        let n = max(near, 1e-3)
+        let f = max(far, n * 1.001)
         let scale = Float(max(slices, 1)) / log(f / n)
         return Vec4(n, f, scale, scale * log(n))
     }
@@ -157,8 +168,10 @@ public enum RenderMath {
 
     /// Fraction of the screen height covered by a bounding sphere (perspective), used for
     /// LOD selection. Orthographic cameras pass their half-height as `orthoSize`.
-    public static func screenHeightFraction(radius: Float, distance: Float, fovY: Float,
-                                            orthoSize: Float? = nil) -> Float {
+    public static func screenHeightFraction(
+        radius: Float, distance: Float, fovY: Float,
+        orthoSize: Float? = nil
+    ) -> Float {
         if let o = orthoSize { return radius / max(o, 1e-4) }
         let d = max(distance, 1e-4)
         return radius / (d * tan(fovY * 0.5))
@@ -178,15 +191,21 @@ public enum RenderMath {
     public static func boundingSphere(_ box: AABB, _ m: Mat4) -> Sphere {
         guard !box.isEmpty else { return Sphere(center: m.translation, radius: 0) }
         let c = m.transformAffine(box.center)
-        let sx = m.c0.xyz.length, sy = m.c1.xyz.length, sz = m.c2.xyz.length
+        let sx = m.c0.xyz.length
+        let sy = m.c1.xyz.length
+        let sz = m.c2.xyz.length
         let r = box.extents.length * max(sx, max(sy, sz))
         return Sphere(center: c, radius: r)
     }
 
     /// Mip count of a full chain for a `w`×`h` texture.
     public static func mipCount(_ w: Int, _ h: Int) -> Int {
-        var n = 1, s = max(w, h)
-        while s > 1 { s >>= 1; n += 1 }
+        var n = 1
+        var s = max(w, h)
+        while s > 1 {
+            s >>= 1
+            n += 1
+        }
         return n
     }
 
@@ -237,10 +256,13 @@ extension RenderMath {
     /// whole output pixels. The rectangle is clipped to the output and is never smaller
     /// than 1 × 1, so a degenerate or off-screen viewport still renders something valid.
     public static func viewportPixels(_ viewport: Rect, outputWidth: Int, outputHeight: Int) -> PixelRect {
-        let w = max(outputWidth, 1), h = max(outputHeight, 1)
+        let w = max(outputWidth, 1)
+        let h = max(outputHeight, 1)
         func clamp01(_ v: Float) -> Float { v.isFinite ? min(max(v, 0), 1) : 0 }
-        let x0 = clamp01(viewport.minX), y0 = clamp01(viewport.minY)
-        let x1 = clamp01(viewport.minX + viewport.size.x), y1 = clamp01(viewport.minY + viewport.size.y)
+        let x0 = clamp01(viewport.minX)
+        let y0 = clamp01(viewport.minY)
+        let x1 = clamp01(viewport.minX + viewport.size.x)
+        let y1 = clamp01(viewport.minY + viewport.size.y)
         let px = min(Int((x0 * Float(w)).rounded()), w - 1)
         let py = min(Int((y0 * Float(h)).rounded()), h - 1)
         let pw = max(Int((x1 * Float(w)).rounded()) - px, 1)

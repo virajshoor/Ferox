@@ -27,8 +27,8 @@ public final class ComponentRegistry: @unchecked Sendable {
     public struct Entry {
         public let name: String
         public let type: any Component.Type
-        let encode: (World, Entity, [CodingUserInfoKey: Any]) throws -> JSONValue?
-        let decode: (JSONValue, World, Entity, [CodingUserInfoKey: Any]) throws -> Void
+        let encode: (World, Entity, [CodingUserInfoKey: any Sendable]) throws -> JSONValue?
+        let decode: (JSONValue, World, Entity, [CodingUserInfoKey: any Sendable]) throws -> Void
         let decodeValue: (JSONValue) throws -> any Component
         public let makeDefault: (() -> any Component)?
     }
@@ -230,7 +230,7 @@ public struct SceneSerializer {
 
         let table = EntityRemapTable()
         for (i, e) in ordered.enumerated() { table.register(e, local: i) }
-        let info: [CodingUserInfoKey: Any] = [.feroxEntityRemap: table]
+        let info: [CodingUserInfoKey: any Sendable] = [.feroxEntityRemap: table]
 
         var records: [SceneDocument.EntityRecord] = []
         records.reserveCapacity(ordered.count)
@@ -261,7 +261,7 @@ public struct SceneSerializer {
             table.register(e, local: r.id)
             created.append(e)
         }
-        let info: [CodingUserInfoKey: Any] = [.feroxEntityRemap: table]
+        let info: [CodingUserInfoKey: any Sendable] = [.feroxEntityRemap: table]
         do {
             for (r, e) in zip(doc.entities, created) {
                 var unknown = UnknownComponents()

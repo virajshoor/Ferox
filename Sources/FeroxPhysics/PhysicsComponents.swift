@@ -99,6 +99,8 @@ public struct ColliderShape3D: Codable, Hashable, Sendable {
         case plane(normal: Vec3, distance: Float)
         /// Static triangle mesh referencing a mesh asset (resolved by the physics system).
         case mesh(AssetID)
+        /// Convex hull of these local-space vertices. Degenerate input is dropped at body creation.
+        case convex(vertices: [Vec3])
     }
     public var geometry: Geometry
     public var offset: Vec3 = .zero

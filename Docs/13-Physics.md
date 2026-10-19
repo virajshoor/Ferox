@@ -50,7 +50,7 @@ Entities and components are described in [06-Scene-and-Entities.md](06-Scene-and
 6. **Update bounds and sleep.** AABBs are recomputed with `speculativeDistance` margin. Sleep islands are updated if `allowSleep` is on.
 7. **Dispatch** events to `onContact`, if set.
 
-**Continuous collision.** `SolverSettings.continuousCollision` is on by default. In step 5, a dynamic body whose step motion is longer than its core radius sweeps that core sphere (3D) or circle (2D) against the non-trigger shapes of static and kinematic bodies. Collision filters and joint collision disabling are respected. The motion is clamped to just before the first hit. The core radius is half of the smallest AABB half-extent. Velocity is kept, so the contact solver stops the body on the next step. See `clampContinuous` in `World3D.swift` and `World2D.swift`.
+**Continuous collision.** `SolverSettings.continuousCollision` is on by default. In step 5, a dynamic body whose step motion is longer than its core radius sweeps that core sphere (3D) or circle (2D) against the non-trigger shapes of static and kinematic bodies. A second pass then tests each dynamic pair once, along their relative motion, and scales both displacements by the same time of impact. Collision filters and joint collision disabling are respected. The core radius is half of the smallest AABB half-extent. Velocity is kept, so the contact solver stops the body on the next step. See `clampContinuous` and `clampDynamicPairs` in `World3D.swift` and `World2D.swift`.
 
 ### 2.2 Broadphase
 
@@ -78,10 +78,12 @@ Entities and components are described in [06-Scene-and-Entities.md](06-Scene-and
 | Box and box | Separating-axis test over 15 axes: 3 per box, and 9 edge cross products. Face axes are preferred. Face contacts are clipped against the reference face, keeping up to four points. An edge-edge contact gives one point. |
 | Capsule and sphere; capsule and capsule | Closest points on the segments. Near-parallel capsules give up to two points. |
 | Box and capsule | Sphere tests at both endpoints and at the closest segment point; up to two points. |
-| Plane and sphere, capsule or box | Per-point tests. A box contributes up to eight corners, reduced to four. |
+| Plane and sphere, capsule, box or convex hull | Per-point tests. A box contributes up to eight corners, reduced to four. A hull contributes its vertices. |
+| Convex hull and sphere or capsule | Closest point on the hull. The normal points from shape A toward shape B. |
+| Convex hull and box, or hull and hull | Face separating-axis test. Edge-edge axes are not tested. |
 | Triangle mesh and sphere or capsule | BVH query, closest point on each triangle, up to four deepest points, averaged normal. |
 | Triangle mesh and box | **Approximated** by an inscribed capsule along the box's longest axis. |
-| Plane against plane or mesh; mesh against mesh or plane | **Not supported.** No contacts are produced. |
+| Triangle mesh and convex hull; plane against plane or mesh; mesh against mesh or plane | **Not supported.** No contacts are produced. |
 
 The mesh BVH splits at the median of the largest centroid extent, with leaves of up to four triangles. Out-of-range indices log an error and produce an empty mesh.
 
@@ -401,8 +403,8 @@ func movePlayer(_ player: Entity, input: Vec2, jumpPressed: Bool, dt: Float) {
 
 ## 14. Limitations
 
-- **Limitation: continuous collision is partial.** Only fast dynamic bodies are swept, and only against static and kinematic shapes. Fast dynamic-against-dynamic pairs can still tunnel. Sphere sweeps against boxes and meshes are conservative approximations. `maxTranslation` limits explosions but is not a substitute. Thicken colliders, limit speeds, or use smaller fixed steps where this matters.
-- **Limitation: no 3D convex hulls.** Decompose other shapes into primitives.
+- **Limitation: continuous collision is a core sweep.** Dynamic bodies are swept against static and kinematic shapes, then each dynamic pair is scaled once along the relative motion. The sweep uses a core sphere or circle, so a thin feature can still be missed. Sphere sweeps against boxes and meshes are conservative approximations. `maxTranslation` limits explosions but is not a substitute.
+- **Limitation: convex hull contacts are face-only.** `ConvexHull3D.build` returns nil for coplanar or collinear points. Sphere and capsule contacts use the closest point. Hull versus box or hull uses face axes only (no edge-edge). Hull versus triangle mesh produces an empty manifold. Inertia is taken from the hull's AABB about its centroid.
 - **Limitation: 2D polygons are convex, with at most 16 vertices.** Split concave outlines.
 - **Limitation: box against mesh is approximated.** Mesh against plane, mesh against mesh and plane against plane produce no contacts.
 - **Limitation: sphere casts against boxes and meshes are approximations** (see [section 8](#8-queries)).
@@ -419,7 +421,7 @@ func movePlayer(_ player: Entity, input: Vec2, jumpPressed: Bool, dt: Float) {
 
 ## 15. Validation status
 
-- `Tests/FeroxPhysicsTests` covers free fall, resting contacts, restitution, triggers, raycasts, filtering, sleeping, teleporting, contact events, the ECS bridge, continuous collision (`ContinuousCollisionTests.swift`) and determinism (`PhysicsDeterminismTests.swift`).
+- `Tests/FeroxPhysicsTests` covers free fall, resting contacts, restitution, triggers, raycasts, filtering, sleeping, teleporting, contact events, the ECS bridge, continuous collision (`ContinuousCollisionTests.swift`), dynamic-versus-dynamic sweeps and convex hulls (`ConvexAndDynamicCCDTests.swift`), and determinism (`PhysicsDeterminismTests.swift`).
 - The physics tests (41 in total) were run on an M1 Max with macOS 27 and Swift 6.4, and all pass.
 - Contact keys are sorted before the solve, so results are repeatable from run to run. `PhysicsDeterminismTests.swift` checks this.
 - The behaviour in this document was derived from the source and checked against those tests.

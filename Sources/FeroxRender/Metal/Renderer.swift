@@ -98,12 +98,11 @@
     /// GPU is still reading.
     ///
     /// The renderer is not thread-safe: create and use it on one thread (normally the main
-    /// thread). The camera renders into its `Camera.viewport` rectangle of the output, at that
-    /// rectangle's size and aspect; the rest of the output is cleared to black and the UI
-    /// still covers the whole output. Limitations: one camera per frame (the highest-priority
-    /// enabled camera, so split-screen needs one renderer per view), `Camera.renderTarget` is
-    /// not yet honoured, and the sky is drawn only for perspective cameras (orthographic
-    /// cameras show `clearColor`).
+    /// thread). The screen camera renders into its `Camera.viewport` rectangle of the output,
+    /// at that rectangle's size and aspect; the rest of the output is cleared to black and the
+    /// UI still covers the whole output. Every other active camera with `renderTarget` set is
+    /// drawn into `renderedCameraTarget(_:)` at the same pixel size, before the screen view.
+    /// The sky is drawn only for perspective cameras (orthographic cameras show `clearColor`).
     /// See Docs/08-Rendering-3D.md and Docs/03-Architecture.md.
     public final class Renderer {
         public let renderDevice: RenderDevice
@@ -157,14 +156,19 @@
         private var nextHookID = 0
 
         /// Written by command-buffer completion handlers (any thread), read on the render thread.
-        private let gpuLock = NSLock()
-        private var lastGPUMilliseconds: Double?
-        /// Scene command buffer GPU time per frame slot, handed from the scene completion
-        /// handler to the post one. Guarded by `gpuLock`.
-        private var sceneGPUMilliseconds: [Double]
+        /// The handlers capture this clock, not `Renderer`.
+        private let gpuClock: GPUFrameClock
 
         private var offscreen: (any MTLTexture)?
         private var offscreenBytes = 0
+        /// Colour of each camera that has a `renderTarget`, at the main viewport size.
+        private var cameraTargets: [AssetID: any MTLTexture] = [:]
+
+        /// Texture last rendered for `Camera.renderTarget == id`, or nil if that camera has not drawn.
+        public func renderedCameraTarget(_ id: AssetID) -> (any MTLTexture)? { cameraTargets[id] }
+
+        /// Result of the MetalFX temporal-scaler probe performed at init.
+        public var metalFXProbe: MetalFXProbeResult { post.metalFXProbe }
 
         /// Camera moves longer than this in one frame are treated as cuts (teleports), which
         /// discard temporal history instead of smearing it.
@@ -189,7 +193,7 @@
             maxFramesInFlight = min(max(settings.frame.maxFramesInFlight, 1), 3)
             inFlight = DispatchSemaphore(value: maxFramesInFlight)
             allocators = (0..<maxFramesInFlight).map { FrameAllocator(device: d, label: "Ferox.Frame\($0)") }
-            sceneGPUMilliseconds = Array(repeating: 0, count: maxFramesInFlight)
+            gpuClock = GPUFrameClock(framesInFlight: maxFramesInFlight)
             shaders = try ShaderLibrary(device: d, sourceDirectory: shaderDirectory)
             pool = TexturePool(device: d)
             meshes = MeshCache(
@@ -209,6 +213,8 @@
             post = try PostProcessor(device: d, shaders: shaders, pool: pool)
             overlays = OverlayPasses(device: d, shaders: shaders)
             dynamicResolution = DynamicResolutionController(settings: resolved.settings.dynamicResolution)
+            post.probeMetalFX()
+            prewarmPipelines()
             for f in resolved.fallbacks { Log.info("Render", "Graphics fallback: \(f)") }
         }
 
@@ -241,6 +247,100 @@
         /// Discards temporal history (TAA, motion blur, ray-tracing denoisers, Hi-Z). Call on
         /// scene loads and camera cuts that the automatic detection would miss.
         public func cameraCut() { cutRequested = true }
+
+        /// Builds the mesh pipelines the resolved preset will draw and records them in a binary
+        /// archive under the user's caches directory so the next launch can reload them.
+        private func prewarmPipelines() {
+            let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("FeroxPipelines.binaryarchive")
+            if let url { shaders.openBinaryArchive(at: url) }
+            let keys = PipelinePrewarm.keys(
+                clusters: resolved.settings.renderPath == .clusteredForward,
+                samples: resolved.msaaSamples,
+                materialArguments: DrawPolicy.useMaterialArgumentBuffers(
+                    argumentBuffersTier: capabilities.argumentBuffersTier))
+            for key in keys {
+                let kind: MeshPassKind
+                switch key.pass {
+                case "shadow": kind = .shadow
+                case "prepass": kind = .prepass
+                default: kind = .forward
+                }
+                let variant = ShaderVariant(
+                    skinning: key.skinning, alphaTest: key.alphaTest, vertexColor: true, clusters: key.clusters,
+                    unlit: key.unlit, materialArguments: key.materialArguments)
+                _ = try? passes.meshPipeline(kind, variant: variant, samples: key.samples)
+            }
+            if let url { shaders.saveBinaryArchive(to: url) }
+        }
+
+        /// Renders every active render-target camera into a texture at the main view's pixel size.
+        /// Encoded before the screen view writes the shared HDR target, then copied out.
+        private func encodeCameraTargets(
+            world: World, width: Int, height: Int, commandBuffer cb: any MTLCommandBuffer, resources r: SceneResources
+        ) {
+            let cameras = CameraTargets.offscreen(in: world)
+            guard !cameras.isEmpty else { return }
+            var graphics = resolved
+            graphics.settings.gpuDrivenCulling = false
+            graphics.settings.shadows.enabled = false
+            for camera in cameras {
+                let texture = ensureCameraTarget(camera.target, width: width, height: height)
+                guard let texture else { continue }
+                var options = ExtractionOptions()
+                options.frustumCull = true
+                options.cameraOverride = RenderCamera(
+                    entity: camera.entity, camera: camera.camera,
+                    worldMatrix: world.get(WorldTransform.self, camera.entity)?.matrix
+                        ?? world.worldMatrix(of: camera.entity),
+                    aspect: Float(width) / Float(max(height, 1)))
+                let frame = RenderSceneExtractor.extract(
+                    world: world, assets: assets, animations: animations, aspect: options.cameraOverride?.aspect ?? 1,
+                    options: options)
+                guard frame.camera != nil else { continue }
+                let uniforms = FrameUniformsBuilder.make(
+                    camera: frame.camera!, width: width, height: height, jitter: .zero, previous: nil,
+                    environment: frame.environment, exposure: 1, time: 0, frameIndex: frameIndex,
+                    environmentMips: environment.prefilteredMipCount)
+                let state = passes.prepare(
+                    frame, uniforms: uniforms, graphics: graphics, probes: [], targets: targets, resources: r)
+                passes.encodePrepass(cb, frame: frame, state: state, targets: targets, resources: r)
+                guard let pass = passes.mainPassDescriptor(targets: targets, clearColor: camera.camera.clearColor),
+                    let enc = cb.makeRenderCommandEncoder(descriptor: pass)
+                else { continue }
+                enc.label = "Ferox.CameraTarget"
+                let lighting = LightingTextures(
+                    prefiltered: environment.prefiltered, brdfLUT: environment.brdfLUT,
+                    shadowMap: r.fallback.shadowArray, rtShadow: r.fallback.white,
+                    rtReflection: r.fallback.clear, ambientOcclusion: r.fallback.white,
+                    irradiance: environment.irradiance, probes: r.fallback.cubeArray,
+                    localShadows: r.fallback.shadowArray)
+                passes.encodeOpaque(enc, frame: frame, state: state, lighting: lighting, resources: r)
+                if camera.camera.projection == .perspective {
+                    passes.encodeSky(enc, environment: environment.environment, state: state, resources: r)
+                }
+                enc.endEncoding()
+                guard let hdr = targets.hdr, let blit = cb.makeBlitCommandEncoder() else { continue }
+                blit.label = "Ferox.CameraTargetCopy"
+                blit.copy(
+                    from: hdr, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(),
+                    sourceSize: MTLSize(width: hdr.width, height: hdr.height, depth: 1),
+                    to: texture, destinationSlice: 0, destinationLevel: 0, destinationOrigin: MTLOrigin())
+                blit.endEncoding()
+            }
+        }
+
+        private func ensureCameraTarget(_ id: AssetID, width: Int, height: Int) -> (any MTLTexture)? {
+            if let existing = cameraTargets[id], existing.width == width, existing.height == height { return existing }
+            let desc = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: TargetFormat.hdr, width: max(width, 1), height: max(height, 1), mipmapped: false)
+            desc.usage = [.shaderRead]
+            desc.storageMode = .private
+            guard let texture = device.makeTexture(descriptor: desc) else { return nil }
+            texture.label = "Ferox.CameraTarget.\(id.rawValue)"
+            cameraTargets[id] = texture
+            return texture
+        }
 
         private func invalidateHistory() {
             history = nil
@@ -365,28 +465,23 @@
 
             // GPU time for dynamic resolution and the profiler is the scene buffer's duration
             // plus the post buffer's. The scene handler always runs before the post handler
-            // (same queue, committed in order), so the per-slot hand-off below is race free;
-            // the lock only orders it against the CPU reading `lastGPUMilliseconds`.
+            // (same queue, committed in order). The handlers capture `gpuClock`, which is
+            // Sendable, and not this renderer.
             let sem = inFlight
-            cbScene.addCompletedHandler { [weak self] cb in
+            let clock = gpuClock
+            cbScene.addCompletedHandler { cb in
                 let ms = max((cb.gpuEndTime - cb.gpuStartTime) * 1000, 0)
                 if ms > 0 { Profiler.shared.recordGPU(name: "GPU.Scene", duration: ms / 1000) }
-                if let self { self.gpuLock.locked { self.sceneGPUMilliseconds[slot] = ms } }
+                clock.recordScene(slot: slot, milliseconds: ms)
             }
-            cbPost.addCompletedHandler { [weak self] cb in
+            cbPost.addCompletedHandler { cb in
                 if cb.status == .error {
                     Log.error("Render", "GPU frame failed: \(cb.error.map { "\($0)" } ?? "unknown error")")
                 }
                 let postMs = max((cb.gpuEndTime - cb.gpuStartTime) * 1000, 0)
                 if postMs > 0 { Profiler.shared.recordGPU(name: "GPU.Post", duration: postMs / 1000) }
-                if let self {
-                    let total: Double = self.gpuLock.locked {
-                        let t = self.sceneGPUMilliseconds[slot] + postMs
-                        if t > 0 { self.lastGPUMilliseconds = t }
-                        return t
-                    }
-                    if total > 0 { Profiler.shared.recordGPUFrame(duration: total / 1000) }
-                }
+                let total = clock.recordPost(slot: slot, postMilliseconds: postMs)
+                if total > 0 { Profiler.shared.recordGPUFrame(duration: total / 1000) }
                 // Signal last: once the slot is free the CPU may reuse its allocator.
                 sem.signal()
             }
@@ -396,13 +491,13 @@
 
             pool.endFrame()
             if frameIndex % 120 == 0 {
-                meshes.evict(frame: frameIndex)
+                meshes.evict(frame: frameIndex, budgetBytes: assets.budget.meshBytes)
                 textures.evict(frame: frameIndex)
             }
             debugDraw.clear()
             statistics.frameIndex = frameIndex
             statistics.cpuMilliseconds = (MonotonicClock.now() - cpuStart) * 1000
-            statistics.gpuMilliseconds = gpuLock.locked { lastGPUMilliseconds }
+            statistics.gpuMilliseconds = gpuClock.lastMilliseconds()
             statistics.reflectionProbeCaptures = probes.captures
             return true
         }
@@ -424,7 +519,7 @@
             statistics.outputHeight = oh
 
             // Dynamic resolution reacts to the last completed frame's GPU time.
-            if resolved.settings.dynamicResolution.enabled, let gpu = gpuLock.locked({ lastGPUMilliseconds }) {
+            if resolved.settings.dynamicResolution.enabled, let gpu = gpuClock.lastMilliseconds() {
                 let budget = 1000 / Double(max(resolved.settings.frame.targetFPS ?? 60, 1))
                 dynamicResolution.update(gpuMilliseconds: gpu, budgetMs: budget)
             }
@@ -439,7 +534,8 @@
             let cfg = RenderTargets.Config(
                 renderWidth: rw, renderHeight: rh, outputWidth: ow, outputHeight: oh,
                 msaaSamples: resolved.msaaSamples, temporalHistory: resolved.jitter,
-                hiz: resolved.settings.gpuDrivenCulling && resolved.settings.occlusionCulling)
+                hiz: resolved.settings.gpuDrivenCulling && resolved.settings.occlusionCulling,
+                geometryPrepass: true)
             do {
                 if try targets.ensure(cfg) {
                     invalidateHistory()
@@ -516,6 +612,8 @@
                     p, world: world, animations: animations, graphics: resolved, passes: passes,
                     environment: environment, commandBuffer: cb, resources: r)
             }
+            encodeCameraTargets(
+                world: world, width: rw, height: rh, commandBuffer: cb, resources: r)
 
             // --- Scene
             var state = passes.prepare(
@@ -534,8 +632,19 @@
             overlays.updateGPUParticles(
                 cb, world: world, deltaTime: deltaTime, frameIndex: frameIndex,
                 allocator: r.allocator)
-            passes.encodePrepass(cb, frame: frame, state: state, targets: targets, resources: r)
-            if cfg.hiz { passes.encodeHiZ(cb, state: state, targets: targets) }
+            let needsPrepass = FramePath.needsGeometryPrepass(
+                opaqueCount: frame.opaque.count, screenSpaceAO: resolved.screenSpaceAO,
+                temporal: resolved.jitter, motionBlur: resolved.settings.post.motionBlur.enabled,
+                rayTracing: resolved.usesRayTracing)
+            if targets.config?.geometryPrepass != needsPrepass {
+                var resized = cfg
+                resized.geometryPrepass = needsPrepass
+                _ = try? targets.ensure(resized)
+            }
+            if needsPrepass {
+                passes.encodePrepass(cb, frame: frame, state: state, targets: targets, resources: r)
+                if cfg.hiz { passes.encodeHiZ(cb, state: state, targets: targets) }
+            }
 
             let postUniforms = PostUniformsBuilder.make(
                 resolved.settings.post, antiAliasing: resolved.settings.antiAliasing,
@@ -567,7 +676,38 @@
                 probes: probeData.isEmpty ? fallback.cubeArray : probes.array,
                 localShadows: localShadows)
 
-            if let pass = passes.mainPassDescriptor(targets: targets, clearColor: camera.camera.clearColor),
+            let sprites = Profiler.shared.scope("Render.Sprites") {
+                spriteBatcher.build(world: world, assets: assets, camera: camera, targetSize: SIMD2(rw, rh))
+            }
+            statistics.spritesDrawn = sprites.drawnObjects
+            let postSettings = resolved.settings.post
+            let directSprites = FramePath.spritesUseLDR(
+                opaqueCount: frame.opaque.count, transparentCount: frame.transparent.count,
+                screenSpaceAO: ssao, temporal: resolved.jitter,
+                motionBlur: postSettings.motionBlur.enabled, rayTracing: resolved.usesRayTracing,
+                bloom: postSettings.bloom.enabled, depthOfField: postSettings.depthOfField.enabled,
+                toneMap: postSettings.toneMapper != .none, spriteMask: sprites.usesStencil,
+                debugGeometry: debugDraw.lineCount > 0)
+            var directLDR: (any MTLTexture)?
+            if directSprites, let ldr = targets.ldr.first {
+                let spritePass = MTLRenderPassDescriptor()
+                spritePass.colorAttachments[0].texture = ldr
+                spritePass.colorAttachments[0].loadAction = .clear
+                spritePass.colorAttachments[0].storeAction = .store
+                let cc = camera.camera.clearColor.rgb
+                spritePass.colorAttachments[0].clearColor = MTLClearColor(
+                    red: Double(cc.x), green: Double(cc.y), blue: Double(cc.z), alpha: 1)
+                if let enc = cb.makeRenderCommandEncoder(descriptor: spritePass) {
+                    enc.label = "Ferox.SpritesLDR"
+                    overlays.encodeSprites(
+                        enc, data: sprites, samples: 1, resources: r, colorFormat: TargetFormat.ldr, depth: false)
+                    enc.endEncoding()
+                }
+                directLDR = ldr
+            }
+
+            if !directSprites,
+                let pass = passes.mainPassDescriptor(targets: targets, clearColor: camera.camera.clearColor),
                 let enc = cb.makeRenderCommandEncoder(descriptor: pass)
             {
                 enc.label = "Ferox.MainPass"
@@ -583,10 +723,6 @@
                 overlays.encodeParticles(
                     enc, world: world, uniforms: state.uniforms, perspective: perspective,
                     samples: state.samples, resources: r)
-                let sprites = Profiler.shared.scope("Render.Sprites") {
-                    spriteBatcher.build(world: world, assets: assets, camera: camera, targetSize: SIMD2(rw, rh))
-                }
-                statistics.spritesDrawn = sprites.drawnObjects
                 overlays.encodeSprites(enc, data: sprites, samples: state.samples, resources: r)
                 statistics.debugLines = debugDraw.lineCount
                 overlays.encodeDebugLines(
@@ -600,9 +736,10 @@
             }
 
             // --- Post and present
-            let inputs = PostInputs(
+            var inputs = PostInputs(
                 uniforms: state.uniforms, post: postUniforms, graphics: resolved,
                 ambientOcclusion: ao, debugView: debugView)
+            inputs.directLDR = directLDR
             guard
                 let final = post.encode(
                     cbPost, targets: targets, inputs: inputs, fallback: fallback,

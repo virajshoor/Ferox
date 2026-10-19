@@ -68,9 +68,14 @@ public enum JSONValue: Hashable, Sendable, Codable {
     public var objectValue: [String: JSONValue]? { if case .object(let o) = self { return o } else { return nil } }
 
     /// Converts any `Encodable` value into a `JSONValue` tree.
-    public static func encode<T: Encodable>(_ value: T, userInfo: [CodingUserInfoKey: Any] = [:]) throws -> JSONValue {
+    ///
+    /// `userInfo` values must be `Sendable`. Swift 6's encoder stores them that way.
+    /// A mutable table used only on this thread can be `@unchecked Sendable`.
+    public static func encode<T: Encodable>(
+        _ value: T, userInfo: [CodingUserInfoKey: any Sendable] = [:]
+    ) throws -> JSONValue {
         let enc = JSONEncoder()
-        enc.userInfo = userInfo
+        applyUserInfo(userInfo, toEncoder: enc)
         enc.nonConformingFloatEncodingStrategy = .convertToString(
             positiveInfinity: "inf", negativeInfinity: "-inf", nan: "nan")
         let data = try enc.encode(value)
@@ -79,13 +84,34 @@ public enum JSONValue: Hashable, Sendable, Codable {
     }
 
     /// Decodes a `Decodable` value from this tree.
-    public func decode<T: Decodable>(_ type: T.Type, userInfo: [CodingUserInfoKey: Any] = [:]) throws -> T {
+    public func decode<T: Decodable>(
+        _ type: T.Type, userInfo: [CodingUserInfoKey: any Sendable] = [:]
+    ) throws -> T {
         let data = try JSONEncoder().encode(self)
         let dec = JSONDecoder()
-        dec.userInfo = userInfo
+        Self.applyUserInfo(userInfo, toDecoder: dec)
         dec.nonConformingFloatDecodingStrategy = .convertFromString(
             positiveInfinity: "inf", negativeInfinity: "-inf", nan: "nan")
         return try dec.decode(T.self, from: data)
+    }
+
+    /// Swift 5.10's encoder stores `[CodingUserInfoKey: Any]`. Swift 6 stores
+    /// `[CodingUserInfoKey: any Sendable]`. The dictionaries are invariant, so each
+    /// SDK gets the assignment it accepts. The values are the same objects.
+    private static func applyUserInfo(_ userInfo: [CodingUserInfoKey: any Sendable], toEncoder encoder: JSONEncoder) {
+        #if compiler(>=6.0)
+            encoder.userInfo = userInfo
+        #else
+            for (key, value) in userInfo { encoder.userInfo[key] = value }
+        #endif
+    }
+
+    private static func applyUserInfo(_ userInfo: [CodingUserInfoKey: any Sendable], toDecoder decoder: JSONDecoder) {
+        #if compiler(>=6.0)
+            decoder.userInfo = userInfo
+        #else
+            for (key, value) in userInfo { decoder.userInfo[key] = value }
+        #endif
     }
 
     /// Maximum nesting depth of the tree (used to reject maliciously deep documents).

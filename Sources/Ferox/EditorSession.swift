@@ -116,9 +116,13 @@ public final class EditorSession {
         }
         world.read(MeshRenderer.self) { e, renderer in
             guard let m = world.get(WorldTransform.self, e)?.matrix,
-                let bounds = engine.assets.mesh(renderer.mesh)?.value?.bounds, !bounds.isEmpty
+                let mesh = engine.assets.mesh(renderer.mesh)?.value, !mesh.bounds.isEmpty
             else { return }
-            consider(e, bounds.transformed(by: m).intersect(ray))
+            if mesh.indices.count >= 3 {
+                consider(e, MeshRaycast.nearest(mesh: mesh, model: m, ray: ray)?.t)
+            } else {
+                consider(e, mesh.bounds.transformed(by: m).intersect(ray))
+            }
         }
         for e in world.entities(with: Light.self) + world.entities(with: Camera.self)
         where !world.has(MeshRenderer.self, e) {

@@ -151,6 +151,8 @@ public enum ShapeGeometry3D: Sendable, Hashable {
     case plane(normal: Vec3, distance: Float)
     /// Static triangle mesh.
     case mesh(TriangleMesh)
+    /// Convex polyhedron. Built with `ConvexHull3D.build`; degenerate input is rejected there.
+    case convex(ConvexHull3D)
 }
 
 /// A collision shape attached to a 3D body with a local offset.
@@ -181,6 +183,11 @@ public struct Shape3D: Sendable, Hashable {
         Shape3D(.plane(normal: normal.normalized, distance: distance))
     }
 
+    /// Convex hull of `points` in shape-local space. Nil when the points do not span a volume.
+    public static func convex(_ points: [Vec3]) -> Shape3D? {
+        ConvexHull3D.build(points).map { Shape3D(.convex($0)) }
+    }
+
     /// Mass, local centre and inertia tensor (about the body origin) for the shape's density.
     func massData() -> (mass: Float, center: Vec3, inertia: Mat3) {
         let d = material.density
@@ -205,6 +212,18 @@ public struct Shape3D: Sendable, Hashable {
             diag = Vec3(ix, iy, ix)
         case .plane, .mesh:
             return (0, .zero, .zero)
+        case .convex(let hull):
+            m = d * hull.volume
+            let ext = hull.bounds.extents
+            let s = ext * 2
+            diag = Vec3(s.y * s.y + s.z * s.z, s.x * s.x + s.z * s.z, s.x * s.x + s.y * s.y) * (m / 12)
+            let r = Mat3(localPose.rotation)
+            var inertia = r * Mat3(diagonal: diag) * r.transposed
+            let c = localPose.apply(hull.centroid)
+            let shift =
+                Mat3(diagonal: Vec3(repeating: c.lengthSquared)) + Mat3(columns: c * -c.x, c * -c.y, c * -c.z)
+            inertia = inertia + shift * m
+            return (m, c, inertia)
         }
         // Rotate the principal tensor into body space and shift with the parallel-axis theorem.
         let r = Mat3(localPose.rotation)
@@ -231,6 +250,9 @@ public struct Shape3D: Sendable, Hashable {
             return AABB(min: Vec3(repeating: -1e9), max: Vec3(repeating: 1e9))
         case .mesh(let mesh):
             return mesh.bounds.transformed(
+                by: Mat4(translation: pose.position, rotation: pose.rotation, scale: Vec3(1, 1, 1)))
+        case .convex(let hull):
+            return hull.bounds.transformed(
                 by: Mat4(translation: pose.position, rotation: pose.rotation, scale: Vec3(1, 1, 1)))
         }
     }
@@ -286,6 +308,8 @@ enum Collide3D {
             return meshShape(mesh, wa, b, wb, margin)
         case (_, .mesh(let mesh)):
             return flip(meshShape(mesh, wb, a, wa, margin))
+        case (.convex, _), (_, .convex):
+            return ConvexContact.manifold(a, wa, b, wb, margin: margin)
         }
     }
 
@@ -456,6 +480,16 @@ enum Collide3D {
                         id += 1
                     }
                 }
+            }
+            if m.points.count > 4 {
+                m.points.sort { $0.separation < $1.separation }
+                m.points = reduceTo4(m.points, normal: n)
+            }
+        case .convex(let hull):
+            var id: UInt32 = 0
+            for v in hull.vertices {
+                add(pose.apply(v), 0, id)
+                id += 1
             }
             if m.points.count > 4 {
                 m.points.sort { $0.separation < $1.separation }
@@ -663,6 +697,9 @@ enum Collide3D {
         case .capsule(let hh, let rr):
             core = segment(hh, pose)
             r = rr
+        case .convex:
+            // A hull against a triangle mesh has no dedicated manifold (same as mesh vs mesh).
+            return Manifold3D()
         case .box(let h):
             // Boxes are approximated by an inscribed capsule along their longest axis
             // (documented limitation; prefer capsules/spheres for bodies touching meshes).
@@ -817,6 +854,12 @@ enum Collide3D {
             // Sphere sweeps against meshes are approximated by pulling the hit back along the ray.
             let tt = max(0, t - inflate)
             return (tt, pose.rotate(nl))
+        case .convex(let hull):
+            let lo = pose.invApply(o)
+            let ld = pose.invRotate(d)
+            guard let hit = hull.raycast(origin: lo, direction: ld, maxT: maxT) else { return nil }
+            let tt = max(0, hit.0 - inflate)
+            return (tt, pose.rotate(hit.1))
         }
     }
 }

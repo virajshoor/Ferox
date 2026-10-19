@@ -97,6 +97,18 @@ struct ProbeData {
 #define BUF_PROBES 10
 #define BUF_CASCADE 11
 #define BUF_LOCAL_SHADOW_MATRICES 12
+#define BUF_MATERIAL_TABLE 13
+#define BUF_MATERIAL_IDS 14
+
+// Tier-2 bindless material. `uniforms` is a pointer at the material's frame-allocator offset.
+struct MaterialRecord {
+    texture2d<float> baseColor [[id(0)]];
+    texture2d<float> normalMap [[id(1)]];
+    texture2d<float> metalRough [[id(2)]];
+    texture2d<float> occlusion [[id(3)]];
+    texture2d<float> emissive [[id(4)]];
+    constant MaterialUniforms *uniforms [[id(5)]];
+};
 
 // Function constants select shader variants (see ShaderVariant in ShaderLibrary.swift).
 constant bool HAS_SKINNING [[function_constant(0)]];
@@ -104,11 +116,15 @@ constant bool HAS_ALPHA_TEST [[function_constant(1)]];
 constant bool HAS_VERTEX_COLOR [[function_constant(2)]];
 constant bool USE_CLUSTERS [[function_constant(3)]];
 constant bool IS_UNLIT [[function_constant(4)]];
+constant bool USE_MATERIAL_ARGUMENTS [[function_constant(5)]];
+constant bool USE_DISCRETE_MATERIALS [[function_constant(6)]];
 constant bool HAS_SKINNING_V = is_function_constant_defined(HAS_SKINNING) && HAS_SKINNING;
 constant bool HAS_ALPHA_TEST_V = is_function_constant_defined(HAS_ALPHA_TEST) && HAS_ALPHA_TEST;
 constant bool HAS_VERTEX_COLOR_V = is_function_constant_defined(HAS_VERTEX_COLOR) && HAS_VERTEX_COLOR;
 constant bool USE_CLUSTERS_V = !is_function_constant_defined(USE_CLUSTERS) || USE_CLUSTERS;
 constant bool IS_UNLIT_V = is_function_constant_defined(IS_UNLIT) && IS_UNLIT;
+constant bool USE_MATERIAL_ARGUMENTS_V = is_function_constant_defined(USE_MATERIAL_ARGUMENTS) && USE_MATERIAL_ARGUMENTS;
+constant bool USE_DISCRETE_MATERIALS_V = !is_function_constant_defined(USE_DISCRETE_MATERIALS) || USE_DISCRETE_MATERIALS;
 
 // MARK: - Vertex input
 

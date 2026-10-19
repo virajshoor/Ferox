@@ -15,6 +15,8 @@
         /// traced, or the white fallback when neither runs).
         var ambientOcclusion: any MTLTexture
         var debugView: RenderDebugView
+        /// When set, the HDR chain is skipped and this texture is presented as-is.
+        var directLDR: (any MTLTexture)?
     }
 
     /// The HDR → LDR chain: SSAO, temporal anti-aliasing / upscaling, depth of field, motion
@@ -56,6 +58,8 @@
         /// Set when a MetalFX scaler cannot be created for the current formats, so the
         /// renderer stays on the Ferox implementation instead of retrying every frame.
         private(set) var metalFXTemporalFailed = false
+        /// Hardware probe from init: whether `makeTemporalScaler` accepted `depth32Float_stencil8`.
+        private(set) var metalFXProbe = MetalFXProbeResult.notAttempted(reason: "Not probed yet")
         private(set) var metalFXSpatialFailed = false
 
         #if canImport(MetalFX)
@@ -83,12 +87,13 @@
                 let e = device.makeBuffer(bytes: &zero, length: MemoryLayout<Float>.stride, options: .storageModeShared)
             else { throw RenderError.allocation("exposure buffer") }
             e.label = "Ferox.Exposure"
+            // `makeBuffer(bytes:)` rejects private storage and returns nil. The histogram is 512
+            // bytes and the adapt kernel zeroes it, so shared storage is enough on every GPU.
             let bins = [UInt32](repeating: 0, count: Self.histogramBins)
             guard
-                let h = bins.withUnsafeBytes({
-                    device.makeBuffer(
-                        bytes: $0.baseAddress!, length: $0.count,
-                        options: .storageModePrivate)
+                let h = bins.withUnsafeBytes({ raw -> (any MTLBuffer)? in
+                    guard let base = raw.baseAddress else { return nil }
+                    return device.makeBuffer(bytes: base, length: raw.count, options: .storageModeShared)
                 })
             else { throw RenderError.allocation("luminance histogram") }
             h.label = "Ferox.LuminanceHistogram"
@@ -224,6 +229,7 @@
             _ cb: any MTLCommandBuffer, targets: RenderTargets, inputs: PostInputs, fallback: FallbackTextures,
             allocator: FrameAllocator
         ) -> (any MTLTexture)? {
+            if let direct = inputs.directLDR { return direct }
             guard let c = targets.config, let hdr = targets.hdr, let depth = targets.depth,
                 targets.ldr.count == 2
             else { return nil }
@@ -521,6 +527,40 @@
 
         // MARK: - MetalFX
 
+        /// Asks MetalFX for a temporal scaler using the depth format the prepass actually writes.
+        /// A nil scaler is recorded; the frame then uses Ferox's own temporal resolve.
+        func probeMetalFX() {
+            #if canImport(MetalFX)
+                let mapping = MetalFXTemporalMapping.make(
+                    renderWidth: 16, renderHeight: 16, jitterNDC: Vec2(0.25, -0.5))
+                guard MTLFXTemporalScalerDescriptor.supportsDevice(device) else {
+                    metalFXProbe = MetalFXProbeResult(
+                        attempted: true, scalerCreated: false, depthFormatAccepted: false,
+                        depthFormat: "depth32Float_stencil8",
+                        unavailableReason: "MetalFX temporal is not supported on this device", mapping: mapping)
+                    return
+                }
+                let d = MTLFXTemporalScalerDescriptor()
+                d.colorTextureFormat = TargetFormat.hdr
+                d.depthTextureFormat = TargetFormat.depth
+                d.motionTextureFormat = TargetFormat.motion
+                d.outputTextureFormat = TargetFormat.hdr
+                d.inputWidth = 16
+                d.inputHeight = 16
+                d.outputWidth = 32
+                d.outputHeight = 32
+                let scaler = d.makeTemporalScaler(device: device)
+                metalFXProbe = MetalFXProbeResult(
+                    attempted: true, scalerCreated: scaler != nil, depthFormatAccepted: scaler != nil,
+                    depthFormat: "depth32Float_stencil8",
+                    unavailableReason: scaler == nil
+                        ? "makeTemporalScaler returned nil for depth32Float_stencil8" : nil,
+                    mapping: mapping)
+            #else
+                metalFXProbe = .notAttempted(reason: "MetalFX is not available in this build")
+            #endif
+        }
+
         /// Runs the MetalFX temporal scaler and returns its output-resolution HDR image, or nil
         /// (after logging once) when MetalFX is unavailable for these formats.
         ///
@@ -574,10 +614,12 @@
                 scaler.outputTexture = out
                 scaler.inputContentWidth = render.0
                 scaler.inputContentHeight = render.1
-                scaler.jitterOffsetX = jitter.x * 0.5 * Float(render.0)
-                scaler.jitterOffsetY = -jitter.y * 0.5 * Float(render.1)
-                scaler.motionVectorScaleX = -Float(render.0)
-                scaler.motionVectorScaleY = -Float(render.1)
+                let mapping = MetalFXTemporalMapping.make(
+                    renderWidth: render.0, renderHeight: render.1, jitterNDC: jitter)
+                scaler.jitterOffsetX = mapping.jitterOffsetX
+                scaler.jitterOffsetY = mapping.jitterOffsetY
+                scaler.motionVectorScaleX = mapping.motionScaleX
+                scaler.motionVectorScaleY = mapping.motionScaleY
                 scaler.isDepthReversed = true
                 scaler.reset = !targets.historyValid
                 scaler.encode(commandBuffer: cb)

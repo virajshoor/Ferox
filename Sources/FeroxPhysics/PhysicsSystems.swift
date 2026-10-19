@@ -256,6 +256,12 @@ public final class PhysicsSystem3D: System {
                     return nil
                 }
                 g = .mesh(mesh)
+            case .convex(let vertices):
+                guard let hull = ConvexHull3D.build(vertices) else {
+                    Log.warning("Physics", "Convex collider is degenerate and was skipped")
+                    return nil
+                }
+                g = .convex(hull)
             }
             return Shape3D(
                 g, localPose: Pose3D(position: d.offset * scale, rotation: d.rotation), material: d.material,

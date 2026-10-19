@@ -177,9 +177,8 @@ Each field is described in [05-Engine-Lifecycle.md](05-Engine-Lifecycle.md). Qua
 
 ## 8. Limitations
 
-- **Limitation: nothing has been built or run in this snapshot.** The commands in this document are taken from the manifest and the sources. They have not been executed. See [01-Overview.md](01-Overview.md), section 7.
 - **Limitation: windowed mode is macOS only.** The renderer and `GameHost` need AppKit and Metal.
-- **Limitation: the game still compiles shaders at launch.** CI compiles every `.metal` module with `xcrun metal` on the Mac job. The running renderer still compiles from source unless a metallib is supplied. See [19-Shaders-and-Hot-Reload.md](19-Shaders-and-Hot-Reload.md).
+- **Limitation: a normal launch compiles shaders from source.** CI compiles every `.metal` module with `xcrun metal` on the Mac job. The running renderer uses a metallib only when `FEROX_METALLIB` or a bundled `FeroxShaders.metallib` is present and hot reload is off. See [19-Shaders-and-Hot-Reload.md](19-Shaders-and-Hot-Reload.md).
 - **Limitation: two toolchains.** The manifest requires Swift 5.10. The Mac CI job uses Xcode 16.4, and a Linux job uses Swift 6.2. A change has to compile on both.
 
 ## 9. Related documents

@@ -161,8 +161,10 @@
 
         private var offscreen: (any MTLTexture)?
         private var offscreenBytes = 0
-        /// Colour of each camera that has a `renderTarget`, at the main viewport size.
+        /// Colour of each camera that has a `renderTarget`, at that camera's pixel size.
         private var cameraTargets: [AssetID: any MTLTexture] = [:]
+        /// G-buffer per offscreen resolution. Not the screen view's targets.
+        private var offscreenBuffers: [String: RenderTargets] = [:]
 
         /// Texture last rendered for `Camera.renderTarget == id`, or nil if that camera has not drawn.
         public func renderedCameraTarget(_ id: AssetID) -> (any MTLTexture)? { cameraTargets[id] }
@@ -274,8 +276,9 @@
             if let url { shaders.saveBinaryArchive(to: url) }
         }
 
-        /// Renders every active render-target camera into a texture at the main view's pixel size.
-        /// Encoded before the screen view writes the shared HDR target, then copied out.
+        /// Renders every active render-target camera into its own texture and G-buffer.
+        /// `targetSize` sets the pixel size; otherwise the camera uses the screen size.
+        /// Encoded before the screen view writes the screen G-buffer.
         private func encodeCameraTargets(
             world: World, width: Int, height: Int, commandBuffer cb: any MTLCommandBuffer, resources r: SceneResources
         ) {
@@ -285,27 +288,36 @@
             graphics.settings.gpuDrivenCulling = false
             graphics.settings.shadows.enabled = false
             for camera in cameras {
-                let texture = ensureCameraTarget(camera.target, width: width, height: height)
+                let size = CameraTargets.resolution(camera.camera, screenWidth: width, screenHeight: height)
+                let texture = ensureCameraTarget(camera.target, width: size.width, height: size.height)
+                let gbuffer = ensureOffscreenBuffer(size.width, size.height)
                 guard let texture else { continue }
+                var offscreenFeatures = HeapFeatures()
+                offscreenFeatures.geometryPrepass = true
+                let offscreenConfig = RenderTargets.Config(
+                    renderWidth: size.width, renderHeight: size.height, outputWidth: size.width,
+                    outputHeight: size.height, msaaSamples: 1, temporalHistory: false, hiz: false,
+                    geometryPrepass: true, features: offscreenFeatures)
+                guard (try? gbuffer.ensure(offscreenConfig)) != nil else { continue }
                 var options = ExtractionOptions()
                 options.frustumCull = true
                 options.cameraOverride = RenderCamera(
                     entity: camera.entity, camera: camera.camera,
                     worldMatrix: world.get(WorldTransform.self, camera.entity)?.matrix
                         ?? world.worldMatrix(of: camera.entity),
-                    aspect: Float(width) / Float(max(height, 1)))
+                    aspect: Float(size.width) / Float(max(size.height, 1)))
                 let frame = RenderSceneExtractor.extract(
                     world: world, assets: assets, animations: animations, aspect: options.cameraOverride?.aspect ?? 1,
                     options: options)
                 guard frame.camera != nil else { continue }
                 let uniforms = FrameUniformsBuilder.make(
-                    camera: frame.camera!, width: width, height: height, jitter: .zero, previous: nil,
+                    camera: frame.camera!, width: size.width, height: size.height, jitter: .zero, previous: nil,
                     environment: frame.environment, exposure: 1, time: 0, frameIndex: frameIndex,
                     environmentMips: environment.prefilteredMipCount)
                 let state = passes.prepare(
-                    frame, uniforms: uniforms, graphics: graphics, probes: [], targets: targets, resources: r)
-                passes.encodePrepass(cb, frame: frame, state: state, targets: targets, resources: r)
-                guard let pass = passes.mainPassDescriptor(targets: targets, clearColor: camera.camera.clearColor),
+                    frame, uniforms: uniforms, graphics: graphics, probes: [], targets: gbuffer, resources: r)
+                passes.encodePrepass(cb, frame: frame, state: state, targets: gbuffer, resources: r)
+                guard let pass = passes.mainPassDescriptor(targets: gbuffer, clearColor: camera.camera.clearColor),
                     let enc = cb.makeRenderCommandEncoder(descriptor: pass)
                 else { continue }
                 enc.label = "Ferox.CameraTarget"
@@ -320,7 +332,7 @@
                     passes.encodeSky(enc, environment: environment.environment, state: state, resources: r)
                 }
                 enc.endEncoding()
-                guard let hdr = targets.hdr, let blit = cb.makeBlitCommandEncoder() else { continue }
+                guard let hdr = gbuffer.hdr, let blit = cb.makeBlitCommandEncoder() else { continue }
                 blit.label = "Ferox.CameraTargetCopy"
                 blit.copy(
                     from: hdr, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(),
@@ -328,6 +340,14 @@
                     to: texture, destinationSlice: 0, destinationLevel: 0, destinationOrigin: MTLOrigin())
                 blit.endEncoding()
             }
+        }
+
+        private func ensureOffscreenBuffer(_ width: Int, _ height: Int) -> RenderTargets {
+            let key = "\(width)x\(height)"
+            if let existing = offscreenBuffers[key] { return existing }
+            let created = RenderTargets(device: device)
+            offscreenBuffers[key] = created
+            return created
         }
 
         private func ensureCameraTarget(_ id: AssetID, width: Int, height: Int) -> (any MTLTexture)? {
@@ -381,6 +401,8 @@
             spriteBatcher.removeAllCaches()
             rayTracing?.release()
             targets.release()
+            for buffer in offscreenBuffers.values { buffer.release() }
+            offscreenBuffers.removeAll()
             probes.invalidateAll()
             invalidateHistory()
         }

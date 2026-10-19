@@ -258,6 +258,18 @@ final class CameraTargetSelectionTests: XCTestCase {
         let found = CameraTargets.offscreen(in: world)
         XCTAssertEqual(found.map(\.target.rawValue), ["high", "low"])
     }
+
+    func testOffscreenResolutionIsPerCamera() {
+        var screen = Camera.perspective()
+        XCTAssertEqual(CameraTargets.resolution(screen, screenWidth: 1920, screenHeight: 1080).width, 1920)
+        XCTAssertEqual(CameraTargets.resolution(screen, screenWidth: 1920, screenHeight: 1080).height, 1080)
+        screen.targetSize = CameraTargetSize(width: 320, height: 180)
+        let sized = CameraTargets.resolution(screen, screenWidth: 1920, screenHeight: 1080)
+        XCTAssertEqual(sized.width, 320)
+        XCTAssertEqual(sized.height, 180)
+        screen.targetSize = CameraTargetSize(width: 0, height: -4)
+        XCTAssertEqual(CameraTargets.resolution(screen, screenWidth: 10, screenHeight: 10).width, 1)
+    }
 }
 
 final class MeshPickingTests: XCTestCase {

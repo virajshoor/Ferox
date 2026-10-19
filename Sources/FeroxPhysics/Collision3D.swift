@@ -684,7 +684,44 @@ enum Collide3D {
         return a + ab * (vb * denom) + ac * (vc * denom)
     }
 
-    /// Mesh (A) vs sphere or capsule (B). Box/mesh contact is not supported (see docs).
+    /// Triangles of `mesh` that overlap the hull, each tested with face and edge-edge axes.
+    static func meshHull(
+        _ mesh: TriangleMesh, _ meshPose: Pose3D, _ hull: ConvexHull3D, _ pose: Pose3D, _ margin: Float
+    ) -> Manifold3D {
+        var world = AABB.empty
+        for v in hull.vertices { world.expand(pose.apply(v)) }
+        let pad = Vec3(repeating: margin)
+        world = AABB(min: world.min - pad, max: world.max + pad)
+        var local = AABB.empty
+        for i in 0..<8 {
+            let p = Vec3(
+                (i & 1) == 0 ? world.min.x : world.max.x,
+                (i & 2) == 0 ? world.min.y : world.max.y,
+                (i & 4) == 0 ? world.min.z : world.max.z)
+            local.expand(meshPose.invApply(p))
+        }
+        var best: [(ContactPoint3D, Vec3)] = []
+        mesh.query(local) { t in
+            let (a, b, c) = mesh.triangle(t)
+            let manifold = ConvexContact.triangle(
+                meshPose.apply(a), meshPose.apply(b), meshPose.apply(c), hull, pose, margin)
+            for point in manifold.points {
+                var stamped = point
+                stamped.id = UInt32(truncatingIfNeeded: t)
+                best.append((stamped, manifold.normal))
+            }
+        }
+        guard !best.isEmpty else { return Manifold3D() }
+        best.sort { $0.0.separation < $1.0.separation }
+        var normal = Vec3.zero
+        for contact in best.prefix(4) { normal += contact.1 }
+        let length = normal.length
+        return Manifold3D(
+            normal: length > 1e-8 ? normal / length : best[0].1,
+            points: best.prefix(4).map(\.0))
+    }
+
+    /// Mesh (A) vs sphere, capsule, or convex hull (B). Box/mesh contact is approximated.
     static func meshShape(_ mesh: TriangleMesh, _ meshPose: Pose3D, _ b: Shape3D, _ pose: Pose3D, _ margin: Float)
         -> Manifold3D
     {
@@ -697,9 +734,8 @@ enum Collide3D {
         case .capsule(let hh, let rr):
             core = segment(hh, pose)
             r = rr
-        case .convex:
-            // A hull against a triangle mesh has no dedicated manifold (same as mesh vs mesh).
-            return Manifold3D()
+        case .convex(let hull):
+            return meshHull(mesh, meshPose, hull, pose, margin)
         case .box(let h):
             // Boxes are approximated by an inscribed capsule along their longest axis
             // (documented limitation; prefer capsules/spheres for bodies touching meshes).

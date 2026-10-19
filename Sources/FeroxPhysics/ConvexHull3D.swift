@@ -291,9 +291,9 @@ public struct ConvexHull3D: Sendable, Hashable {
     }
 }
 
-/// Face-SAT and closest-point contact for convex shapes. Sphere and capsule queries use the
-/// hull surface directly. Hull and box pairs use the face normals of whichever shape has
-/// faces; edge-edge axes are not searched.
+/// SAT contact for convex shapes. Sphere and capsule queries use the hull surface directly.
+/// Hull and box pairs test face normals and edge-edge axes, then build a clipped manifold
+/// (one point when the winning axis is an edge cross).
 enum ConvexContact {
     struct Point {
         var a: Vec3
@@ -376,41 +376,209 @@ enum ConvexContact {
         return p
     }
 
-    /// Face axes of boxes and hulls. `separation` is the support of B behind A's outward plane
-    /// (negative when penetrating). The axis with the greatest separation is the contact axis.
+    /// World-space polygon. `normal` points outwards.
+    private struct FacePoly {
+        var normal: Vec3
+        var points: [Vec3]
+    }
+
+    /// Face normals, then edge-edge crosses. The greatest separation (least penetration) wins.
+    /// Face axes are preferred by a small bias so a flat resting contact does not flicker onto
+    /// an edge. ponytail: O(edges²) crosses; switch to EPA if hulls grow past a few dozen edges.
     private static func sat(_ a: Shape3D, _ pa: Pose3D, _ b: Shape3D, _ pb: Pose3D, _ margin: Float) -> Manifold3D {
+        let facesA = faces(a, pa)
+        let facesB = faces(b, pb)
+        guard !facesA.isEmpty || !facesB.isEmpty else { return Manifold3D() }
         var best = -Float.greatestFiniteMagnitude
         var normal = Vec3.up
-        var sawAxis = false
-        func consider(_ shape: Shape3D, _ pose: Pose3D, _ other: Shape3D, _ otherPose: Pose3D, _ sign: Float) -> Bool {
-            for axis in faceAxes(shape, pose) {
-                sawAxis = true
-                let supportPoint = support(other, otherPose, -axis.normal)
-                let separation = axis.normal.dot(supportPoint - axis.point)
-                if separation > margin { return true }
-                if separation > best {
-                    best = separation
-                    normal = axis.normal * sign
-                }
+        var kind = 0
+        var faceIndex = 0
+        var edgePair: ((Vec3, Vec3), (Vec3, Vec3))?
+        func considerFace(_ face: FacePoly, ownerIsA: Bool, index: Int) -> Bool {
+            let n = face.normal
+            let other: Shape3D = ownerIsA ? b : a
+            let otherPose: Pose3D = ownerIsA ? pb : pa
+            let supportPoint = support(other, otherPose, -n)
+            let separation = n.dot(supportPoint - face.points[0])
+            if separation > margin { return true }
+            if separation > best {
+                best = separation
+                normal = ownerIsA ? n : -n
+                kind = ownerIsA ? 0 : 1
+                faceIndex = index
+                edgePair = nil
             }
             return false
         }
-        if consider(a, pa, b, pb, 1) || consider(b, pb, a, pa, -1) || !sawAxis || best > margin {
+        for (i, face) in facesA.enumerated() where considerFace(face, ownerIsA: true, index: i) {
             return Manifold3D()
         }
-        let point = support(b, pb, -normal)
-        return Manifold3D(normal: normal, points: [ContactPoint3D(point: point, separation: best, id: 0)])
+        for (i, face) in facesB.enumerated() where considerFace(face, ownerIsA: false, index: i) {
+            return Manifold3D()
+        }
+        let edgesA = edges(a, pa)
+        let edgesB = edges(b, pb)
+        let towardB = pb.position - pa.position
+        for ea in edgesA {
+            let da = ea.1 - ea.0
+            for eb in edgesB {
+                var axis = da.cross(eb.1 - eb.0)
+                let lengthSquared = axis.lengthSquared
+                if lengthSquared < 1e-10 { continue }
+                axis = axis / lengthSquared.squareRoot()
+                if axis.dot(towardB) < 0 { axis = -axis }
+                let separation = axis.dot(support(b, pb, -axis) - support(a, pa, axis))
+                if separation > margin { return Manifold3D() }
+                // Edges must beat the best face by more than the bias.
+                if separation - 0.001 > best {
+                    best = separation - 0.001
+                    normal = axis
+                    kind = 2
+                    edgePair = (ea, eb)
+                }
+            }
+        }
+        if kind == 2, let (ea, eb) = edgePair {
+            let (ca, cb) = Collide3D.closestSegmentSegment(ea.0, ea.1, eb.0, eb.1)
+            let separation = (cb - ca).dot(normal)
+            guard separation <= margin else { return Manifold3D() }
+            return Manifold3D(
+                normal: normal,
+                points: [ContactPoint3D(point: (ca + cb) * 0.5, separation: separation, id: 0xE000)])
+        }
+        return clipFaces(
+            refIsA: kind == 0, facesA: facesA, facesB: facesB, faceIndex: faceIndex,
+            normal: normal, margin: margin, fallback: best)
     }
 
-    private struct Axis {
-        var normal: Vec3
-        var point: Vec3
+    /// One triangle of a mesh against a hull. The triangle is a two-sided face plus three edges.
+    static func triangle(
+        _ a: Vec3, _ b: Vec3, _ c: Vec3, _ hull: ConvexHull3D, _ pose: Pose3D, _ margin: Float
+    ) -> Manifold3D {
+        let raw = (b - a).cross(c - a)
+        guard raw.lengthSquared > 1e-12 else { return Manifold3D() }
+        let n = raw.normalized
+        let tri = Shape3D(.convex(hull))
+        let facesA = [FacePoly(normal: n, points: [a, b, c]), FacePoly(normal: -n, points: [a, c, b])]
+        let facesB = faces(tri, pose)
+        var best = -Float.greatestFiniteMagnitude
+        var normal = n
+        var kind = 0
+        var faceIndex = 0
+        var edgePair: ((Vec3, Vec3), (Vec3, Vec3))?
+        func triSupport(_ dir: Vec3) -> Vec3 {
+            let da = dir.dot(a)
+            let db = dir.dot(b)
+            let dc = dir.dot(c)
+            if da >= db && da >= dc { return a }
+            return db >= dc ? b : c
+        }
+        for (i, face) in facesA.enumerated() {
+            let supportPoint = support(tri, pose, -face.normal)
+            let separation = face.normal.dot(supportPoint - a)
+            if separation > margin { return Manifold3D() }
+            if separation > best {
+                best = separation
+                normal = face.normal
+                kind = 0
+                faceIndex = i
+                edgePair = nil
+            }
+        }
+        for (i, face) in facesB.enumerated() {
+            let separation = face.normal.dot(triSupport(-face.normal) - face.points[0])
+            if separation > margin { return Manifold3D() }
+            if separation > best {
+                best = separation
+                normal = -face.normal
+                kind = 1
+                faceIndex = i
+                edgePair = nil
+            }
+        }
+        let triEdges = [(a, b), (b, c), (c, a)]
+        let hullEdges = edges(tri, pose)
+        let center = (a + b + c) / 3
+        for ea in triEdges {
+            let da = ea.1 - ea.0
+            for eb in hullEdges {
+                var axis = da.cross(eb.1 - eb.0)
+                let lengthSquared = axis.lengthSquared
+                if lengthSquared < 1e-10 { continue }
+                axis = axis / lengthSquared.squareRoot()
+                if axis.dot(pose.position - center) < 0 { axis = -axis }
+                let separation = axis.dot(support(tri, pose, -axis) - triSupport(axis))
+                if separation > margin { return Manifold3D() }
+                if separation - 0.001 > best {
+                    best = separation - 0.001
+                    normal = axis
+                    kind = 2
+                    edgePair = (ea, eb)
+                }
+            }
+        }
+        if kind == 2, let (ea, eb) = edgePair {
+            let (ca, cb) = Collide3D.closestSegmentSegment(ea.0, ea.1, eb.0, eb.1)
+            let separation = (cb - ca).dot(normal)
+            guard separation <= margin else { return Manifold3D() }
+            return Manifold3D(
+                normal: normal,
+                points: [ContactPoint3D(point: (ca + cb) * 0.5, separation: separation, id: 0xE100)])
+        }
+        return clipFaces(
+            refIsA: kind == 0, facesA: facesA, facesB: facesB, faceIndex: faceIndex,
+            normal: normal, margin: margin, fallback: best)
     }
 
-    private static func faceAxes(_ shape: Shape3D, _ pose: Pose3D) -> [Axis] {
+    private static func clipFaces(
+        refIsA: Bool, facesA: [FacePoly], facesB: [FacePoly], faceIndex: Int, normal: Vec3, margin: Float,
+        fallback: Float
+    ) -> Manifold3D {
+        let refFaces = refIsA ? facesA : facesB
+        let incFaces = refIsA ? facesB : facesA
+        guard faceIndex < refFaces.count,
+            let incident = incFaces.min(by: {
+                $0.normal.dot(refIsA ? normal : -normal) < $1.normal.dot(refIsA ? normal : -normal)
+            })
+        else {
+            return Manifold3D(normal: normal, points: [ContactPoint3D(point: .zero, separation: fallback, id: 0)])
+        }
+        let ref = refFaces[faceIndex]
+        let refN = refIsA ? normal : -normal
+        var poly = incident.points
+        let count = ref.points.count
+        guard count >= 3 else { return Manifold3D() }
+        let centroid = ref.points.reduce(Vec3.zero, +) / Float(count)
+        for i in 0..<count {
+            let p0 = ref.points[i]
+            let p1 = ref.points[(i + 1) % count]
+            var side = (p1 - p0).cross(ref.normal)
+            let length = side.length
+            if length < 1e-8 { continue }
+            side = side / length
+            if side.dot(centroid - p0) > 0 { side = -side }
+            poly = Collide3D.clipPolygon(poly, side, side.dot(p0))
+            if poly.isEmpty { return Manifold3D() }
+        }
+        var manifold = Manifold3D(normal: normal)
+        let plane = refN.dot(ref.points[0])
+        for (k, p) in poly.enumerated() {
+            let separation = refN.dot(p) - plane
+            guard separation <= margin else { continue }
+            manifold.points.append(
+                ContactPoint3D(point: p - refN * (separation * 0.5), separation: separation, id: UInt32(k)))
+        }
+        if manifold.points.count > 4 { manifold.points = Collide3D.reduceTo4(manifold.points, normal: normal) }
+        if manifold.points.isEmpty {
+            manifold.points = [ContactPoint3D(point: ref.points[0], separation: fallback, id: 0)]
+        }
+        return manifold
+    }
+
+    private static func faces(_ shape: Shape3D, _ pose: Pose3D) -> [FacePoly] {
         switch shape.geometry {
         case .convex(let hull):
-            var axes: [Axis] = []
+            var polys: [FacePoly] = []
             let count = hull.triangleCount
             for t in 0..<count {
                 let a = pose.apply(hull.vertices[Int(hull.indices[t * 3])])
@@ -418,19 +586,75 @@ enum ConvexContact {
                 let c = pose.apply(hull.vertices[Int(hull.indices[t * 3 + 2])])
                 let n = (b - a).cross(c - a)
                 if n.lengthSquared < 1e-10 { continue }
-                axes.append(Axis(normal: n.normalized, point: a))
+                polys.append(FacePoly(normal: n.normalized, points: [a, b, c]))
             }
-            return axes
+            return polys
         case .box(let half):
             let r = Mat3(pose.rotation)
-            return [
-                Axis(normal: r.c0, point: pose.position + r.c0 * half.x),
-                Axis(normal: -r.c0, point: pose.position - r.c0 * half.x),
-                Axis(normal: r.c1, point: pose.position + r.c1 * half.y),
-                Axis(normal: -r.c1, point: pose.position - r.c1 * half.y),
-                Axis(normal: r.c2, point: pose.position + r.c2 * half.z),
-                Axis(normal: -r.c2, point: pose.position - r.c2 * half.z),
-            ]
+            let axes = [r.c0, r.c1, r.c2]
+            let extents = [half.x, half.y, half.z]
+            var polys: [FacePoly] = []
+            for i in 0..<3 {
+                for sign in [Float(1), Float(-1)] {
+                    let n = axes[i] * sign
+                    let center = pose.position + n * extents[i]
+                    let u = axes[(i + 1) % 3]
+                    let v = axes[(i + 2) % 3]
+                    let hu = extents[(i + 1) % 3]
+                    let hv = extents[(i + 2) % 3]
+                    polys.append(
+                        FacePoly(
+                            normal: n,
+                            points: [
+                                center + u * hu + v * hv,
+                                center - u * hu + v * hv,
+                                center - u * hu - v * hv,
+                                center + u * hu - v * hv,
+                            ]))
+                }
+            }
+            return polys
+        default:
+            return []
+        }
+    }
+
+    private static func edges(_ shape: Shape3D, _ pose: Pose3D) -> [(Vec3, Vec3)] {
+        switch shape.geometry {
+        case .convex(let hull):
+            var seen = Set<UInt64>()
+            var result: [(Vec3, Vec3)] = []
+            let count = hull.triangleCount
+            for t in 0..<count {
+                let i0 = Int(hull.indices[t * 3])
+                let i1 = Int(hull.indices[t * 3 + 1])
+                let i2 = Int(hull.indices[t * 3 + 2])
+                for (u, v) in [(i0, i1), (i1, i2), (i2, i0)] {
+                    let lo = min(u, v)
+                    let hi = max(u, v)
+                    let key = (UInt64(lo) << 32) | UInt64(hi)
+                    guard seen.insert(key).inserted else { continue }
+                    result.append((pose.apply(hull.vertices[lo]), pose.apply(hull.vertices[hi])))
+                }
+            }
+            return result
+        case .box(let half):
+            let r = Mat3(pose.rotation)
+            let axes = [r.c0, r.c1, r.c2]
+            let extents = [half.x, half.y, half.z]
+            var result: [(Vec3, Vec3)] = []
+            for axis in 0..<3 {
+                let dir = axes[axis] * extents[axis]
+                let u = (axis + 1) % 3
+                let v = (axis + 2) % 3
+                for su in [Float(-1), Float(1)] {
+                    for sv in [Float(-1), Float(1)] {
+                        let center = pose.position + axes[u] * (extents[u] * su) + axes[v] * (extents[v] * sv)
+                        result.append((center - dir, center + dir))
+                    }
+                }
+            }
+            return result
         default:
             return []
         }

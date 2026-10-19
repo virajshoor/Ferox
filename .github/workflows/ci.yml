@@ -51,6 +51,9 @@ jobs:
       - name: Build (release)
         run: swift build -c release
 
+      - name: GPU frame timing
+        run: swift run -c release FeroxBenchmarks --quick --filter gpu.frame-timing
+
   linux-swift-5-10:
     name: Linux Swift 5.10
     runs-on: ubuntu-latest

@@ -78,6 +78,8 @@
         public var reflectionProbeCaptures = 0
         /// Frames skipped because the GPU did not release a frame slot in time.
         public var skippedFrames = 0
+        /// Indirect commands encoded on the GPU this frame (0 when the pass stayed immediate).
+        public var gpuEncodedCommands = 0
     }
 
     // MARK: - Renderer
@@ -501,6 +503,7 @@
             cbPost.enqueue()
 
             frameIndex += 1
+            passes.resetGPUEncodedCommandCount()
             let slot = Int(frameIndex % UInt64(maxFramesInFlight))
             let allocator = allocators[slot]
             allocator.reset()
@@ -559,6 +562,7 @@
             }
             debugDraw.clear()
             statistics.frameIndex = frameIndex
+            statistics.gpuEncodedCommands = passes.gpuEncodedCommandCount
             statistics.cpuMilliseconds = (MonotonicClock.now() - cpuStart) * 1000
             statistics.gpuMilliseconds = gpuClock.lastMilliseconds()
             statistics.reflectionProbeCaptures = probes.captures

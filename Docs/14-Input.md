@@ -454,7 +454,7 @@ input.captureCursor(false)    // on pause
 - **Limitation: playback replaces live input.** Recordings store events and frame indices only, with no timestamps.
 - **Limitation: duplicate action names** without contexts give an unspecified winner.
 - **Limitation: import replaces whole maps,** including actions the file does not list.
-- **Tests.** `Tests/FeroxSubsystemTests/InputTests.swift` covers the behaviour described here. The tests have not yet been run on a toolchain.
+- **Tests.** `Tests/FeroxSubsystemTests/InputTests.swift` covers the behaviour described here. The tests run in CI.
 
 ## 17. Related documents
 

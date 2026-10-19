@@ -1,9 +1,9 @@
 #if canImport(AppKit) && canImport(GameController)
-    import AppKit
-    import CoreHaptics
+    @preconcurrency import AppKit
+    @preconcurrency import CoreHaptics
     import FeroxCore
     import Foundation
-    import GameController
+    @preconcurrency import GameController
 
     /// macOS input backend: translates `NSEvent`s from the game view and polls controllers
     /// through Apple's GameController framework, feeding `InputSystem`.
@@ -20,7 +20,7 @@
         private var lastAxes: [Int: [GamepadAxis: Float]] = [:]
         private var hapticEngines: [Int: CHHapticEngine] = [:]
         private var nextID = 1
-        private var observers: [any NSObjectProtocol] = []
+        nonisolated(unsafe) private var observers: [any NSObjectProtocol] = []
 
         public init(input: InputSystem) {
             self.input = input
@@ -32,13 +32,19 @@
             let center = NotificationCenter.default
             observers.append(
                 center.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { [weak self] note in
-                    guard let c = note.object as? GCController else { return }
-                    MainActor.assumeIsolated { self?.connect(c) }
+                    nonisolated(unsafe) let controller = note.object as? GCController
+                    MainActor.assumeIsolated {
+                        guard let controller else { return }
+                        self?.connect(controller)
+                    }
                 })
             observers.append(
                 center.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { [weak self] note in
-                    guard let c = note.object as? GCController else { return }
-                    MainActor.assumeIsolated { self?.disconnect(c) }
+                    nonisolated(unsafe) let controller = note.object as? GCController
+                    MainActor.assumeIsolated {
+                        guard let controller else { return }
+                        self?.disconnect(controller)
+                    }
                 })
             GCController.shouldMonitorBackgroundEvents = false
             for c in GCController.controllers() { connect(c) }

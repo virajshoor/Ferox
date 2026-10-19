@@ -25,9 +25,11 @@ The open-source game engine for macOS and Apple Silicon.
 > Metal renderer drew offscreen frames, and the examples ran. The current portable suite is 542
 > XCTest tests on Swift 6.2.3 (Linux, `swift test --enable-xctest`). On Swift 6.2, plain
 > `swift test` can exit 0 without running this suite. The Linux CI builds the engine without
-> executing Metal. The macOS CI job compiles every shader and runs `MetalDeviceTests` when the
-> runner has a GPU. That is compilation and renderer construction, not a frame capture on Apple
-> Silicon. Please report build errors or rendering issues on other Macs.
+> executing Metal. The macOS CI job compiles every shader and, when the runner has a GPU, draws an
+> offscreen frame, checks a centre pixel, runs a GPU-encoded indirect command on Metal 3 tier-2
+> devices, and renders a MetalFX temporal frame when the scaler exists. It also prints
+> `gpu.frame-timing`. That paravirtual GPU is not a frame capture on Apple Silicon. Please report
+> build errors or rendering issues on other Macs.
 
 ## Contents
 
@@ -79,7 +81,7 @@ Every row has limits, which are listed honestly in [Limitations and Roadmap](Doc
 
 ## Quick start
 
-You need macOS 14 or later and Xcode 15.3 or later (Swift 5.10, the package's tools version). CI builds with Swift 5.10, Swift 6.2, and Xcode 16.4 on `macos-15`. The Swift 6.2 job also builds `FeroxMath` and `FeroxCore` with strict concurrency. Apple Silicon is recommended.
+You need macOS 14 or later and Xcode 15.3 or later (Swift 5.10, the package's tools version). CI builds with Swift 5.10, Swift 6.2, and Xcode 16.4 on `macos-15`. The Swift 6.2 and macOS jobs build every target with strict concurrency. Apple Silicon is recommended.
 
 ```sh
 git clone https://github.com/virajshoor/Ferox.git

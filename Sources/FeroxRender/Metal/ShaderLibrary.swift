@@ -151,20 +151,58 @@
             }
         }
 
+        /// Device and result slots for the parallel compile. `MTLDevice.makeLibrary` is
+        /// thread-safe; the lock covers the result array. The class is unchecked because
+        /// `MTLDevice` is not `Sendable`.
+        private final class ModuleCompile: @unchecked Sendable {
+            let device: any MTLDevice
+            let directory: URL
+            private let lock = NSLock()
+            private var results: [Result<any MTLLibrary, RenderError>?]
+            init(device: any MTLDevice, directory: URL, count: Int) {
+                self.device = device
+                self.directory = directory
+                results = Array(repeating: nil, count: count)
+            }
+            func store(_ index: Int, _ value: Result<any MTLLibrary, RenderError>) {
+                lock.lock()
+                results[index] = value
+                lock.unlock()
+            }
+            func result(at index: Int) -> Result<any MTLLibrary, RenderError>? { results[index] }
+        }
+
+        private static func compileModule(
+            _ module: String, common: String, device: any MTLDevice, directory: URL
+        ) -> Result<any MTLLibrary, RenderError> {
+            let url = directory.appendingPathComponent("\(module).metal")
+            do {
+                guard let body = try? String(contentsOf: url, encoding: .utf8) else {
+                    throw RenderError.shaderSourceMissing(url.path)
+                }
+                let source = common + "\n#line 1 \"\(module).metal\"\n" + body
+                let lib = try device.makeLibrary(source: source, options: compileOptions())
+                lib.label = "Ferox.\(module)"
+                return .success(lib)
+            } catch let e as RenderError {
+                return .failure(e)
+            } catch {
+                return .failure(.shaderCompilation(file: "\(module).metal", message: "\(error)"))
+            }
+        }
+
         private func compileAll() throws {
             let common = try readSource("Common")
             let modules = Self.modules
-            var results = [Result<any MTLLibrary, RenderError>?](repeating: nil, count: modules.count)
-            let lock = NSLock()
+            let job = ModuleCompile(device: device, directory: sourceDirectory, count: modules.count)
             // Modules are independent; compile them in parallel (MTLDevice is thread-safe).
             DispatchQueue.concurrentPerform(iterations: modules.count) { i in
-                let r = compile(modules[i], common: common)
-                lock.lock()
-                results[i] = r
-                lock.unlock()
+                job.store(
+                    i,
+                    Self.compileModule(modules[i], common: common, device: job.device, directory: job.directory))
             }
             for (i, m) in modules.enumerated() {
-                switch results[i] {
+                switch job.result(at: i) {
                 case .success(let lib)?:
                     install(lib, module: m)
                     failures[m] = nil

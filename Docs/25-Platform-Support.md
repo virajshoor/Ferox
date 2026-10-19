@@ -86,11 +86,11 @@ The full capability model, and the rules that map settings onto it, are in [24-G
 
 The workflow is `.github/workflows/ci.yml`. It has four jobs. Image tags are pinned by digest. See [04-Building-and-Testing.md](04-Building-and-Testing.md).
 
-**macOS build and test** runs on `macos-15`. It requires `/Applications/Xcode_16.4.app` and fails if that bundle is missing. It then builds in debug, runs `swift test --enable-xctest --parallel`, compiles every shader module with `Scripts/compile-shaders.sh`, and builds in release.
+**macOS build and test** runs on `macos-15`. It requires `/Applications/Xcode_16.4.app` and fails if that bundle is missing. It builds in debug, checks strict concurrency, runs `swift test --enable-xctest --parallel` (offscreen pixels, culled indirect commands, and a MetalFX frame that skips when the scaler is absent), compiles every shader module with `Scripts/compile-shaders.sh`, builds in release, and prints `gpu.frame-timing` from `FeroxBenchmarks`. The GPU is the runner's paravirtual device, not Apple Silicon.
 
 **Linux Swift 5.10** is the tools-version floor (`swift:5.10` by digest). It builds `Ferox` and runs all seven test targets with warnings as errors. It does not pass `--enable-xctest`.
 
-**Linux Swift 6.2** (`swift:6.2` by digest) lints with `swift format`, builds `FeroxMath` and `FeroxCore` with `-strict-concurrency=complete` and warnings as errors, and runs `swift test --enable-xctest --parallel`. The rest of the package stays in Swift 5 mode.
+**Linux Swift 6.2** (`swift:6.2` by digest) lints with `swift format`, builds every target and the tests with `-strict-concurrency=complete` and warnings as errors, and runs `swift test --enable-xctest --parallel`. The macOS job runs the same checking, which is what compiles the Metal sources. The package stays in Swift 5 language mode. See [04-Building-and-Testing.md](04-Building-and-Testing.md) for the two source changes that checking required.
 
 **Markdown links** runs lychee in offline mode over `README.md` and `Docs/**/*.md`, and fails on a broken relative link.
 

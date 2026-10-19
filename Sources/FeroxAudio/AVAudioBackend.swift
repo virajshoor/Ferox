@@ -1,5 +1,5 @@
 #if canImport(AVFoundation)
-    import AVFoundation
+    @preconcurrency import AVFoundation
     import FeroxCore
     import Foundation
 
@@ -22,7 +22,8 @@
             var file: AVAudioFile?
             var temporaryURL: URL?
         }
-        private final class Voice {
+        /// Main thread, except `finished`, which the audio callback writes under `flagLock`.
+        private final class Voice: @unchecked Sendable {
             let node = AVAudioPlayerNode()
             var generation: UInt32 = 0
             /// Incremented on every (re)schedule/stop; completion handlers ignore stale schedules.
@@ -285,8 +286,10 @@
                     guard let v, v.scheduleID == sid else { return }
                     if v.loops {
                         // Re-schedule from the start on the main thread for gapless-enough looping.
-                        DispatchQueue.main.async {
-                            guard let self, v.scheduleID == sid, v.busy, let clip = self.clips[v.clip] else { return }
+                        DispatchQueue.main.async { [weak self, weak v] in
+                            guard let self, let v, v.scheduleID == sid, v.busy, let clip = self.clips[v.clip] else {
+                                return
+                            }
                             v.offset = 0
                             self.schedule(v, clip: clip, from: 0)
                         }

@@ -5,7 +5,7 @@
     import FeroxScene
     import FeroxUI
     import Foundation
-    import Metal
+    @preconcurrency import Metal
 
     // MARK: - Public types
 
@@ -78,6 +78,8 @@
         public var reflectionProbeCaptures = 0
         /// Frames skipped because the GPU did not release a frame slot in time.
         public var skippedFrames = 0
+        /// Indirect commands encoded on the GPU this frame (0 when the pass stayed immediate).
+        public var gpuEncodedCommands = 0
     }
 
     // MARK: - Renderer
@@ -172,6 +174,11 @@
             let lock = NSLock()
             var request: Request?
             var ready: InstancePickSample?
+            /// The staging buffer is read once, on the completion thread, after the GPU finishes.
+            final class Bytes: @unchecked Sendable {
+                let buffer: any MTLBuffer
+                init(_ buffer: any MTLBuffer) { self.buffer = buffer }
+            }
         }
         private let instancePicks = InstancePickSlot()
 
@@ -496,6 +503,7 @@
             cbPost.enqueue()
 
             frameIndex += 1
+            passes.resetGPUEncodedCommandCount()
             let slot = Int(frameIndex % UInt64(maxFramesInFlight))
             let allocator = allocators[slot]
             allocator.reset()
@@ -554,6 +562,7 @@
             }
             debugDraw.clear()
             statistics.frameIndex = frameIndex
+            statistics.gpuEncodedCommands = passes.gpuEncodedCommandCount
             statistics.cpuMilliseconds = (MonotonicClock.now() - cpuStart) * 1000
             statistics.gpuMilliseconds = gpuClock.lastMilliseconds()
             statistics.reflectionProbeCaptures = probes.captures
@@ -579,14 +588,15 @@
                 renderWidth: renderWidth, renderHeight: renderHeight)
             let entities = frame.instanceEntities
             let serial = request.serial
+            let held = InstancePickSlot.Bytes(staging)
             guard
                 passes.encodeInstancePick(
                     cb, frame: frame, state: state, resources: r, width: renderWidth, height: renderHeight,
                     pixelX: pixel.x, pixelY: pixel.y, staging: staging)
             else { return }
-            cb.addCompletedHandler { [staging] buffer in
+            cb.addCompletedHandler { buffer in
                 guard buffer.status == .completed else { return }
-                let word = staging.contents().load(
+                let word = held.buffer.contents().load(
                     fromByteOffset: InstancePickStaging.wordOffset, as: UInt32.self)
                 slot.lock.lock()
                 slot.ready = InstancePickSample(serial: serial, instance: word, entities: entities)

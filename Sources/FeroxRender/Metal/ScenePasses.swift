@@ -140,6 +140,10 @@
             var textures: [any MTLTexture]
         }
         private var culledCommands: CulledCommands?
+        /// Commands executed from a GPU-encoded indirect buffer since `resetGPUEncodedCommandCount`.
+        private(set) var gpuEncodedCommandCount = 0
+
+        func resetGPUEncodedCommandCount() { gpuEncodedCommandCount = 0 }
 
         init(device: any MTLDevice, shaders: ShaderLibrary, capabilities: DeviceCapabilities) {
             self.device = device
@@ -1149,7 +1153,7 @@
             }
             enc.setFragmentBuffer(made.table, offset: 0, index: BufferIndex.materialTable)
             enc.setFragmentSlice(made.ids, index: BufferIndex.materialIds)
-            for texture in made.textures { enc.useResource(texture, usage: .sample) }
+            for texture in made.textures { enc.useResource(texture, usage: .read, stages: .fragment) }
             return made
         }
 
@@ -1311,9 +1315,12 @@
             guard let prepared = culledCommands, prepared.kind == kind else { return false }
             culledCommands = nil
             enc.setCullMode(frame.opaque.allSatisfy { !$0.doubleSided } ? .back : .none)
-            for buffer in prepared.buffers { enc.useResource(buffer, usage: .read) }
-            for texture in prepared.textures { enc.useResource(texture, usage: .sample) }
+            for buffer in prepared.buffers {
+                enc.useResource(buffer, usage: .read, stages: [.vertex, .fragment])
+            }
+            for texture in prepared.textures { enc.useResource(texture, usage: .read, stages: .fragment) }
             enc.executeCommandsInBuffer(prepared.commands, range: 0..<prepared.count)
+            gpuEncodedCommandCount += prepared.count
             Profiler.shared.updateRenderCounters { $0.drawCalls += prepared.count }
             return true
         }

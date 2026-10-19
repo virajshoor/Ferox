@@ -279,7 +279,7 @@ enum FeroxBenchmarks {
     #if canImport(Metal)
         /// Times complete offscreen frames (CPU encode + GPU execution + wait) of a lit scene.
         static func gpuBenchmarks(_ device: RenderDevice) -> [Benchmark] {
-            QualityPreset.allCases.compactMap { preset in
+            var benches = QualityPreset.allCases.compactMap { preset in
                 // One renderer per preset, created up front: pipeline compilation is a one-off
                 // cost that must not land in the timed loop.
                 let assets = AssetManager(database: nil)
@@ -298,6 +298,25 @@ enum FeroxBenchmarks {
                         renderer.waitUntilIdle()
                         return frames
                     }
+                }
+            }
+            if let timing = frameTiming(device) { benches.append(timing) }
+            return benches
+        }
+
+        /// A few tiny frames so CI can print a timing without a 1080p preset sweep.
+        static func frameTiming(_ device: RenderDevice) -> Benchmark? {
+            let assets = AssetManager(database: nil)
+            guard let renderer = try? Renderer(device: device, assets: assets) else { return nil }
+            let world = benchmarkScene(assets)
+            return Benchmark(name: "gpu.frame-timing", unit: "frames/s") { _ in
+                {
+                    let frames = 4
+                    for _ in 0..<frames {
+                        _ = renderer.renderOffscreen(world: world, width: 128, height: 128)
+                    }
+                    renderer.waitUntilIdle()
+                    return frames
                 }
             }
         }

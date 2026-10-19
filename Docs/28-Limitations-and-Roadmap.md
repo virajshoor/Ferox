@@ -76,7 +76,7 @@ See [11-Ray-Tracing.md](11-Ray-Tracing.md) for the budget rules, and [24-Graphic
 The items below are plans. They are based on gaps that the source records or that this review found. They are not commitments, they have no dates, and they may change or be dropped.
 
 - **Verify on more hardware.** The package has been built, tested and rendered on one M1 Max. Repeat the build, the tests and `FeroxDiag --render` on other named Apple Silicon Macs and on other GPUs. Record the Mac model, chip, macOS version and commit, as [CONTRIBUTING.md](../CONTRIBUTING.md) asks, and then update [25-Platform-Support.md](25-Platform-Support.md) and this document.
-- **Verify MetalFX on a captured frame.** The probe records whether a temporal scaler can be created for the prepass depth format. A captured frame on hardware that supports MetalFX, and on hardware that does not, is still needed.
+- **Verify MetalFX on Apple Silicon.** CI renders a temporal frame when the runner's GPU can create the scaler, and skips that test when it cannot. A captured frame on Apple Silicon, where the scaler is expected to run, is still needed.
 - **Two presented views.** Render-target cameras draw at their own resolution into their own G-buffer. Presenting two viewports in one drawable is not done.
 - **Sky for other projections.** Draw the sky for orthographic cameras, or document the clear-colour behaviour as the intended design.
 - **Reflection probes.** Support per-probe face sizes, blending between overlapping probes, and review the limit of 16 probes.

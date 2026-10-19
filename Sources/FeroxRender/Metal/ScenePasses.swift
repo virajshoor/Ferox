@@ -140,6 +140,10 @@
             var textures: [any MTLTexture]
         }
         private var culledCommands: CulledCommands?
+        /// Commands executed from a GPU-encoded indirect buffer since `resetGPUEncodedCommandCount`.
+        private(set) var gpuEncodedCommandCount = 0
+
+        func resetGPUEncodedCommandCount() { gpuEncodedCommandCount = 0 }
 
         init(device: any MTLDevice, shaders: ShaderLibrary, capabilities: DeviceCapabilities) {
             self.device = device
@@ -1314,6 +1318,7 @@
             for buffer in prepared.buffers { enc.useResource(buffer, usage: .read) }
             for texture in prepared.textures { enc.useResource(texture, usage: .sample) }
             enc.executeCommandsInBuffer(prepared.commands, range: 0..<prepared.count)
+            gpuEncodedCommandCount += prepared.count
             Profiler.shared.updateRenderCounters { $0.drawCalls += prepared.count }
             return true
         }

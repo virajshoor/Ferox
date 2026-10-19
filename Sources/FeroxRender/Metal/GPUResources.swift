@@ -895,13 +895,15 @@
             fill(blackCube, [0, 0, 0, 255], slices: 6)
             cubeArray = try make(.typeCubeArray, .rgba8Unorm, storage: colorStorage, label: "Ferox.Fallback.CubeArray")
             fill(cubeArray, [0, 0, 0, 255], slices: 6)
-            hiz = try make(.type2D, .r32Float, storage: colorStorage, label: "Ferox.Fallback.HiZ")
-            var farDepth: Float = 0  // reverse-Z far: a sample (if occlusion is wrongly left on) stays conservative
+            // Fill through a local. A closure that reads `hiz` captures `self` before `shadowArray` is set.
+            let hizTexture = try make(.type2D, .r32Float, storage: colorStorage, label: "Ferox.Fallback.HiZ")
+            let farDepth: Float = 0  // reverse-Z far: a sample (if occlusion is wrongly left on) stays conservative
             withUnsafeBytes(of: farDepth) { raw in
-                hiz.replace(
+                hizTexture.replace(
                     region: MTLRegionMake2D(0, 0, 1, 1), mipmapLevel: 0, slice: 0, withBytes: raw.baseAddress!,
                     bytesPerRow: 4, bytesPerImage: 4)
             }
+            hiz = hizTexture
             // Depth textures must be private; clear it with a render pass.
             shadowArray = try make(
                 .type2DArray, .depth32Float, storage: .private, usage: [.shaderRead, .renderTarget],

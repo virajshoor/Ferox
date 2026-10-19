@@ -56,7 +56,7 @@ See [11-Ray-Tracing.md](11-Ray-Tracing.md) for the budget rules, and [24-Graphic
 
 ## 6. Editor
 
-- **Limitation: picking is CPU-side.** Left-clicking in the viewport selects the nearest entity. A mesh with indices is tested with a front-face triangle raycast (`MeshRaycast`); a mesh without indices uses its world bounds. Lights and cameras without a mesh use a 0.3-unit marker sphere. `prepassPickFragment` can write an instance id into an `r32Uint` attachment, and `InstancePickMap` turns that id into an entity, but the editor does not read a GPU attachment back. The editor's own guide is [22-Editor.md](22-Editor.md).
+- Viewport picking reads one `r32Uint` pixel back through a staging buffer. The CPU raycast is the fallback until that read finishes, and it is what hits lights, cameras and meshes without indices. The GPU pass draws opaque meshes only. The inspector, asset browser and prefab editing are still absent. See [22-Editor.md](22-Editor.md).
 
 ## 7. Networking
 

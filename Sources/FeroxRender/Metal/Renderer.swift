@@ -159,6 +159,22 @@
         /// The handlers capture this clock, not `Renderer`.
         private let gpuClock: GPUFrameClock
 
+        /// One scheduled instance-id read and the sample the GPU has finished. The completion
+        /// handler writes `ready` from a Metal thread.
+        private final class InstancePickSlot: @unchecked Sendable {
+            struct Request {
+                var x: Int
+                var y: Int
+                var serial: UInt64
+                var viewWidth: Int
+                var viewHeight: Int
+            }
+            let lock = NSLock()
+            var request: Request?
+            var ready: InstancePickSample?
+        }
+        private let instancePicks = InstancePickSlot()
+
         private var offscreen: (any MTLTexture)?
         private var offscreenBytes = 0
         /// Colour of each camera that has a `renderTarget`, at that camera's pixel size.
@@ -171,6 +187,26 @@
 
         /// Result of the MetalFX temporal-scaler probe performed at init.
         public var metalFXProbe: MetalFXProbeResult { post.metalFXProbe }
+
+        /// Asks the next frame to write the instance id at a view pixel into a staging buffer.
+        /// `serial` comes from `EditorSession.gpuPickSerial`. The result is read with `takeInstancePick`.
+        public func scheduleInstancePick(x: Int, y: Int, serial: UInt64, viewWidth: Int, viewHeight: Int) {
+            let slot = instancePicks
+            slot.lock.lock()
+            slot.request = InstancePickSlot.Request(
+                x: x, y: y, serial: serial, viewWidth: max(viewWidth, 1), viewHeight: max(viewHeight, 1))
+            slot.lock.unlock()
+        }
+
+        /// The latest finished GPU pick, if the readback has landed. Clears it.
+        public func takeInstancePick() -> InstancePickSample? {
+            let slot = instancePicks
+            slot.lock.lock()
+            defer { slot.lock.unlock() }
+            let ready = slot.ready
+            slot.ready = nil
+            return ready
+        }
 
         /// Camera moves longer than this in one frame are treated as cuts (teleports), which
         /// discard temporal history instead of smearing it.
@@ -524,6 +560,40 @@
             return true
         }
 
+        /// Encodes a scheduled instance-id pick into `cb` and publishes the word when the buffer finishes.
+        private func encodeScheduledInstancePick(
+            _ cb: any MTLCommandBuffer, frame: RenderFrameData, state: SceneFrameState,
+            resources r: SceneResources, renderWidth: Int, renderHeight: Int
+        ) {
+            let slot = instancePicks
+            slot.lock.lock()
+            let request = slot.request
+            slot.request = nil
+            slot.lock.unlock()
+            guard let request,
+                let staging = device.makeBuffer(length: InstancePickStaging.byteCount, options: .storageModeShared)
+            else { return }
+            staging.label = "Ferox.InstancePickStaging"
+            let pixel = InstancePickStaging.renderPixel(
+                viewX: request.x, viewY: request.y, viewWidth: request.viewWidth, viewHeight: request.viewHeight,
+                renderWidth: renderWidth, renderHeight: renderHeight)
+            let entities = frame.instanceEntities
+            let serial = request.serial
+            guard
+                passes.encodeInstancePick(
+                    cb, frame: frame, state: state, resources: r, width: renderWidth, height: renderHeight,
+                    pixelX: pixel.x, pixelY: pixel.y, staging: staging)
+            else { return }
+            cb.addCompletedHandler { [staging] buffer in
+                guard buffer.status == .completed else { return }
+                let word = staging.contents().load(
+                    fromByteOffset: InstancePickStaging.wordOffset, as: UInt32.self)
+                slot.lock.lock()
+                slot.ready = InstancePickSample(serial: serial, instance: word, entities: entities)
+                slot.lock.unlock()
+            }
+        }
+
         private func encodeFrame(
             world: World, output: RenderOutput, time: Double, deltaTime: Float, ui: UIContext?,
             slot: Int, scene cb: any MTLCommandBuffer, post cbPost: any MTLCommandBuffer,
@@ -680,6 +750,8 @@
                 passes.encodePrepass(cb, frame: frame, state: state, targets: targets, resources: r)
                 if cfg.hiz { passes.encodeHiZ(cb, state: state, targets: targets) }
             }
+            encodeScheduledInstancePick(
+                cb, frame: frame, state: state, resources: r, renderWidth: rw, renderHeight: rh)
 
             let postUniforms = PostUniformsBuilder.make(
                 resolved.settings.post, antiAliasing: resolved.settings.antiAliasing,

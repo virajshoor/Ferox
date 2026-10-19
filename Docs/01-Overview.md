@@ -104,7 +104,7 @@ The list below states what the source implements. Each item links to the documen
 - **Upscaling.** Ferox spatial and temporal upscalers, MetalFX spatial and temporal scalers, and a dynamic resolution controller. See [12-Upscaling-and-Dynamic-Resolution.md](12-Upscaling-and-Dynamic-Resolution.md).
 - **UI, audio, animation, assets and networking.** These are described in [15-User-Interface.md](15-User-Interface.md), [16-Audio.md](16-Audio.md), [17-Animation-and-Particles.md](17-Animation-and-Particles.md), [18-Assets.md](18-Assets.md) and [23-Networking.md](23-Networking.md).
 - **Shaders.** Metal sources compile at run time and can be hot-reloaded from a directory. A precompiled metallib is used when `FEROX_METALLIB` or a bundled `FeroxShaders.metallib` is present and hot reload is off. Mesh pipelines are prewarmed into a binary archive. See [19-Shaders-and-Hot-Reload.md](19-Shaders-and-Hot-Reload.md).
-- **Editor core.** `EditorSession`, in `Sources/Ferox/EditorSession.swift`, provides selection, play, pause and stop, undo and redo, and scene files without any UI. Mesh picking uses triangle hits when the mesh has indices. See [22-Editor.md](22-Editor.md).
+- **Editor core.** `EditorSession`, in `Sources/Ferox/EditorSession.swift`, provides selection, play, pause and stop, undo and redo, and scene files without any UI. Mesh picking uses a GPU instance-id readback when Metal is available, and a triangle raycast until that read lands. See [22-Editor.md](22-Editor.md).
 
 ## 5. Platform support
 
@@ -144,7 +144,7 @@ This documentation was written from the source code of this repository snapshot.
 - **Limitation: one machine verified.** Verification covers one M1 Max running macOS 27. Section 7 applies to every document in this series.
 - **Limitation: other hardware is untested.** Other Macs, GPUs and iOS devices have not been tested.
 - **Limitation: Linux does not execute Metal.** CI builds `Ferox` and runs the portable tests. The examples' windows, shaders and audio output require macOS.
-- **Limitation: a basic editor.** `FeroxEditor` picks entities in the viewport by world bounds for meshes, and by a small marker sphere for lights and cameras. It has a fixed toolbar layout. See [22-Editor.md](22-Editor.md).
+- **Limitation: a basic editor.** The viewport pick uses the GPU instance id for opaque meshes and a CPU raycast otherwise. The toolbar layout is fixed, and the inspector edits name and transform only. See [22-Editor.md](22-Editor.md).
 
 ## 9. Related documents
 

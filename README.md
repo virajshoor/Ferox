@@ -72,7 +72,7 @@ The engine is a set of small Swift modules. The parts that do not need Metal are
 | **Gameplay** | `Game` protocol hooks, input actions and contexts, retained-mode UI, spatial audio, animation clips and state machines, CPU and GPU particles |
 | **Assets** | glTF 2.0, PNG and JPEG decoding, a validated asset database, memory budgets, hot reload |
 | **Shaders** | Metal Shading Language, run-time hot reload, optional metallib, pipeline binary-archive prewarm |
-| **Editor** | Hierarchy, inspector, Play/Pause/Step/Stop, snapshot undo/redo, scene files, triangle mesh picking |
+| **Editor** | Hierarchy, inspector, Play/Pause/Step/Stop, snapshot undo/redo, scene files, GPU instance-id picking with a CPU raycast fallback |
 | **Networking** | Scoped foundations: transport, reliable channels, snapshot replication |
 
 Every row has limits, which are listed honestly in [Limitations and Roadmap](Docs/28-Limitations-and-Roadmap.md).

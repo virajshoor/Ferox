@@ -298,6 +298,26 @@ final class MeshPickingTests: XCTestCase {
         XCTAssertNil(map.entity(forInstance: 4))
     }
 
+    func testInstancePickReadbackKeepsTheLatestSerial() {
+        var readback = InstancePickReadback()
+        let first = readback.request(x: 3, y: 4)
+        let second = readback.request(x: -2, y: 9)
+        XCTAssertEqual(first.serial, 1)
+        XCTAssertEqual(second.x, 0)
+        XCTAssertGreaterThan(second.serial, first.serial)
+        readback.complete(serial: first.serial, word: 7)
+        XCTAssertNil(readback.sample)
+        readback.complete(serial: second.serial, word: 0)
+        let world = World()
+        let entity = world.createEntity()
+        XCTAssertEqual(readback.entity(serial: second.serial, map: InstancePickMap(entities: [entity])), entity)
+        let pixel = InstancePickStaging.renderPixel(
+            viewX: 10, viewY: 20, viewWidth: 100, viewHeight: 50, renderWidth: 200, renderHeight: 100)
+        XCTAssertEqual(pixel.x, 20)
+        XCTAssertEqual(pixel.y, 40)
+        XCTAssertEqual(InstancePickStaging.byteCount, 256)
+    }
+
     func testShadersDeclareTheNewPaths() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -321,11 +341,28 @@ final class MeshPickingTests: XCTestCase {
                 throw XCTSkip(
                     "No Metal device in this process. Renderer construction and shader compilation need a GPU.")
             }
-            let renderer = try Renderer(assets: AssetManager(database: nil))
+            let assets = AssetManager(database: nil)
+            let mesh = AssetID("pick.cube")
+            assets.registerMesh(.cube(), id: mesh)
+            let renderer = try Renderer(assets: assets)
             XCTAssertTrue(renderer.shaders.failures.isEmpty, "\(renderer.shaders.failures)")
             XCTAssertEqual(renderer.shaders.module(of: "prepassPickFragment"), "Mesh")
             XCTAssertTrue(renderer.metalFXProbe.attempted)
             XCTAssertFalse(renderer.metalFXProbe.depthFormat.isEmpty)
+            let world = World()
+            let cameraEntity = world.createEntity(
+                named: "Camera",
+                transform: Transform(position: Vec3(0, 0, 4), rotation: .lookRotation(forward: Vec3(0, 0, -1))))
+            world.add(Camera.perspective(), to: cameraEntity)
+            let cube = world.createEntity(named: "Cube")
+            world.add(MeshRenderer(mesh: mesh), to: cube)
+            renderer.scheduleInstancePick(x: 32, y: 32, serial: 1, viewWidth: 64, viewHeight: 64)
+            XCTAssertNotNil(renderer.renderOffscreen(world: world, width: 64, height: 64))
+            let sample = renderer.takeInstancePick()
+            XCTAssertEqual(sample?.serial, 1)
+            XCTAssertEqual(sample?.instance, 0)
+            XCTAssertEqual(sample?.entities.first, cube)
+
             if renderer.device.supportsFamily(.metal3) {
                 let desc = MTLIndirectCommandBufferDescriptor()
                 desc.commandTypes = [.drawIndexed]

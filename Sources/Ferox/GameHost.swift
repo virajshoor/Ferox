@@ -1,8 +1,8 @@
 #if canImport(AppKit) && canImport(MetalKit)
-    import AppKit
-    import Metal
-    import MetalKit
-    import QuartzCore
+    @preconcurrency import AppKit
+    @preconcurrency import Metal
+    @preconcurrency import MetalKit
+    @preconcurrency import QuartzCore
 
     /// Runs a `Game` in a macOS window: creates the application, the window, a Metal view,
     /// the engine and the renderer, and drives one `Engine.tick()` + `Renderer.render` per

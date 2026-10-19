@@ -5,7 +5,7 @@
     import FeroxScene
     import FeroxUI
     import Foundation
-    import Metal
+    @preconcurrency import Metal
 
     // MARK: - Public types
 

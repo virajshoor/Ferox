@@ -23,6 +23,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- GPU culling compiles and covers every opaque submesh. `cullInstances` takes the Hi-Z pyramid as `access::read` and writes a visibility flag; `expandVisibleDraws` builds indirect arguments for every batch, including later submeshes. Indirect draws are 32 bytes so each batch offset is 16-byte aligned. If a cull kernel fails to compile, the frame draws the CPU index list. Occlusion-off binds a 1×1 `r32Float` texture.
+- `Engine.activeCamera()` is `RenderSceneExtractor.mainCamera`: hierarchy, `renderTarget == nil`, priority, then lowest entity index.
+- Discrete-GPU textures are staged into private storage with a blit. Managed fallback textures are synchronized before the GPU reads them.
+- Contact keys are `(body, shape)` pairs. Shape 256 no longer aliases shape 0, and tilemaps are not capped at 255 boxes.
 - `MeshBudgetTests` declared `weak let`. Swift 5.10 (the Xcode 15.4 toolchain used by macOS CI) rejects that, so the test target failed to compile and the suite never ran. The witness is now a `weak var` assigned on the next line, which also stays warning-free on Swift 6.2+.
 - First build with a real Swift compiler (6.1.3, Linux): fixed compile errors in `SceneManager`, `Collision3D`, `AssetDatabase`, `RenderScene`, the examples and `EngineTests`. All 491 tests pass on Linux.
 - `FrameClock.tick(delta:)` dropped the first frame's delta, and rounding error could drop a fixed step. Fixed steps are now frame-rate independent.

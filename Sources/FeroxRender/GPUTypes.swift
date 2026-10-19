@@ -321,7 +321,7 @@ public struct CullUniforms {
     public var previousViewProjection = Mat4.identity
     /// xy mip-0 size, z mip count.
     public var hizSize = Vec4.zero
-    /// x instance count, y flags (bit 0 occlusion), z batch count.
+    /// x instance count, y flags (bit 0 occlusion), z batch count, w membership count.
     public var counts = SIMD4<UInt32>.zero
     public init() {}
 }

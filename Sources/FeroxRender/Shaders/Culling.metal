@@ -4,10 +4,11 @@
 //    With reverse-Z the *farthest* depth is the minimum, so each texel keeps the MIN of
 //    its footprint (odd sizes fold in the extra row/column so nothing is skipped).
 // 2. `resetDrawArgs` zeroes each batch's instance count.
-// 3. `cullInstances` tests every instance's bounding sphere against the frustum and,
-//    optionally, the Hi-Z pyramid (previous view-projection), then appends survivors to
-//    their batch's indirect draw arguments. The vertex shader reads
-//    `instanceIndices[instance_id]` (Metal's instance_id already includes baseInstance).
+// 3. `cullInstances` writes one visibility flag per instance (frustum, then optional Hi-Z).
+// 4. `expandVisibleDraws` appends each visible instance to every opaque batch that draws
+//    it, so a mesh with several submeshes is culled once and drawn in each batch.
+//    The vertex shader reads `instanceIndices[instance_id]` (Metal's instance_id already
+//    includes baseInstance).
 //
 // Hi-Z testing uses the previous frame's depth, so an object revealed by fast camera
 // motion can be culled for one frame. The CPU path is used where this is unacceptable.
@@ -16,11 +17,12 @@ struct CullUniforms {
     float4 planes[6];           // world-space frustum planes (xyz normal pointing inwards, w distance)
     float4x4 previousViewProjection;
     float4 hizSize;             // xy mip-0 size, z mip count, w unused
-    uint4 counts;               // x instance count, y flags (bit 0: occlusion), z batch count, w unused
+    uint4 counts;               // x instance count, y flags (bit 0: occlusion), z batch count, w membership count
 };
 
 #define CULL_FLAG_OCCLUSION 1u
-#define DRAW_ARGS_STRIDE 5u  // MTLDrawIndexedPrimitivesIndirectArguments, in uints
+// Eight uints: five draw-argument words plus padding so each batch is 16-byte aligned.
+#define DRAW_ARGS_STRIDE 8u
 
 kernel void hizCopy(depth2d<float, access::read> depth [[texture(0)]],
                     texture2d<float, access::write> dst [[texture(1)]],
@@ -71,7 +73,7 @@ inline bool sphereInFrustum(float4 sphere, constant CullUniforms &u) {
 }
 
 /// Conservative occlusion test of a bounding sphere against the Hi-Z pyramid.
-inline bool sphereVisibleHiZ(float4 sphere, constant CullUniforms &u, texture2d<float> hiz) {
+inline bool sphereVisibleHiZ(float4 sphere, constant CullUniforms &u, texture2d<float, access::read> hiz) {
     float2 uvMin = float2(1.0f), uvMax = float2(0.0f);
     float nearestDepth = 0.0f;  // reverse-Z: larger is nearer
     for (uint i = 0; i < 8u; i++) {
@@ -103,18 +105,34 @@ inline bool sphereVisibleHiZ(float4 sphere, constant CullUniforms &u, texture2d<
 
 kernel void cullInstances(constant CullUniforms &u [[buffer(0)]],
                           const device InstanceData *instances [[buffer(1)]],
-                          const device uint *batchIds [[buffer(2)]],
-                          device atomic_uint *args [[buffer(3)]],
-                          device uint *instanceIndices [[buffer(4)]],
-                          texture2d<float> hiz [[texture(0)]],
+                          device uint *visibility [[buffer(2)]],
+                          texture2d<float, access::read> hiz [[texture(0)]],
                           uint gid [[thread_position_in_grid]]) {
     if (gid >= u.counts.x) { return; }
+    uint visible = 1u;
     float4 sphere = instances[gid].bounds;
-    if (!sphereInFrustum(sphere, u)) { return; }
-    if ((u.counts.y & CULL_FLAG_OCCLUSION) != 0u && !sphereVisibleHiZ(sphere, u, hiz)) { return; }
-    uint batch = batchIds[gid];
+    if (!sphereInFrustum(sphere, u)) {
+        visible = 0u;
+    } else if ((u.counts.y & CULL_FLAG_OCCLUSION) != 0u && !sphereVisibleHiZ(sphere, u, hiz)) {
+        visible = 0u;
+    }
+    visibility[gid] = visible;
+}
+
+/// One thread per (instance, batch) membership. Visible instances are appended to that
+/// batch's indirect arguments. `counts.w` is the membership count.
+kernel void expandVisibleDraws(constant CullUniforms &u [[buffer(0)]],
+                               const device uint *visibility [[buffer(1)]],
+                               const device uint2 *memberships [[buffer(2)]],
+                               device atomic_uint *args [[buffer(3)]],
+                               device uint *instanceIndices [[buffer(4)]],
+                               uint gid [[thread_position_in_grid]]) {
+    if (gid >= u.counts.w) { return; }
+    uint2 m = memberships[gid];
+    if (m.x >= u.counts.x || visibility[m.x] == 0u) { return; }
+    uint batch = m.y;
     if (batch >= u.counts.z) { return; }
     uint slot = atomic_fetch_add_explicit(&args[batch * DRAW_ARGS_STRIDE + 1u], 1u, memory_order_relaxed);
     uint base = atomic_load_explicit(&args[batch * DRAW_ARGS_STRIDE + 4u], memory_order_relaxed);
-    instanceIndices[base + slot] = gid;
+    instanceIndices[base + slot] = m.x;
 }

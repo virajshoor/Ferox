@@ -180,9 +180,6 @@ public final class PhysicsSystem2D: System {
                 s.material = material
                 s.filter = filter
                 shapes.append(s)
-                // Shapes per body are limited to 256 (contact key packing); split into extra
-                // rows beyond that would require multiple bodies.
-                if shapes.count >= 255 { return shapes }
             }
         }
         return shapes

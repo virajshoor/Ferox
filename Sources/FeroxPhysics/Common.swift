@@ -205,7 +205,3 @@ struct SweepAndPrune {
     }
 }
 
-func pairKey(_ a: Int, _ b: Int) -> UInt64 {
-    let lo = UInt64(Swift.min(a, b)), hi = UInt64(Swift.max(a, b))
-    return (lo << 32) | hi
-}

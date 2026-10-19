@@ -270,15 +270,13 @@ public final class Engine {
 
     // MARK: Helpers
 
-    /// The camera the renderer will use: the enabled camera with the highest priority
-    /// (ties go to the lowest entity index, matching `RenderSceneExtractor`).
+    /// The camera the renderer draws to the screen. This is `RenderSceneExtractor.mainCamera`:
+    /// active in the hierarchy, `renderTarget == nil`, highest priority, and on a tie the
+    /// lowest entity index. Audio and game code follow the same camera as the picture.
     public func activeCamera() -> (entity: Entity, camera: Camera, transform: WorldTransform)? {
-        var best: (Entity, Camera, WorldTransform)?
-        world.read(Camera.self) { e, c in
-            guard !world.has(Disabled.self, e), let t = world.get(WorldTransform.self, e) else { return }
-            if best == nil || c.priority > best!.1.priority { best = (e, c, t) }
-        }
-        return best.map { (entity: $0.0, camera: $0.1, transform: $0.2) }
+        guard let (e, c) = RenderSceneExtractor.mainCamera(in: world) else { return nil }
+        let t = world.get(WorldTransform.self, e) ?? WorldTransform(matrix: world.worldMatrix(of: e))
+        return (entity: e, camera: c, transform: t)
     }
 
     /// Spatial audio follows the active camera.

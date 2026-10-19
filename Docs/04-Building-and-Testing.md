@@ -56,19 +56,19 @@ The package has no external dependencies, so there is no resolution step. Metal 
 | `FeroxRenderTests` | `FeroxRender`, `Ferox` | The CPU side of the renderer: render maths, uniforms, dynamic resolution, tessellation, debug drawing, sprite batching, scene extraction |
 | `FeroxIntegrationTests` | `Ferox` | Engine lifecycle, editor session (undo, Play/Stop, save and load), launcher |
 
-None of these tests needs a GPU, so all seven can run on Linux. All 491 tests pass with Swift 6.1.3 on Linux. They have not yet been run on a Mac.
+None of these tests needs a GPU, so all seven can run on Linux. The suite is 515 XCTest tests on Swift 6.2.3 (Linux). On Swift 6.2, `swift test` without `--enable-xctest` can exit 0 after running zero tests, so use the flag below. An earlier Mac run of the previous suite (504 tests, Swift 6.4) passed.
 
 ## 4. Running tests
 
 ```sh
-swift test                                  # every test target that exists
-swift test --parallel                       # what the macOS CI job runs
+swift test --enable-xctest                 # every XCTest target (required on Swift 6.2)
+swift test --enable-xctest --parallel       # what the macOS CI job should run
 swift test --filter FeroxPhysicsTests       # one target
 swift test --filter "FeroxMathTests|FeroxCoreTests|FeroxSceneTests|FeroxPhysicsTests|FeroxSubsystemTests|FeroxRenderTests|FeroxIntegrationTests"
                                             # what the Linux CI job runs
 ```
 
-`CONTRIBUTING.md` requires that a pull request includes tests for new behaviour and that `swift test` passes locally.
+`CONTRIBUTING.md` requires that a pull request includes tests for new behaviour and that `swift test` passes locally. Pass `--enable-xctest` so a Swift 6.2 runner cannot report success after executing zero tests. The workflow in this tree still invokes `swift test` without that flag; that is called out with the CI job below.
 
 ## 5. Continuous integration
 
@@ -177,7 +177,7 @@ The steps for adding a shader are in [19-Shaders-and-Hot-Reload.md](19-Shaders-a
 
 ## 11. Limitations
 
-- **Limitation: tests verified on one machine.** The full suite (504 tests) passes on an M1 Max, macOS 27, Swift 6.4. No other Mac or CI result is cited.
+- **Limitation: the current suite is verified on Linux.** 515 XCTest tests pass on Swift 6.2.3. An earlier suite of 504 tests passed on an M1 Max, macOS 27, Swift 6.4. No other Mac result is cited for this tree.
 - **Limitation: no GPU tests.** Shaders and render passes are exercised only by running the examples or `FeroxDiag --render` on a Mac.
 - **Limitation: shader errors are found at run time.** There is no offline shader compile step in CI.
 - **Limitation: no benchmark figures are published here.** Use the tool, in release configuration, on the machine of interest.

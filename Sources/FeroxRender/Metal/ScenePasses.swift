@@ -54,9 +54,13 @@ struct SceneFrameState {
     var instances: BufferSlice?
     /// CPU-built `instanceIndices` (shadow casters, transparents, non-cullable batches).
     var staticIndices: BufferSlice?
-    /// Indices compacted by `cullInstances` (nil when GPU culling is off).
+    /// Indices compacted by `expandVisibleDraws` (nil when GPU culling is off).
     var culledIndices: BufferSlice?
-    /// One `MTLDrawIndexedPrimitivesIndirectArguments` per opaque batch.
+    /// One visibility flag per instance, written by `cullInstances`.
+    var visibility: BufferSlice?
+    /// `(instance, batch)` pairs consumed by `expandVisibleDraws`.
+    var memberships: BufferSlice?
+    /// One indirect draw record per opaque batch (`IndirectDrawLayout` stride).
     var drawArgs: BufferSlice?
     /// Per opaque batch: drawn indirectly from the GPU-culled list.
     var cullable: [Bool] = []
@@ -87,8 +91,8 @@ final class ScenePasses {
     /// Cluster grid (must match `FrameUniforms.clusterDims` defaults and Clusters.metal).
     static let clusterDims = SIMD4<UInt32>(16, 9, 24, 64)
     static var clusterCount: Int { Int(clusterDims.x * clusterDims.y * clusterDims.z) }
-    /// Bytes of `MTLDrawIndexedPrimitivesIndirectArguments` (5 × UInt32).
-    static let drawArgsStride = 20
+    /// Bytes of one indirect draw record. See `IndirectDrawLayout` (32, not 20).
+    static let drawArgsStride = IndirectDrawLayout.strideBytes
 
     let device: any MTLDevice
     let shaders: ShaderLibrary
@@ -114,6 +118,10 @@ final class ScenePasses {
     /// Winding of front faces. Counter-clockwise for every normal view; reflection-probe
     /// capture sets clockwise while it encodes, because cube-face cameras are mirrored.
     var frontFacing: MTLWinding = .counterClockwise
+
+    /// Set when this frame's cull kernels were encoded. A compile failure clears it so
+    /// draws use `staticIndices` instead of an indirect buffer the GPU never filled.
+    private(set) var indirectCullingActive = false
 
     init(device: any MTLDevice, shaders: ShaderLibrary, capabilities: DeviceCapabilities) {
         self.device = device
@@ -332,42 +340,24 @@ final class ScenePasses {
         return matrices
     }
 
-    /// Decides which opaque batches the GPU culls and uploads the culling inputs.
-    ///
-    /// A batch is GPU-cullable only when every instance it draws maps back to it through
-    /// `instanceBatch` (an instance with several submeshes belongs to several batches, but
-    /// `cullInstances` can append it to only one). Other batches draw directly from the
-    /// static index list, unculled on the GPU (they were already frustum-culled on the CPU).
+    /// Uploads culling inputs. Every opaque batch is cullable, including later submeshes of
+    /// the same instance. Instances are tested once; `expandVisibleDraws` fills each batch.
     private func prepareCulling(_ frame: RenderFrameData, graphics: ResolvedGraphics, targets: RenderTargets,
                                 uniforms u: FrameUniforms, state: inout SceneFrameState, allocator a: FrameAllocator) {
         let batches = frame.opaque
         guard graphics.settings.gpuDrivenCulling, !batches.isEmpty, !frame.instances.isEmpty else { return }
-        var cullable = [Bool](repeating: false, count: batches.count)
-        for (bi, b) in batches.enumerated() {
-            var ok = b.instanceCount > 0
-            for k in b.firstInstance..<(b.firstInstance + b.instanceCount) where ok {
-                let inst = Int(frame.instanceIndices[k])
-                ok = inst < frame.instanceBatch.count && frame.instanceBatch[inst] == UInt32(bi)
-            }
-            cullable[bi] = ok
-        }
-        guard cullable.contains(true) else { return }
-
-        // Instances whose batch is not cullable are skipped by the kernel (out-of-range id).
-        let batchIds = frame.instanceBatch.map { $0 != .max && cullable[Int($0)] ? $0 : UInt32.max }
-        // Draw arguments: instanceCount is zeroed by `resetDrawArgs` and rebuilt by the cull.
-        var args: [UInt32] = []
-        args.reserveCapacity(batches.count * 5)
-        for b in batches {
-            args += [0, UInt32(b.instanceCount), 0, 0, UInt32(b.firstInstance)]
-        }
-        guard let ids = a.upload(batchIds), let argSlice = a.upload(args),
+        let plan = CullingPlan.make(batches: batches, instanceIndices: frame.instanceIndices)
+        guard plan.cullable.contains(true) else { return }
+        let pairs = plan.memberships.map { SIMD2<UInt32>($0.instance, $0.batch) }
+        guard let memberships = a.upload(pairs), let argSlice = a.upload(plan.drawArgs),
+              let visibility = a.allocate(length: max(frame.instances.count, 1) * MemoryLayout<UInt32>.stride),
               let culled = a.allocate(length: max(frame.instanceIndices.count, 1) * MemoryLayout<UInt32>.stride)
         else { return }
         state.drawArgs = argSlice
         state.culledIndices = culled
-        state.cullable = cullable
-        cullBatchIds = ids
+        state.visibility = visibility
+        state.memberships = memberships
+        state.cullable = plan.cullable
 
         var cu = CullUniforms()
         cu.planes = RenderMath.packedPlanes(Frustum(viewProjection: u.unjitteredViewProjection))
@@ -376,23 +366,22 @@ final class ScenePasses {
             cu.previousViewProjection = hizViewProjection
             cu.hizSize = Vec4(Float(hiz.width), Float(hiz.height), Float(hiz.mipmapLevelCount), 0)
         }
-        cu.counts = SIMD4(UInt32(frame.instances.count), occlusion ? 1 : 0, UInt32(batches.count), 0)
+        cu.counts = SIMD4(UInt32(frame.instances.count), occlusion ? 1 : 0, UInt32(batches.count),
+                          UInt32(plan.memberships.count))
         state.cullUniforms = cu
     }
-
-    /// Batch ids uploaded by `prepareCulling` for the current frame.
-    private var cullBatchIds: BufferSlice?
 
     /// Patches index ranges into the draw arguments once meshes are resident. Batches whose
     /// mesh is not resident yet keep indexCount 0 and draw nothing.
     private func patchDrawArgs(_ frame: RenderFrameData, state: SceneFrameState, resources r: SceneResources) {
         guard let args = state.drawArgs else { return }
-        let p = (args.buffer.contents() + args.offset).bindMemory(to: UInt32.self, capacity: frame.opaque.count * 5)
-        for (i, b) in frame.opaque.enumerated() where state.cullable[i] {
+        let words = IndirectDrawLayout.words
+        let p = (args.buffer.contents() + args.offset).bindMemory(to: UInt32.self, capacity: frame.opaque.count * words)
+        for (i, b) in frame.opaque.enumerated() where i < state.cullable.count && state.cullable[i] {
             guard let mesh = r.meshes.mesh(b.mesh, assets: r.assets, frame: r.frameIndex) else { continue }
             let range = mesh.range(ofSubmesh: b.submesh)
-            p[i * 5 + 0] = UInt32(range.count)
-            p[i * 5 + 2] = UInt32(range.offset)
+            p[i * words + IndirectDrawLayout.indexCount] = UInt32(range.count)
+            p[i * words + IndirectDrawLayout.indexStart] = UInt32(range.offset)
         }
     }
 
@@ -562,6 +551,7 @@ final class ScenePasses {
     /// the prepass and share one compute encoder.
     func encodeCompute(_ cb: any MTLCommandBuffer, frame: RenderFrameData, state: SceneFrameState,
                        targets: RenderTargets, resources r: SceneResources) {
+        indirectCullingActive = false
         let culling = state.gpuCulling
         guard state.useClusters || culling else { return }
         patchDrawArgs(frame, state: state, resources: r)
@@ -587,19 +577,28 @@ final class ScenePasses {
             do {
                 let reset = try shaders.computePipeline("resetDrawArgs")
                 let cull = try shaders.computePipeline("cullInstances")
+                let expand = try shaders.computePipeline("expandVisibleDraws")
                 enc.setSlice(state.drawArgs, index: 0)
                 enc.setValue(state.cullUniforms, index: 1, allocator: r.allocator)
-                // The encoder's default serial dispatch type runs the reset before the cull.
+                // Serial dispatch: reset, then visibility, then per-batch expansion.
                 enc.dispatch1D(reset, count: frame.opaque.count)
                 enc.setValue(state.cullUniforms, index: 0, allocator: r.allocator)
                 enc.setSlice(state.instances, index: 1)
-                enc.setSlice(cullBatchIds, index: 2)
+                enc.setSlice(state.visibility, index: 2)
+                // Frustum-only culling still binds a depth texture. `fallback.hiz` is r32Float;
+                // the white RGBA8 placeholder is not a legal argument for `texture2d<float>`.
+                enc.setTexture(targets.hiz ?? r.fallback.hiz, index: 0)
+                enc.dispatch1D(cull, count: frame.instances.count)
+                enc.setValue(state.cullUniforms, index: 0, allocator: r.allocator)
+                enc.setSlice(state.visibility, index: 1)
+                enc.setSlice(state.memberships, index: 2)
                 enc.setSlice(state.drawArgs, index: 3)
                 enc.setSlice(state.culledIndices, index: 4)
-                enc.setTexture(targets.hiz ?? r.fallback.white, index: 0)
-                enc.dispatch1D(cull, count: frame.instances.count)
-                Profiler.shared.updateRenderCounters { $0.computeDispatches += 2 }
+                enc.dispatch1D(expand, count: max(Int(state.cullUniforms.counts.w), 1))
+                indirectCullingActive = true
+                Profiler.shared.updateRenderCounters { $0.computeDispatches += 3 }
             } catch {
+                indirectCullingActive = false
                 Log.error("Render", "GPU culling unavailable: \(error)")
             }
         }
@@ -841,7 +840,7 @@ final class ScenePasses {
                 lastMaterial = .some(b.material)
             }
             enc.setCullMode(b.doubleSided ? .none : .back)
-            let gpu = state.gpuCulling && state.cullable[i]
+            let gpu = indirectCullingActive && state.gpuCulling && i < state.cullable.count && state.cullable[i]
             if boundIndices != gpu {
                 enc.setVertexSlice(gpu ? state.culledIndices : state.staticIndices, index: BufferIndex.instanceIndices)
                 boundIndices = gpu

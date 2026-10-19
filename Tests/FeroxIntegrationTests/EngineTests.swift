@@ -153,6 +153,39 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(engine.activeCamera()?.entity, low)
     }
 
+    // A render-target camera and a disabled parent are not the screen camera, and a
+    // priority tie keeps the lowest entity index. This is the same rule the extractor uses.
+    func testActiveCameraMatchesTheScreenCamera() throws {
+        let engine = try makeEngine()
+        let world = engine.world
+        let parent = world.createEntity(named: "Parent")
+        let child = world.createEntity(named: "Child", parent: parent)
+        var hidden = Camera.perspective()
+        hidden.priority = 10
+        world.add(hidden, to: child)
+        world.add(Disabled(), to: parent)
+
+        let offscreen = world.createEntity(named: "Offscreen")
+        var target = Camera.perspective()
+        target.priority = 9
+        target.renderTarget = AssetID("rt")
+        world.add(target, to: offscreen)
+
+        let first = world.createEntity(named: "First")
+        var tied = Camera.perspective()
+        tied.priority = 1
+        world.add(tied, to: first)
+        let second = world.createEntity(named: "Second")
+        var tiedToo = Camera.perspective()
+        tiedToo.priority = 1
+        world.add(tiedToo, to: second)
+        engine.tick(delta: 1.0 / 60)
+        XCTAssertLessThan(first.index, second.index)
+        XCTAssertEqual(engine.activeCamera()?.entity, first)
+        XCTAssertEqual(RenderSceneExtractor.mainCamera(in: world)?.0, first)
+        XCTAssertNil(engine.activeCamera()?.camera.renderTarget)
+    }
+
     // A pause of the clock stops fixed steps but the frame loop keeps running.
     func testPausedClockRunsNoFixedSteps() throws {
         let engine = try makeEngine()

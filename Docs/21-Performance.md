@@ -89,7 +89,7 @@ These are counts. They describe what the renderer asked the GPU to do, which is 
 
 `MemoryBudget` holds three limits in bytes: textures, meshes and audio. `MemoryBudget.recommended(workingSetBytes:)` derives a budget from the GPU's recommended working-set size, giving textures half, meshes an eighth and audio the smaller of a thirty-second and 512 MB. `AssetManager` is created with a default budget of 1 GB of textures, 256 MB of meshes and 128 MB of audio.
 
-Enforcement is partial. The asset manager's `update` compares texture memory with `budget.textureBytes` and evicts unreferenced textures in least-recently-used order, logging a warning if the budget is still exceeded. Mesh memory is stored in the budget but no eviction for it was found in the source reviewed. `Engine` copies `audioBytes` into the audio backend, which streams a clip instead of decoding it when decoding would exceed the budget. See [16-Audio.md](16-Audio.md#3-loading-clips).
+Enforcement is partial. The asset manager's `update` compares texture memory with `budget.textureBytes` and evicts unreferenced textures in least-recently-used order, logging a warning if the budget is still exceeded. `meshBytes` evicts unreferenced cached models the same way. Meshes registered in memory are counted and are not evicted. The GPU `MeshCache` is a separate residency cache: it drops a mesh after it has not been drawn for `maxIdleFrames` (600), and it does not read `meshBytes`. `Engine` copies `audioBytes` into the audio backend, which streams a clip instead of decoding it when decoding would exceed the budget. See [16-Audio.md](16-Audio.md#3-loading-clips).
 
 ## 5. FeroxBenchmarks
 
@@ -223,7 +223,7 @@ Tests pin these behaviours: `PerformancePathTests` (scene), `PhysicsDeterminismT
 - **Benchmark names can mislead.** Physics benchmark names include the full body count even in quick runs, which use fewer bodies.
 - **The benchmark tool has no statistical tests.** It reports a mean, median, minimum and maximum, but does not check for noise or thermal throttling.
 - **Hosted runners are not representative.** The CI benchmark runs on virtualised hardware and is only a trend indicator.
-- **Mesh budget enforced for cached model data (unreferenced models are evicted LRU); registered meshes are counted but never evicted.** The mesh limit is stored, but no mesh eviction was found in the source reviewed.
+- **Mesh budget covers CPU model caches only.** Unreferenced loaded models are evicted LRU under `meshBytes`. Registered meshes are counted and kept. GPU meshes stay resident until they go idle, independent of that budget.
 - **Counters are unlabelled.** Counter names are plain strings with no registry, so a misspelled name silently creates a new counter.
 - **Device-dependent paths are unverified.** Ray tracing, MetalFX and the dynamic-resolution controller have not been exercised on hardware.
 

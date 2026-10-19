@@ -168,7 +168,7 @@ Forces and torques are cleared after each step, so a continuous force must be re
 
 3D: `Shape3D.sphere(_:)`, `Shape3D.box(_:)`, `Shape3D.capsule(height:radius:)` (aligned to local Y), `Shape3D.plane(normal:distance:)` (static bodies only), and `.mesh(TriangleMesh)` (static only). `TriangleMesh(vertices:indices:)` builds the BVH.
 
-Every shape has `material`, `filter` and `isTrigger`. Triggers do not contribute mass or impulses, but they produce begin and end events and overlap results. Shape indices occupy 8 bits in contact keys, so one body supports at most 256 shapes. The tilemap generator stops at 255 boxes.
+Every shape has `material`, `filter` and `isTrigger`. Triggers do not contribute mass or impulses, but they produce begin and end events and overlap results. Contact keys are a `(body, shape)` pair, so a compound or a tilemap may have more than 256 shapes on one body. The tilemap generator emits one box per solid run and does not stop at 255.
 
 ## 7. Joints
 
@@ -408,7 +408,7 @@ func movePlayer(_ player: Entity, input: Vec2, jumpPressed: Bool, dt: Float) {
 - **Limitation: sphere casts against boxes and meshes are approximations** (see [section 8](#8-queries)).
 - **Limitation: no gyroscopic term.**
 - **Limitation: single-threaded.** The step does not use `Jobs`.
-- **Limitation: 256 shapes per body.** The tilemap generator produces at most 255 boxes.
+- **Limitation: tilemaps are one body.** A large tilemap is a single static body with one box per solid run. That is correct, and it can be a lot of shapes.
 - **Limitation: `positionIterations` is unused.**
 - **Limitation: no hinge limits, and no spring on 3D distance joints.**
 - **Limitation: the ECS bridge does not update bodies after creation.** Use the body API (see [section 10](#10-ecs-integration)).

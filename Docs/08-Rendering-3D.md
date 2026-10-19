@@ -151,9 +151,7 @@ Two culling methods exist. The one used depends on `GraphicsSettings.gpuDrivenCu
 
 **CPU frustum culling.** `RenderSceneExtractor` tests each renderer's bounding sphere against the camera's frustum. It is used when GPU culling is off. Shadow casters within `ShadowSettings.maxDistance` (120 world units by default) are kept even if they are outside the frustum, because they can cast into it.
 
-**GPU-driven culling.** When `gpuDrivenCulling` is on, the CPU does not cull. A compute kernel, `cullInstances` in `Culling.metal`, tests each instance's bounding sphere against the six frustum planes. It then optionally tests the sphere against the Hi-Z pyramid, and appends survivors to the indirect draw arguments of their batch. The vertex shader reads the surviving instance index. Each batch's indirect arguments are zeroed each frame and rebuilt by the kernel.
-
-Only batches whose instances all belong to that batch are culled on the GPU. Other batches are drawn through the CPU index list. This is a condition of the batch layout, not a user setting.
+**GPU-driven culling.** When `gpuDrivenCulling` is on, the CPU does not frustum-cull. Two compute kernels in `Culling.metal` run in order. `cullInstances` tests each instance's bounding sphere against the six frustum planes and, optionally, the Hi-Z pyramid, and writes one visibility flag. `expandVisibleDraws` appends each visible instance to every opaque batch that draws it, including later submeshes of the same mesh and skinned instances that share a mesh. The vertex shader reads the surviving instance index. Each batch's indirect arguments are 32 bytes (eight `uint`s: the five `MTLDrawIndexedPrimitivesIndirectArguments` words plus padding) so every batch offset stays 16-byte aligned. If either kernel fails to compile, the frame draws the CPU index list instead of an uninitialised indirect buffer. When occlusion culling is off, the kernel still receives a 1×1 `r32Float` texture (`FallbackTextures.hiz`), not the RGBA8 white placeholder, and the argument is `access::read`.
 
 **Hi-Z occlusion.** When `occlusionCulling` is on, and GPU culling is on, the depth of the previous frame is copied and reduced into a pyramid. Each texel keeps the minimum of its footprint. The kernel tests each bounding sphere conservatively against this pyramid, using the previous frame's view-projection. An object revealed by fast camera motion can therefore be culled for one frame. The source comment notes that the CPU path is used where this is unacceptable. The CPU path is used whenever GPU culling is off.
 
@@ -259,7 +257,7 @@ GPU time is measured from the command buffers' start and end times. The scene an
 
 ## 14. Limitations
 
-- **Limitation: one camera per frame.** The renderer draws the highest-priority enabled camera. `Renderer`'s documentation states this.
+- **Limitation: one camera per frame.** The renderer draws the highest-priority enabled camera that is active in the hierarchy and has no `renderTarget`. `Engine.activeCamera()` uses that same choice, including priority ties (lowest entity index). `Renderer`'s documentation states the one-camera limit.
 - **Limitation: `Camera.renderTarget` is not used.** `RenderSceneExtractor` skips cameras that have one set. The active camera's `viewport` is honoured: the scene is presented into that normalised rectangle of the drawable (`RenderMath.viewportPixels`), the rest is cleared to black, and UI still covers the whole drawable. With one camera per frame, split-screen is not yet possible.
 - **Limitation: the sky is drawn only for perspective cameras.** An orthographic camera shows `clearColor`.
 - **Limitation: Hi-Z uses the previous frame.** Objects revealed by fast motion can be culled for one frame.

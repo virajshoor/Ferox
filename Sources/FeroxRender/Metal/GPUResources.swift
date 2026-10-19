@@ -562,6 +562,18 @@ final class TextureCache {
     private var entries: [Key: Entry] = [:]
     /// Textures whose mip chain must be generated on the GPU before first use.
     private var pendingMipmaps: [any MTLTexture] = []
+    /// Discrete-GPU uploads: a shared staging buffer blitted into a private texture.
+    private struct StagedUpload {
+        var buffer: any MTLBuffer
+        var bytesPerRow: Int
+        var bytesPerImage: Int
+        var width: Int
+        var height: Int
+        var texture: any MTLTexture
+        var slice: Int
+        var level: Int
+    }
+    private var stagedUploads: [StagedUpload] = []
     private(set) var residentBytes = 0
 
     init(device: any MTLDevice, capabilities: DeviceCapabilities) {
@@ -608,13 +620,22 @@ final class TextureCache {
         for e in entries.values { release(e.texture) }
         entries.removeAll()
         pendingMipmaps.removeAll()
+        stagedUploads.removeAll()
     }
 
     /// Encodes mipmap generation for textures created since the last call. Must run before
     /// any pass samples them; the renderer calls it first in every frame.
     func encodePendingWork(_ cb: any MTLCommandBuffer) {
-        guard !pendingMipmaps.isEmpty, let blit = cb.makeBlitCommandEncoder() else { return }
+        guard !pendingMipmaps.isEmpty || !stagedUploads.isEmpty, let blit = cb.makeBlitCommandEncoder() else { return }
         blit.label = "Ferox.Mipmaps"
+        for u in stagedUploads {
+            blit.copy(from: u.buffer, sourceOffset: 0, sourceBytesPerRow: u.bytesPerRow,
+                      sourceBytesPerImage: u.bytesPerImage,
+                      sourceSize: MTLSize(width: u.width, height: u.height, depth: 1),
+                      to: u.texture, destinationSlice: u.slice, destinationLevel: u.level,
+                      destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0))
+        }
+        stagedUploads.removeAll()
         for t in pendingMipmaps { blit.generateMipmaps(for: t) }
         blit.endEncoding()
         pendingMipmaps.removeAll()
@@ -631,8 +652,10 @@ final class TextureCache {
         }
     }
 
-    /// Creates a texture from decoded pixels. Uses shared storage on unified memory (no
-    /// copy) and managed storage otherwise; `replace(region:)` performs the upload.
+    /// Creates a texture from decoded pixels. Unified memory writes a shared texture in
+    /// place. A discrete GPU gets a private texture filled by a staging blit (see
+    /// `GPUTextureUpload`), so the GPU never samples a managed texture that was only
+    /// `replace`d.
     func makeTexture(_ image: ImageData, srgb: Bool, label: String) -> (any MTLTexture)? {
         let w = image.width, h = image.height
         guard w > 0, h > 0, w <= 16384, h <= 16384 else { return nil }
@@ -651,17 +674,29 @@ final class TextureCache {
         d.height = image.isCubemap ? w : h
         d.mipmapLevelCount = levels
         d.usage = .shaderRead
-        d.storageMode = capabilities.hasUnifiedMemory ? .shared : .managed
+        let stage = GPUTextureUpload.path(unifiedMemory: capabilities.hasUnifiedMemory) == .stagingBlitToPrivate
+        d.storageMode = stage ? .private : .shared
         guard let t = device.makeTexture(descriptor: d) else { return nil }
         t.label = label
 
         func upload(_ data: Data, level: Int, slice: Int, width: Int, height: Int) -> Bool {
             let rowBytes = width * bpp
-            guard data.count >= rowBytes * height else { return false }
+            let length = rowBytes * height
+            guard data.count >= length else { return false }
+            if stage {
+                guard let staging = device.makeBuffer(length: length, options: .storageModeShared) else { return false }
+                data.withUnsafeBytes { raw in
+                    guard let base = raw.baseAddress else { return }
+                    staging.contents().copyMemory(from: base, byteCount: length)
+                }
+                stagedUploads.append(StagedUpload(buffer: staging, bytesPerRow: rowBytes, bytesPerImage: length,
+                                                  width: width, height: height, texture: t, slice: slice, level: level))
+                return true
+            }
             data.withUnsafeBytes { raw in
                 guard let base = raw.baseAddress else { return }
                 t.replace(region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: level, slice: slice,
-                          withBytes: base, bytesPerRow: rowBytes, bytesPerImage: rowBytes * height)
+                          withBytes: base, bytesPerRow: rowBytes, bytesPerImage: length)
             }
             return true
         }
@@ -759,6 +794,10 @@ final class FallbackTextures {
     let cubeArray: any MTLTexture
     /// One-slice depth array cleared to 1 (standard-Z far plane) = never in shadow.
     let shadowArray: any MTLTexture
+    /// 1×1 `r32Float` bound when the Hi-Z pyramid is not allocated (occlusion culling off).
+    /// The cull kernel's texture argument is `texture2d<float, access::read>`, which rejects
+    /// the RGBA8 white placeholder.
+    let hiz: any MTLTexture
 
     init(device: any MTLDevice, queue: any MTLCommandQueue) throws {
         func make(_ type: MTLTextureType, _ format: MTLPixelFormat, storage: MTLStorageMode = .shared,
@@ -795,6 +834,12 @@ final class FallbackTextures {
         fill(blackCube, [0, 0, 0, 255], slices: 6)
         cubeArray = try make(.typeCubeArray, .rgba8Unorm, storage: colorStorage, label: "Ferox.Fallback.CubeArray")
         fill(cubeArray, [0, 0, 0, 255], slices: 6)
+        hiz = try make(.type2D, .r32Float, storage: colorStorage, label: "Ferox.Fallback.HiZ")
+        var farDepth: Float = 0  // reverse-Z far: a sample (if occlusion is wrongly left on) stays conservative
+        withUnsafeBytes(of: farDepth) { raw in
+            hiz.replace(region: MTLRegionMake2D(0, 0, 1, 1), mipmapLevel: 0, slice: 0, withBytes: raw.baseAddress!,
+                        bytesPerRow: 4, bytesPerImage: 4)
+        }
         // Depth textures must be private; clear it with a render pass.
         shadowArray = try make(.type2DArray, .depth32Float, storage: .private, usage: [.shaderRead, .renderTarget],
                                label: "Ferox.Fallback.ShadowArray")
@@ -807,6 +852,18 @@ final class FallbackTextures {
         if let cb = queue.makeCommandBuffer(), let enc = cb.makeRenderCommandEncoder(descriptor: rp) {
             enc.label = "Ferox.ClearFallbackShadow"
             enc.endEncoding()
+            // `replace` on a managed texture does not reach the GPU until a blit synchronizes it.
+            // (`didModify` is the buffer API; textures use `synchronize`.)
+            let managed = [white, clear, blackCube, cubeArray, hiz].filter { $0.storageMode == .managed }
+            if !managed.isEmpty, let blit = cb.makeBlitCommandEncoder() {
+                blit.label = "Ferox.SyncFallbackTextures"
+                for t in managed {
+                    for slice in 0..<t.arrayLength {
+                        blit.synchronize(texture: t, slice: slice, level: 0)
+                    }
+                }
+                blit.endEncoding()
+            }
             cb.commit()
         }
     }

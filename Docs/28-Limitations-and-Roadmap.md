@@ -18,7 +18,7 @@ The most important limitation is the first one: Ferox has been verified on one A
 
 ## 1. Verification status
 
-- **Limitation: one machine verified.** The package has been built on an M1 Max running macOS 27 with Swift 6.4. `swift build --build-tests` has zero warnings, and the full `swift test` suite (504 XCTest tests) passes. The Metal renderer draws an offscreen frame, and the HelloFerox, Platformer2D and Showcase3D examples run. No Intel Macs, other GPUs or iOS devices have been tested, and the macOS CI job is not covered by this result. See [25-Platform-Support.md](25-Platform-Support.md).
+- **Limitation: one machine verified for Metal.** The package has been built on an M1 Max running macOS 27 with Swift 6.4. That run's suite was 504 XCTest tests, the Metal renderer drew an offscreen frame, and the HelloFerox, Platformer2D and Showcase3D examples ran. The current portable suite is 515 XCTest tests on Swift 6.2.3 (Linux). No Intel Macs, other GPUs or iOS devices have been tested, and the macOS CI job is not covered by the M1 result. See [25-Platform-Support.md](25-Platform-Support.md).
 - **Limitation: MetalFX upscaling is unverified on hardware.** Its code paths and the fallbacks in [24-Graphics-Settings-and-Presets.md](24-Graphics-Settings-and-Presets.md) follow the resolver's rules. How they behave on a real device is not known.
 - No benchmark numbers, frame rates or timings are quoted anywhere in these documents, because none have been measured. The method is in [21-Performance.md](21-Performance.md).
 

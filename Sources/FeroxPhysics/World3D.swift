@@ -106,7 +106,7 @@ public final class PhysicsWorld3D {
     var bodies: [Body3D?] = []
     var generations: [UInt32] = []
     var freeBodies: [UInt32] = []
-    var contacts: [UInt64: Contact3D] = [:]
+    var contacts: [ContactKey: Contact3D] = [:]
     var joints: [JointState3D?] = []
     var jointGenerations: [UInt32] = []
     var broadphase = SweepAndPrune()
@@ -351,7 +351,7 @@ public final class PhysicsWorld3D {
 
         // Sorted so the solve order (and therefore the result) is deterministic.
         // Single pass over the dictionary (no per-key re-lookup); sorted for a stable order.
-        var active: [UInt64] = []
+        var active: [ContactKey] = []
         active.reserveCapacity(contacts.count)
         for (k, c) in contacts where c.isActive(bodies) { active.append(k) }
         active.sort()
@@ -419,8 +419,6 @@ public final class PhysicsWorld3D {
         return best < len ? d * max(best - settings.linearSlop, 0) : dp
     }
 
-    private func shapeKey(_ body: Int, _ shape: Int) -> Int { (body << 8) | (shape & 0xFF) }
-
     func updateContacts() {
         broadphaseItems.removeAll(keepingCapacity: true)
         broadphaseItems.reserveCapacity(bodies.count)
@@ -428,7 +426,7 @@ public final class PhysicsWorld3D {
         broadphase.update(broadphaseItems, rebuild: broadphaseDirty)
         broadphaseDirty = false
 
-        var seen = Set<UInt64>()
+        var seen = Set<ContactKey>()
         seen.reserveCapacity(contacts.count)
         broadphase.forEachOverlap { ia, ib in
             guard let a = bodies[ia], let b = bodies[ib] else { return }
@@ -447,14 +445,14 @@ public final class PhysicsWorld3D {
                 let boxA = shapeA.aabb(pa).inflated(by: settings.speculativeDistance)
                 for (sb, shapeB) in b.shapes.enumerated() {
                     guard shapeA.filter.shouldCollide(with: shapeB.filter), boxA.intersects(shapeB.aabb(pb)) else { continue }
-                    let ka = shapeKey(ia, sa), kb = shapeKey(ib, sb)
+                    let ka = ShapeRef(body: ia, shape: sa), kb = ShapeRef(body: ib, shape: sb)
                     let flip = ka > kb
                     let (bi, bj, si, sj) = flip ? (ib, ia, sb, sa) : (ia, ib, sa, sb)
                     let (s1, s2) = flip ? (shapeB, shapeA) : (shapeA, shapeB)
                     let (p1, p2) = flip ? (pb, pa) : (pa, pb)
                     let trigger = s1.isTrigger || s2.isTrigger
                     let manifold = Collide3D.manifold(s1, p1, s2, p2, margin: trigger ? 0 : settings.speculativeDistance)
-                    let key = pairKey(ka, kb)
+                    let key = ContactKey(ka, kb)
                     seen.insert(key)
                     var c = contacts[key] ?? Contact3D(bodyA: bi, bodyB: bj, shapeA: si, shapeB: sj, isTrigger: trigger)
                     c.friction = PhysicsMaterial.mixFriction(s1.material.friction, s2.material.friction)

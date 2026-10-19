@@ -84,7 +84,8 @@ public struct RenderFrameData {
     public var instances: [InstanceData] = []
     /// Instance indirection read by the vertex shaders (`instanceIndices[iid + baseInstance]`).
     public var instanceIndices: [UInt32] = []
-    /// Batch index per instance for GPU culling (`UInt32.max` = not GPU-culled).
+    /// First opaque batch that draws the instance (`UInt32.max` = none). GPU culling does
+    /// not use this: a mesh with several submeshes is listed once per batch in `CullingPlan`.
     public var instanceBatch: [UInt32] = []
     public var opaque: [DrawBatch] = []
     /// One batch per instance, sorted back to front.
@@ -298,9 +299,9 @@ public enum RenderSceneExtractor {
     }
 
     static func sameBatch(_ a: Item, _ b: Item) -> Bool {
-        // Skinned instances use per-instance palettes but can still share a draw; they are
-        // kept separate so each skinned mesh is its own batch, which keeps culling simple.
-        !a.skinned && !b.skinned && a.material == b.material && a.mesh == b.mesh && a.submesh == b.submesh
+        // Skinned instances share a draw when the mesh and material match. The joint palette
+        // offset lives on the instance (`params.w`), and culling expands visibility per batch.
+        a.skinned == b.skinned && a.material == b.material && a.mesh == b.mesh && a.submesh == b.submesh
             && a.alphaTest == b.alphaTest && a.doubleSided == b.doubleSided && a.unlit == b.unlit
     }
 
@@ -326,8 +327,7 @@ public enum RenderSceneExtractor {
                                     alphaTest: it.alphaTest, doubleSided: it.doubleSided, unlit: it.unlit, depth: it.depth)
             }
             frame.instanceIndices.append(UInt32(it.instance))
-            // An instance with several submeshes appears in several batches; GPU culling then
-            // keeps only the first batch's association and the CPU path draws the others.
+            // Records the first batch only. `CullingPlan` lists every submesh.
             if frame.instanceBatch[it.instance] == .max { frame.instanceBatch[it.instance] = UInt32(frame.opaque.count) }
             currentItem = it
         }

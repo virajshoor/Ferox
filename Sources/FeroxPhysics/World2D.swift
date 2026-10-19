@@ -113,7 +113,7 @@ public final class PhysicsWorld2D {
     var bodies: [Body2D?] = []
     var generations: [UInt32] = []
     var freeBodies: [UInt32] = []
-    var contacts: [UInt64: Contact2D] = [:]
+    var contacts: [ContactKey: Contact2D] = [:]
     var joints: [JointState2D?] = []
     var jointGenerations: [UInt32] = []
     var broadphase = SweepAndPrune()
@@ -375,7 +375,7 @@ public final class PhysicsWorld2D {
         // 3. Solve.
         // Sorted so the solve order (and therefore the result) is deterministic.
         // Single pass over the dictionary (no per-key re-lookup); sorted for a stable order.
-        var active: [UInt64] = []
+        var active: [ContactKey] = []
         active.reserveCapacity(contacts.count)
         for (k, c) in contacts where c.isActive(bodies) { active.append(k) }
         active.sort()
@@ -446,8 +446,6 @@ public final class PhysicsWorld2D {
         return best < 1 ? dp * max(best - settings.linearSlop / len, 0) : dp
     }
 
-    private func shapeKey(_ body: Int, _ shape: Int) -> Int { (body << 8) | (shape & 0xFF) }
-
     func updateContacts() {
         let n = bodies.count
         broadphaseItems.removeAll(keepingCapacity: true)
@@ -458,7 +456,7 @@ public final class PhysicsWorld2D {
         broadphase.update(broadphaseItems, rebuild: broadphaseDirty)
         broadphaseDirty = false
 
-        var seen = Set<UInt64>()
+        var seen = Set<ContactKey>()
         seen.reserveCapacity(contacts.count)
         broadphase.forEachOverlap { ia, ib in
             guard let a = bodies[ia], let b = bodies[ib] else { return }
@@ -483,9 +481,9 @@ public final class PhysicsWorld2D {
                     let (blo, bhi) = shapeB.aabb(xb)
                     let m = settings.speculativeDistance
                     guard alo.x - m <= bhi.x && blo.x - m <= ahi.x && alo.y - m <= bhi.y && blo.y - m <= ahi.y else { continue }
-                    let key = pairKey(shapeKey(ia, sa), shapeKey(ib, sb))
-                    // Normalise ordering so A is always the lower shape key.
-                    let flip = shapeKey(ia, sa) > shapeKey(ib, sb)
+                    let key = ContactKey(bodyA: ia, shapeA: sa, bodyB: ib, shapeB: sb)
+                    // Normalise ordering so A is always the lower shape reference.
+                    let flip = ShapeRef(body: ia, shape: sa) > ShapeRef(body: ib, shape: sb)
                     let (bi, bj, si, sj) = flip ? (ib, ia, sb, sa) : (ia, ib, sa, sb)
                     let (s1, s2) = flip ? (shapeB, shapeA) : (shapeA, shapeB)
                     let (x1, x2) = flip ? (xb, xa) : (xa, xb)

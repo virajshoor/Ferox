@@ -112,7 +112,7 @@ The list below states what the source implements. Each item links to the documen
 | --- | --- |
 | macOS 14 or later | The target platform. `Package.swift` declares `.macOS(.v14)`. |
 | Apple Silicon | The primary target, according to `CONTRIBUTING.md`. Verified on one M1 Max only. |
-| Linux | The CI runs a portable job that builds `FeroxMath` and `FeroxCore` and runs the test filters for the portable modules. The rest of the package is not built there. |
+| Linux | The CI builds the `Ferox` target (the renderer compiles without Metal) and runs all seven test targets. Shaders, windowing and audio output are not executed. |
 | iOS, tvOS, visionOS | Not declared in `Package.swift`. Not supported by this snapshot. |
 
 Hardware requirements and build instructions are in [02-Getting-Started.md](02-Getting-Started.md). Platform detail is in [25-Platform-Support.md](25-Platform-Support.md).
@@ -133,7 +133,7 @@ Hardware requirements and build instructions are in [02-Getting-Started.md](02-G
 
 This documentation was written from the source code of this repository snapshot. The package has since been built and run on one Mac: an M1 Max running macOS 27, with Swift 6.4. The following statements hold:
 
-- **Built and tested on one Mac.** `swift build --build-tests` has zero warnings, and the full `swift test` suite (504 XCTest tests, see [04-Building-and-Testing.md](04-Building-and-Testing.md)) passes. No Intel Macs, other GPUs or iOS devices have been tested.
+- **Built and tested.** The portable suite is 515 XCTest tests on Swift 6.2.3 (Linux, `swift test --enable-xctest`; see [04-Building-and-Testing.md](04-Building-and-Testing.md)). An earlier commit passed 504 tests on an M1 Max, macOS 27, Swift 6.4. No Intel Macs, other GPUs or iOS devices have been tested.
 - **Examples run.** HelloFerox, Platformer2D and Showcase3D run on the M1 Max. `swift run FeroxDiag --render` draws an offscreen frame with the Metal renderer.
 - **Not measured.** No benchmark result, frame time or memory figure is given in any document of this series. The benchmark tool exists, but its output has not been recorded here. See [21-Performance.md](21-Performance.md).
 - **Limited hardware checks.** Apart from the offscreen render and the examples above, the rendering, lighting, upscaling and ray-tracing behaviour described in sections 07 to 12 is derived from the Swift and Metal source. It has not been observed on hardware. Statements about hardware tiers repeat what the source comments say, and are marked as such where they appear.
@@ -143,7 +143,7 @@ This documentation was written from the source code of this repository snapshot.
 
 - **Limitation: one machine verified.** Verification covers one M1 Max running macOS 27. Section 7 applies to every document in this series.
 - **Limitation: other hardware is untested.** Other Macs, GPUs and iOS devices have not been tested.
-- **Limitation: Linux is partial.** Only the portable modules are built in CI on Linux. The renderer and the examples require macOS.
+- **Limitation: Linux does not execute Metal.** CI builds `Ferox` and runs the portable tests. The examples' windows, shaders and audio output require macOS.
 - **Limitation: a basic editor.** `FeroxEditor` picks entities in the viewport by world bounds for meshes, and by a small marker sphere for lights and cameras. It has a fixed toolbar layout. See [22-Editor.md](22-Editor.md).
 
 ## 9. Related documents

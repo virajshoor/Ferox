@@ -87,12 +87,13 @@
                 let e = device.makeBuffer(bytes: &zero, length: MemoryLayout<Float>.stride, options: .storageModeShared)
             else { throw RenderError.allocation("exposure buffer") }
             e.label = "Ferox.Exposure"
+            // `makeBuffer(bytes:)` rejects private storage and returns nil. The histogram is 512
+            // bytes and the adapt kernel zeroes it, so shared storage is enough on every GPU.
             let bins = [UInt32](repeating: 0, count: Self.histogramBins)
             guard
-                let h = bins.withUnsafeBytes({
-                    device.makeBuffer(
-                        bytes: $0.baseAddress!, length: $0.count,
-                        options: .storageModePrivate)
+                let h = bins.withUnsafeBytes({ raw -> (any MTLBuffer)? in
+                    guard let base = raw.baseAddress else { return nil }
+                    return device.makeBuffer(bytes: base, length: raw.count, options: .storageModeShared)
                 })
             else { throw RenderError.allocation("luminance histogram") }
             h.label = "Ferox.LuminanceHistogram"

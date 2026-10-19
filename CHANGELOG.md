@@ -34,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The luminance histogram is a shared buffer. `makeBuffer(bytes:)` with private storage returns nil, so renderer init failed on the macOS 15 CI GPU before any frame was encoded.
 - **Breaking:** `UDPTransport(listenOn:dtls:)` and `UDPTransport(connectingTo:dtls:)` are replaced by `init(listenOn:security:)` and `init(connectingTo:security:)`. Both throw on an invalid security configuration.
 - CPU hot paths fetch component stores once per pass, reuse scratch buffers, gather active physics contacts in one pass, and give 2D drawables and shadowed lights a total sort order. Results are unchanged; no timings have been measured. See [section 10 of Docs/21-Performance.md](Docs/21-Performance.md#10-cpu-hot-paths).
 

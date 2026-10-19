@@ -28,7 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **Breaking:** `Jobs.parallelMap` is removed. Nothing in the engine called it. Use `Jobs.parallelFor` over a buffer you own. `parallelFor`'s closure is now `@Sendable`, so it must not capture a `World` or a component store.
 - **Breaking:** `JSONValue.encode` and `JSONValue.decode` take `[CodingUserInfoKey: any Sendable]` instead of `[CodingUserInfoKey: Any]`. `EntityRemapTable` is `@unchecked Sendable` for that dictionary. A value that is not `Sendable` no longer type-checks.
-- The Swift 6.2 CI job builds `FeroxMath` and `FeroxCore` with `-strict-concurrency=complete` and warnings as errors. The package stays in Swift 5 language mode.
+- The Swift 6.2 and macOS CI jobs build every target and the tests with `-strict-concurrency=complete` and warnings as errors. The package stays in Swift 5 language mode. `FeroxBenchmarks.cpuBenchmarks` is a function. Shader compiles and the instance-id readback no longer capture a non-`Sendable` value from a concurrent closure.
 - Flat-root transforms are indexed on the calling thread. Workers write disjoint dense-buffer ranges and do not call `denseIndex`.
 - Command-buffer completion handlers record GPU time on `GPUFrameClock` instead of capturing `Renderer`.
 

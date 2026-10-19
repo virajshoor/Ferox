@@ -79,7 +79,7 @@ Every row has limits, which are listed honestly in [Limitations and Roadmap](Doc
 
 ## Quick start
 
-You need macOS 14 or later and Xcode 15.3 or later (Swift 5.10, the package's tools version). CI builds with Swift 5.10, Swift 6.2, and Xcode 16.4 on `macos-15`. The Swift 6.2 job also builds `FeroxMath` and `FeroxCore` with strict concurrency. Apple Silicon is recommended.
+You need macOS 14 or later and Xcode 15.3 or later (Swift 5.10, the package's tools version). CI builds with Swift 5.10, Swift 6.2, and Xcode 16.4 on `macos-15`. The Swift 6.2 and macOS jobs build every target with strict concurrency. Apple Silicon is recommended.
 
 ```sh
 git clone https://github.com/virajshoor/Ferox.git

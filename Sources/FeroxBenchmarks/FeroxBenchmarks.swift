@@ -75,7 +75,7 @@ enum FeroxBenchmarks {
             memoryGB: Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824,
             buildConfiguration: configuration, quick: quick, gpu: nil, results: [])
 
-        var benchmarks = cpuBenchmarks
+        var benchmarks = cpuBenchmarks()
         #if canImport(Metal)
             if let device = try? RenderDevice() {
                 report.gpu = device.capabilities.deviceName
@@ -144,117 +144,120 @@ enum FeroxBenchmarks {
 
     // MARK: - CPU benchmarks
 
-    static let cpuBenchmarks: [Benchmark] = [
-        Benchmark(name: "ecs.create+destroy", unit: "entities/s") { quick in
-            let n = quick ? 20_000 : 100_000
-            return {
+    static func cpuBenchmarks() -> [Benchmark] {
+        [
+            Benchmark(name: "ecs.create+destroy", unit: "entities/s") { quick in
+                let n = quick ? 20_000 : 100_000
+                return {
+                    let world = World()
+                    var entities: [Entity] = []
+                    entities.reserveCapacity(n)
+                    for i in 0..<n {
+                        let e = world.createEntity()
+                        world.add(Transform(position: Vec3(Float(i), 0, 0)), to: e)
+                        entities.append(e)
+                    }
+                    for e in entities { world.destroy(e) }
+                    return n
+                }
+            },
+            Benchmark(name: "ecs.forEach(Transform)", unit: "components/s") { quick in
+                let n = quick ? 50_000 : 200_000
                 let world = World()
-                var entities: [Entity] = []
-                entities.reserveCapacity(n)
-                for i in 0..<n {
-                    let e = world.createEntity()
-                    world.add(Transform(position: Vec3(Float(i), 0, 0)), to: e)
-                    entities.append(e)
+                for i in 0..<n { world.add(Transform(position: Vec3(Float(i), 0, 0)), to: world.createEntity()) }
+                return {
+                    world.forEach(Transform.self) { _, t in t.position.y += 0.01 }
+                    return n
                 }
-                for e in entities { world.destroy(e) }
-                return n
-            }
-        },
-        Benchmark(name: "ecs.forEach(Transform)", unit: "components/s") { quick in
-            let n = quick ? 50_000 : 200_000
-            let world = World()
-            for i in 0..<n { world.add(Transform(position: Vec3(Float(i), 0, 0)), to: world.createEntity()) }
-            return {
-                world.forEach(Transform.self) { _, t in t.position.y += 0.01 }
-                return n
-            }
-        },
-        Benchmark(name: "transform.hierarchy", unit: "entities/s") { quick in
-            // A forest of 4-level chains with every root moved each frame, so the whole
-            // hierarchy is dirty: the worst case for `TransformSystem`.
-            let roots = quick ? 2_500 : 10_000
-            let world = World()
-            var rootEntities: [Entity] = []
-            for i in 0..<roots {
-                var parent = world.createEntity(named: "r\(i)", transform: Transform(position: Vec3(Float(i), 0, 0)))
-                rootEntities.append(parent)
-                for _ in 0..<3 {
-                    parent = world.createEntity(
-                        named: "c", transform: Transform(position: Vec3(0, 1, 0)), parent: parent)
+            },
+            Benchmark(name: "transform.hierarchy", unit: "entities/s") { quick in
+                // A forest of 4-level chains with every root moved each frame, so the whole
+                // hierarchy is dirty: the worst case for `TransformSystem`.
+                let roots = quick ? 2_500 : 10_000
+                let world = World()
+                var rootEntities: [Entity] = []
+                for i in 0..<roots {
+                    var parent = world.createEntity(
+                        named: "r\(i)", transform: Transform(position: Vec3(Float(i), 0, 0)))
+                    rootEntities.append(parent)
+                    for _ in 0..<3 {
+                        parent = world.createEntity(
+                            named: "c", transform: Transform(position: Vec3(0, 1, 0)), parent: parent)
+                    }
                 }
-            }
-            TransformSystem.update(world)
-            return {
-                for e in rootEntities { world.modify(Transform.self, e) { $0.position.z += 0.1 } }
                 TransformSystem.update(world)
-                return roots * 4
-            }
-        },
-        Benchmark(name: "physics2d.pile.60steps", unit: "body-steps/s") { quick in
-            let n = quick ? 200 : 500
-            let engine = makeEngine(physics2D: true, physics3D: false)
-            let ground = engine.world.createEntity(named: "Ground")
-            engine.world.add(Collider2D.box(Vec2(200, 1)), to: ground)
-            for i in 0..<n {
-                let e = engine.world.createEntity(
-                    named: "Box",
-                    transform: Transform(position: Vec3(Float(i % 25) * 1.1 - 13, 1 + Float(i / 25) * 1.1, 0)))
-                engine.world.add(RigidBody2D(), to: e)
-                engine.world.add(Collider2D.box(Vec2(1, 1)), to: e)
-            }
-            return {
-                engine.simulate(frames: 60)
-                return n * 60
-            }
-        },
-        Benchmark(name: "physics3d.pile.60steps", unit: "body-steps/s") { quick in
-            let n = quick ? 200 : 500
-            let engine = makeEngine(physics2D: false, physics3D: true)
-            let ground = engine.world.createEntity(named: "Ground")
-            engine.world.add(Collider3D.box(Vec3(100, 1, 100)), to: ground)
-            for i in 0..<n {
-                let p = Vec3(Float(i % 10) * 1.1 - 5, 1 + Float(i / 100) * 1.1, Float((i / 10) % 10) * 1.1 - 5)
-                let e = engine.world.createEntity(named: "Crate", transform: Transform(position: p))
-                engine.world.add(RigidBody3D(), to: e)
-                engine.world.add(Collider3D.box(Vec3(1, 1, 1)), to: e)
-            }
-            return {
-                engine.simulate(frames: 60)
-                return n * 60
-            }
-        },
-        Benchmark(name: "events.enqueue+flush", unit: "events/s") { quick in
-            let n = quick ? 100_000 : 500_000
-            let bus = EventBus()
-            var sum = 0
-            let subscription = bus.subscribe(BenchEvent.self) { sum &+= $0.value }
-            return {
-                for i in 0..<n { bus.enqueue(BenchEvent(value: i)) }
-                bus.flush()
-                withExtendedLifetime(subscription) {}
-                return n
-            }
-        },
-        Benchmark(name: "math.mat4-multiply", unit: "products/s") { quick in
-            let n = quick ? 200_000 : 1_000_000
-            let a = Mat4(
-                translation: Vec3(1, 2, 3), rotation: Quat(angle: 0.3, axis: Vec3(0, 1, 0)), scale: Vec3(1, 1, 1))
-            return {
-                var m = Mat4.identity
-                for _ in 0..<n { m = m * a }
-                blackHole(m)
-                return n
-            }
-        },
-        Benchmark(name: "engine.tick(empty scene)", unit: "ticks/s") { quick in
-            let n = quick ? 2_000 : 10_000
-            let engine = makeEngine(physics2D: true, physics3D: true)
-            return {
-                engine.simulate(frames: n)
-                return n
-            }
-        },
-    ]
+                return {
+                    for e in rootEntities { world.modify(Transform.self, e) { $0.position.z += 0.1 } }
+                    TransformSystem.update(world)
+                    return roots * 4
+                }
+            },
+            Benchmark(name: "physics2d.pile.60steps", unit: "body-steps/s") { quick in
+                let n = quick ? 200 : 500
+                let engine = makeEngine(physics2D: true, physics3D: false)
+                let ground = engine.world.createEntity(named: "Ground")
+                engine.world.add(Collider2D.box(Vec2(200, 1)), to: ground)
+                for i in 0..<n {
+                    let e = engine.world.createEntity(
+                        named: "Box",
+                        transform: Transform(position: Vec3(Float(i % 25) * 1.1 - 13, 1 + Float(i / 25) * 1.1, 0)))
+                    engine.world.add(RigidBody2D(), to: e)
+                    engine.world.add(Collider2D.box(Vec2(1, 1)), to: e)
+                }
+                return {
+                    engine.simulate(frames: 60)
+                    return n * 60
+                }
+            },
+            Benchmark(name: "physics3d.pile.60steps", unit: "body-steps/s") { quick in
+                let n = quick ? 200 : 500
+                let engine = makeEngine(physics2D: false, physics3D: true)
+                let ground = engine.world.createEntity(named: "Ground")
+                engine.world.add(Collider3D.box(Vec3(100, 1, 100)), to: ground)
+                for i in 0..<n {
+                    let p = Vec3(Float(i % 10) * 1.1 - 5, 1 + Float(i / 100) * 1.1, Float((i / 10) % 10) * 1.1 - 5)
+                    let e = engine.world.createEntity(named: "Crate", transform: Transform(position: p))
+                    engine.world.add(RigidBody3D(), to: e)
+                    engine.world.add(Collider3D.box(Vec3(1, 1, 1)), to: e)
+                }
+                return {
+                    engine.simulate(frames: 60)
+                    return n * 60
+                }
+            },
+            Benchmark(name: "events.enqueue+flush", unit: "events/s") { quick in
+                let n = quick ? 100_000 : 500_000
+                let bus = EventBus()
+                var sum = 0
+                let subscription = bus.subscribe(BenchEvent.self) { sum &+= $0.value }
+                return {
+                    for i in 0..<n { bus.enqueue(BenchEvent(value: i)) }
+                    bus.flush()
+                    withExtendedLifetime(subscription) {}
+                    return n
+                }
+            },
+            Benchmark(name: "math.mat4-multiply", unit: "products/s") { quick in
+                let n = quick ? 200_000 : 1_000_000
+                let a = Mat4(
+                    translation: Vec3(1, 2, 3), rotation: Quat(angle: 0.3, axis: Vec3(0, 1, 0)), scale: Vec3(1, 1, 1))
+                return {
+                    var m = Mat4.identity
+                    for _ in 0..<n { m = m * a }
+                    blackHole(m)
+                    return n
+                }
+            },
+            Benchmark(name: "engine.tick(empty scene)", unit: "ticks/s") { quick in
+                let n = quick ? 2_000 : 10_000
+                let engine = makeEngine(physics2D: true, physics3D: true)
+                return {
+                    engine.simulate(frames: n)
+                    return n
+                }
+            },
+        ]
+    }
 
     struct BenchEvent: Event { var value: Int }
 

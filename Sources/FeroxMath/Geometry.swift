@@ -6,7 +6,10 @@ public struct AABB: Hashable, Codable, Sendable {
     public var min: Vec3
     public var max: Vec3
 
-    @inlinable public init(min: Vec3, max: Vec3) { self.min = min; self.max = max }
+    @inlinable public init(min: Vec3, max: Vec3) {
+        self.min = min
+        self.max = max
+    }
     @inlinable public init(center: Vec3, extents: Vec3) { self.init(min: center - extents, max: center + extents) }
 
     /// An inverted box that any `expand` call will overwrite.
@@ -57,7 +60,8 @@ public struct AABB: Hashable, Codable, Sendable {
         var tmin: Float = 0
         var tmax = maxDistance
         for i in 0..<3 {
-            let o = ray.origin[i], d = ray.direction[i]
+            let o = ray.origin[i]
+            let d = ray.direction[i]
             if Swift.abs(d) < 1e-12 {
                 if o < min[i] || o > max[i] { return nil }
             } else {
@@ -91,7 +95,10 @@ public struct Rect: Hashable, Codable, Sendable {
     public var origin: Vec2
     public var size: Vec2
 
-    @inlinable public init(origin: Vec2, size: Vec2) { self.origin = origin; self.size = size }
+    @inlinable public init(origin: Vec2, size: Vec2) {
+        self.origin = origin
+        self.size = size
+    }
     @inlinable public init(x: Float, y: Float, width: Float, height: Float) {
         self.init(origin: Vec2(x, y), size: Vec2(width, height))
     }
@@ -129,7 +136,10 @@ public struct Rect: Hashable, Codable, Sendable {
 public struct EdgeInsets: Hashable, Codable, Sendable {
     public var top: Float, left: Float, bottom: Float, right: Float
     @inlinable public init(top: Float = 0, left: Float = 0, bottom: Float = 0, right: Float = 0) {
-        self.top = top; self.left = left; self.bottom = bottom; self.right = right
+        self.top = top
+        self.left = left
+        self.bottom = bottom
+        self.right = right
     }
     @inlinable public init(all v: Float) { self.init(top: v, left: v, bottom: v, right: v) }
     @inlinable public init(horizontal h: Float, vertical v: Float) { self.init(top: v, left: h, bottom: v, right: h) }
@@ -154,7 +164,10 @@ public struct Ray: Hashable, Codable, Sendable {
 public struct Sphere: Hashable, Codable, Sendable {
     public var center: Vec3
     public var radius: Float
-    @inlinable public init(center: Vec3, radius: Float) { self.center = center; self.radius = radius }
+    @inlinable public init(center: Vec3, radius: Float) {
+        self.center = center
+        self.radius = radius
+    }
 
     public func intersect(_ ray: Ray) -> Float? {
         let oc = ray.origin - center
@@ -175,7 +188,10 @@ public struct Sphere: Hashable, Codable, Sendable {
 public struct Plane: Hashable, Codable, Sendable {
     public var normal: Vec3
     public var d: Float
-    @inlinable public init(normal: Vec3, d: Float) { self.normal = normal; self.d = d }
+    @inlinable public init(normal: Vec3, d: Float) {
+        self.normal = normal
+        self.d = d
+    }
     @inlinable public init(normal: Vec3, point: Vec3) {
         let n = normal.normalized
         self.init(normal: n, d: -n.dot(point))
@@ -203,7 +219,10 @@ public struct Frustum: Sendable {
     /// conventional and reversed-Z projections since near/far are symmetric in the test.
     public init(viewProjection m: Mat4) {
         let t = m.transposed  // rows of m are columns of t
-        let r0 = t.c0, r1 = t.c1, r2 = t.c2, r3 = t.c3
+        let r0 = t.c0
+        let r1 = t.c1
+        let r2 = t.c2
+        let r3 = t.c3
         planes = [
             Plane(coefficients: r3 + r0),  // left
             Plane(coefficients: r3 - r0),  // right
@@ -221,7 +240,8 @@ public struct Frustum: Sendable {
 
     /// Conservative AABB test using the "positive vertex" per plane.
     @inlinable public func intersects(_ b: AABB) -> Bool {
-        let c = b.center, e = b.extents
+        let c = b.center
+        let e = b.extents
         for p in planes {
             let r = e.dot(p.normal.absolute)
             if p.signedDistance(c) < -r { return false }

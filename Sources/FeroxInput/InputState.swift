@@ -91,7 +91,9 @@ public struct InputState: Sendable {
     public init() {}
 
     // MARK: Keyboard
-    @inline(__always) static func bit(_ k: Key) -> (Int, UInt64) { (Int(k.rawValue) >> 6, 1 << UInt64(k.rawValue & 63)) }
+    @inline(__always) static func bit(_ k: Key) -> (Int, UInt64) {
+        (Int(k.rawValue) >> 6, 1 << UInt64(k.rawValue & 63))
+    }
     public func isDown(_ k: Key) -> Bool {
         let (w, b) = InputState.bit(k)
         return keys[w] & b != 0
@@ -114,7 +116,9 @@ public struct InputState: Sendable {
 
     // MARK: Gamepad
     /// Gamepad assigned to `player`, if connected.
-    public func gamepad(player: Int) -> GamepadState? { gamepads.values.first { $0.player == player && $0.isConnected } }
+    public func gamepad(player: Int) -> GamepadState? {
+        gamepads.values.first { $0.player == player && $0.isConnected }
+    }
 
     /// Left/right stick with the stick dead zone applied.
     public func stick(_ left: Bool, player: Int = 0) -> Vec2 {
@@ -127,7 +131,9 @@ public struct InputState: Sendable {
         return triggerDeadZone.apply(g.raw(left ? .leftTrigger : .rightTrigger))
     }
     public func isDown(_ b: GamepadButton, player: Int = 0) -> Bool { gamepad(player: player)?.isDown(b) ?? false }
-    public func wasPressed(_ b: GamepadButton, player: Int = 0) -> Bool { gamepad(player: player)?.wasPressed(b) ?? false }
+    public func wasPressed(_ b: GamepadButton, player: Int = 0) -> Bool {
+        gamepad(player: player)?.wasPressed(b) ?? false
+    }
 
     /// Any input this frame (useful for "press any key" screens and device switching).
     public var anyKeyPressed: Bool {
@@ -152,31 +158,31 @@ public struct InputState: Sendable {
 
     mutating func apply(_ e: InputEvent) {
         switch e {
-        case let .keyDown(k, rep, mods):
+        case .keyDown(let k, let rep, let mods):
             let (w, b) = InputState.bit(k)
             keys[w] |= b
             modifiers = mods
             if rep { keyRepeats.insert(k) }
-        case let .keyUp(k, mods):
+        case .keyUp(let k, let mods):
             let (w, b) = InputState.bit(k)
             keys[w] &= ~b
             modifiers = mods
         case .text(let s):
             text += s
-        case let .mouseMove(p, d):
+        case .mouseMove(let p, let d):
             mousePosition = p.simd
             mouseDelta += d.simd
-        case let .mouseDown(b, count):
+        case .mouseDown(let b, let count):
             mouse |= 1 << UInt8(b.rawValue)
             clickCount = count
         case .mouseUp(let b):
             mouse &= ~(1 << UInt8(b.rawValue))
-        case let .scroll(d, precise):
+        case .scroll(let d, let precise):
             scrollDelta += d.simd
             scrollIsPrecise = precise
         case .magnify(let m): magnification += m
         case .rotate(let r): rotation += r
-        case let .gamepadConnected(id, name):
+        case .gamepadConnected(let id, let name):
             var g = gamepads[id] ?? GamepadState(id: id, name: name)
             g.isConnected = true
             g.name = name
@@ -186,10 +192,14 @@ public struct InputState: Sendable {
             gamepads[id]?.isConnected = false
             gamepads[id]?.down = 0
             gamepads[id]?.rawAxes = [Float](repeating: 0, count: GamepadAxis.allCases.count)
-        case let .gamepadButton(id, b, pressed):
+        case .gamepadButton(let id, let b, let pressed):
             guard gamepads[id] != nil else { return }
-            if pressed { gamepads[id]!.down |= 1 << UInt32(b.rawValue) } else { gamepads[id]!.down &= ~(1 << UInt32(b.rawValue)) }
-        case let .gamepadAxis(id, a, v):
+            if pressed {
+                gamepads[id]!.down |= 1 << UInt32(b.rawValue)
+            } else {
+                gamepads[id]!.down &= ~(1 << UInt32(b.rawValue))
+            }
+        case .gamepadAxis(let id, let a, let v):
             gamepads[id]?.rawAxes[a.rawValue] = v.clamped(-1, 1)
             // Mirror triggers as digital buttons.
             if a == .leftTrigger { apply(.gamepadButton(id: id, .leftTrigger, pressed: v > 0.5)) }

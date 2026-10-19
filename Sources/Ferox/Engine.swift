@@ -2,7 +2,8 @@ import Foundation
 
 /// Everything needed to start an `Engine`. Plain data so it can be loaded from a project
 /// file or built in code.
-public struct EngineConfiguration: Sendable {
+/// `URL` is not `Sendable` on the Swift 5.10 Linux SDK. The roots are immutable paths.
+public struct EngineConfiguration: @unchecked Sendable {
     /// Window title (macOS host) and log prefix.
     public var title = "Ferox"
     /// Initial window content size in points.
@@ -283,28 +284,29 @@ public final class Engine {
     private func updateAudioListener() {
         guard let cam = activeCamera() else { return }
         let m = cam.transform.matrix
-        audio.setListener(position: m.translation, forward: m.transformDirection(.forward).normalized,
-                          up: m.transformDirection(.up).normalized)
+        audio.setListener(
+            position: m.translation, forward: m.transformDirection(.forward).normalized,
+            up: m.transformDirection(.up).normalized)
     }
 
     private static func makeAudioBackend(enabled: Bool) -> any AudioBackend {
         #if canImport(AVFoundation)
-        if enabled {
-            do {
-                return try AVAudioBackend()
-            } catch {
-                Log.warning("Audio", "Audio output unavailable (\(error)); continuing without sound")
+            if enabled {
+                do {
+                    return try AVAudioBackend()
+                } catch {
+                    Log.warning("Audio", "Audio output unavailable (\(error)); continuing without sound")
+                }
             }
-        }
         #endif
         return SilentAudioBackend()
     }
 
     private static func makeFontProvider() -> any UIFontProvider {
         #if canImport(CoreText)
-        return CoreTextFontProvider()
+            return CoreTextFontProvider()
         #else
-        return MonospaceFontProvider()
+            return MonospaceFontProvider()
         #endif
     }
 }

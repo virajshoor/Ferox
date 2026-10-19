@@ -39,9 +39,13 @@ open class UILabel: UIElement {
         let base = color ?? (isEffectivelyEnabled ? context.theme.text : context.theme.textMuted)
         let size = context.fonts.measure(runs(context), maxWidth: wraps ? r.width : nil)
         let y = r.minY + max(0, (r.height - size.y) / 2)
-        for group in context.fonts.layout(runs(context), origin: Vec2(r.minX, y), maxWidth: wraps || alignment != .leading ? r.width : nil,
-                                          alignment: alignment, scale: context.scaleFactor) {
-            list.glyphs(group.quads, atlas: group.atlas, color: (group.color ?? base).withAlpha((group.color ?? base).a * context.currentOpacity))
+        for group in context.fonts.layout(
+            runs(context), origin: Vec2(r.minX, y), maxWidth: wraps || alignment != .leading ? r.width : nil,
+            alignment: alignment, scale: context.scaleFactor)
+        {
+            list.glyphs(
+                group.quads, atlas: group.atlas,
+                color: (group.color ?? base).withAlpha((group.color ?? base).a * context.currentOpacity))
         }
     }
 
@@ -116,9 +120,14 @@ open class UIButton: UIElement {
         }
         if !enabled { fill = fill.withAlpha(fill.a * 0.4) }
         let o = context.currentOpacity
-        list.rect(frame, fill.withAlpha(fill.a * o), radius: t.cornerRadius, border: style == .standard ? 1 : 0,
-                  borderColor: t.border.withAlpha(o))
-        if isFocused { list.rect(frame.insetBy(EdgeInsets(all: -3)), .clear, radius: t.cornerRadius + 3, border: 2, borderColor: t.focusRing.withAlpha(o)) }
+        list.rect(
+            frame, fill.withAlpha(fill.a * o), radius: t.cornerRadius, border: style == .standard ? 1 : 0,
+            borderColor: t.border.withAlpha(o))
+        if isFocused {
+            list.rect(
+                frame.insetBy(EdgeInsets(all: -3)), .clear, radius: t.cornerRadius + 3, border: 2,
+                borderColor: t.focusRing.withAlpha(o))
+        }
         label.color = style == .primary ? t.accentText : (enabled ? t.text : t.textMuted)
     }
 
@@ -160,9 +169,13 @@ open class UIToggle: UIElement {
         let t = context.theme
         let o = context.currentOpacity
         let box = Rect(x: frame.minX + 4, y: frame.center.y - 10, width: 20, height: 20)
-        list.rect(box, (isOn ? t.accent : t.surface).withAlpha(o), radius: 4, border: 1, borderColor: t.border.withAlpha(o))
+        list.rect(
+            box, (isOn ? t.accent : t.surface).withAlpha(o), radius: 4, border: 1, borderColor: t.border.withAlpha(o))
         if isOn { list.rect(box.insetBy(EdgeInsets(all: 6)), t.accentText.withAlpha(o), radius: 2) }
-        if isFocused { list.rect(box.insetBy(EdgeInsets(all: -3)), .clear, radius: 6, border: 2, borderColor: t.focusRing.withAlpha(o)) }
+        if isFocused {
+            list.rect(
+                box.insetBy(EdgeInsets(all: -3)), .clear, radius: 6, border: 2, borderColor: t.focusRing.withAlpha(o))
+        }
     }
 
     public func setOn(_ v: Bool) {
@@ -193,7 +206,10 @@ open class UISlider: UIElement {
     public var step: Float?
     public var onChange: ((Float) -> Void)?
 
-    public init(value: Float, range: ClosedRange<Float> = 0...1, step: Float? = nil, name: String = "", onChange: ((Float) -> Void)? = nil) {
+    public init(
+        value: Float, range: ClosedRange<Float> = 0...1, step: Float? = nil, name: String = "",
+        onChange: ((Float) -> Void)? = nil
+    ) {
         self.value = min(max(value, range.lowerBound), range.upperBound)
         self.range = range
         self.step = step
@@ -229,18 +245,29 @@ open class UISlider: UIElement {
         list.rect(Rect(origin: track.origin, size: Vec2(track.width * normalized, 4)), t.accent.withAlpha(o), radius: 2)
         let knob = Rect(x: track.minX + track.width * normalized - 8, y: frame.center.y - 8, width: 16, height: 16)
         list.rect(knob, (isPressed ? t.accent : t.text).withAlpha(o), radius: 8)
-        if isFocused { list.rect(knob.insetBy(EdgeInsets(all: -3)), .clear, radius: 11, border: 2, borderColor: t.focusRing.withAlpha(o)) }
+        if isFocused {
+            list.rect(
+                knob.insetBy(EdgeInsets(all: -3)), .clear, radius: 11, border: 2, borderColor: t.focusRing.withAlpha(o))
+        }
     }
 
     open override func handle(_ event: UIEvent, context: UIContext) -> Bool {
         guard isEffectivelyEnabled else { return false }
         let increment = step ?? (range.upperBound - range.lowerBound) / 20
         switch event {
-        case .pointerDown(let p, _): setFromPointer(p); return true
-        case .pointerDrag(let p, _): setFromPointer(p); return true
+        case .pointerDown(let p, _):
+            setFromPointer(p)
+            return true
+        case .pointerDrag(let p, _):
+            setFromPointer(p)
+            return true
         case .pointerUp: return true
-        case .key(.left, _), .key(.down, _): setValue(value - increment); return true
-        case .key(.right, _), .key(.up, _): setValue(value + increment); return true
+        case .key(.left, _), .key(.down, _):
+            setValue(value - increment)
+            return true
+        case .key(.right, _), .key(.up, _):
+            setValue(value + increment)
+            return true
         case .navigate(let d) where Swift.abs(d.x) > 0.5:
             setValue(value + (d.x > 0 ? increment : -increment))
             return true
@@ -280,19 +307,25 @@ open class UITextField: UIElement {
         Vec2(120, context.fonts.lineHeight(context.theme.font))
     }
 
-    open override func tick(dt: Float, context: UIContext) { blink = isFocused ? (blink + dt).truncatingRemainder(dividingBy: 1) : 0 }
+    open override func tick(dt: Float, context: UIContext) {
+        blink = isFocused ? (blink + dt).truncatingRemainder(dividingBy: 1) : 0
+    }
 
     open override func draw(_ list: inout UIDrawList, context: UIContext) {
         let t = context.theme
         let o = context.currentOpacity
-        list.rect(frame, t.surfacePressed.withAlpha(o), radius: t.cornerRadius, border: isFocused ? 2 : 1,
-                  borderColor: (isFocused ? t.focusRing : t.border).withAlpha(o))
+        list.rect(
+            frame, t.surfacePressed.withAlpha(o), radius: t.cornerRadius, border: isFocused ? 2 : 1,
+            borderColor: (isFocused ? t.focusRing : t.border).withAlpha(o))
         let r = contentRect
         let showPlaceholder = text.isEmpty && !isFocused
         let runs = [TextRun(text: showPlaceholder ? placeholder : text, font: t.font, color: nil)]
         list.pushClip(r)
         let lh = context.fonts.lineHeight(t.font)
-        for g in context.fonts.layout(runs, origin: Vec2(r.minX, r.center.y - lh / 2), maxWidth: nil, alignment: .leading, scale: context.scaleFactor) {
+        for g in context.fonts.layout(
+            runs, origin: Vec2(r.minX, r.center.y - lh / 2), maxWidth: nil, alignment: .leading,
+            scale: context.scaleFactor)
+        {
             list.glyphs(g.quads, atlas: g.atlas, color: (showPlaceholder ? t.textMuted : t.text).withAlpha(o))
         }
         if isFocused && blink < 0.6 {
@@ -319,7 +352,9 @@ open class UITextField: UIElement {
         case .pointerDown(let p, _):
             let xs = context.fonts.caretPositions(text, font: context.theme.font)
             let local = p.x - contentRect.minX
-            caret = xs.enumerated().min { Swift.abs($0.element - local) < Swift.abs($1.element - local) }?.offset ?? text.count
+            caret =
+                xs.enumerated().min { Swift.abs($0.element - local) < Swift.abs($1.element - local) }?.offset
+                ?? text.count
             return true
         case .pointerUp: return true
         case .text(let s):
@@ -401,8 +436,11 @@ open class UIScrollView: UIElement {
     /// Scrolls so `element` (a descendant) is fully visible.
     public func scrollToVisible(_ element: UIElement) {
         let r = contentRect
-        if element.frame.minY < r.minY { scroll(by: element.frame.minY - r.minY) }
-        else if element.frame.maxY > r.maxY { scroll(by: element.frame.maxY - r.maxY) }
+        if element.frame.minY < r.minY {
+            scroll(by: element.frame.minY - r.minY)
+        } else if element.frame.maxY > r.maxY {
+            scroll(by: element.frame.maxY - r.maxY)
+        }
     }
 
     open override func tick(dt: Float, context: UIContext) {
@@ -423,12 +461,14 @@ open class UIScrollView: UIElement {
         let ratio = r.height / max(content.frame.height, 1)
         let h = max(24, r.height * ratio)
         let y = r.minY + (r.height - h) * (scrollOffset / maxOffset)
-        list.rect(Rect(x: r.maxX - 5, y: y, width: 3, height: h), context.theme.textMuted.withAlpha(0.6 * context.currentOpacity), radius: 1.5)
+        list.rect(
+            Rect(x: r.maxX - 5, y: y, width: 3, height: h),
+            context.theme.textMuted.withAlpha(0.6 * context.currentOpacity), radius: 1.5)
     }
 
     open override func handle(_ event: UIEvent, context: UIContext) -> Bool {
         switch event {
-        case let .scroll(d, precise):
+        case .scroll(let d, let precise):
             if precise { scroll(by: -d.y) } else { velocity += -d.y * 12 }
             return true
         case .pointerDrag(_, let delta):
@@ -443,7 +483,12 @@ open class UIScrollView: UIElement {
 /// lists stay cheap. Rows have a fixed height.
 open class UIListView: UIElement {
     public var rowHeight: Float
-    public var count: Int { didSet { rows.removeAll(); removeAllChildren() } }
+    public var count: Int {
+        didSet {
+            rows.removeAll()
+            removeAllChildren()
+        }
+    }
     public var makeRow: (Int) -> UIElement
     public private(set) var selectedIndex: Int?
     public var onSelect: ((Int) -> Void)?
@@ -463,7 +508,9 @@ open class UIListView: UIElement {
     open override var isFocusable: Bool { count > 0 && isVisible }
     var maxOffset: Float { max(0, Float(count) * rowHeight - contentRect.height) }
 
-    open override func contentSize(available: Vec2, context: UIContext) -> Vec2 { Vec2(available.x, Float(count) * rowHeight) }
+    open override func contentSize(available: Vec2, context: UIContext) -> Vec2 {
+        Vec2(available.x, Float(count) * rowHeight)
+    }
 
     open override func arrangeChildren(context: UIContext) {
         let r = contentRect
@@ -476,14 +523,18 @@ open class UIListView: UIElement {
             rows[i] = nil
         }
         for i in visible.sorted() {
-            let e = rows[i] ?? {
-                let row = makeRow(i)
-                rows[i] = row
-                add(row)
-                return row
-            }()
+            let e =
+                rows[i]
+                ?? {
+                    let row = makeRow(i)
+                    rows[i] = row
+                    add(row)
+                    return row
+                }()
             e.background = i == selectedIndex ? context.theme.accent.withAlpha(0.25) : nil
-            e.arrange(Rect(x: r.minX, y: r.minY + Float(i) * rowHeight - scrollOffset, width: r.width, height: rowHeight), context: context)
+            e.arrange(
+                Rect(x: r.minX, y: r.minY + Float(i) * rowHeight - scrollOffset, width: r.width, height: rowHeight),
+                context: context)
         }
     }
 
@@ -501,7 +552,7 @@ open class UIListView: UIElement {
 
     open override func handle(_ event: UIEvent, context: UIContext) -> Bool {
         switch event {
-        case let .scroll(d, _):
+        case .scroll(let d, _):
             scrollOffset = min(max(scrollOffset - d.y, 0), maxOffset)
             return true
         case .pointerUp(let p, true):
@@ -541,20 +592,29 @@ open class UIDropdown: UIElement {
 
     open override func contentSize(available: Vec2, context: UIContext) -> Vec2 {
         let f = context.theme.font
-        let w = options.map { context.fonts.measure([TextRun(text: $0, font: f, color: nil)], maxWidth: nil).x }.max() ?? 0
+        let w =
+            options.map { context.fonts.measure([TextRun(text: $0, font: f, color: nil)], maxWidth: nil).x }.max() ?? 0
         return Vec2(w + 20, context.fonts.lineHeight(f))
     }
 
     open override func draw(_ list: inout UIDrawList, context: UIContext) {
         let t = context.theme
         let o = context.currentOpacity
-        list.rect(frame, (isHovered ? t.surfaceHover : t.surface).withAlpha(o), radius: t.cornerRadius, border: 1, borderColor: t.border.withAlpha(o))
-        if isFocused { list.rect(frame.insetBy(EdgeInsets(all: -3)), .clear, radius: t.cornerRadius + 3, border: 2, borderColor: t.focusRing.withAlpha(o)) }
+        list.rect(
+            frame, (isHovered ? t.surfaceHover : t.surface).withAlpha(o), radius: t.cornerRadius, border: 1,
+            borderColor: t.border.withAlpha(o))
+        if isFocused {
+            list.rect(
+                frame.insetBy(EdgeInsets(all: -3)), .clear, radius: t.cornerRadius + 3, border: 2,
+                borderColor: t.focusRing.withAlpha(o))
+        }
         let r = contentRect
         let title = options.indices.contains(selectedIndex) ? options[selectedIndex] : ""
         let lh = context.fonts.lineHeight(t.font)
-        for g in context.fonts.layout([TextRun(text: title + "  ▾", font: t.font, color: nil)], origin: Vec2(r.minX, r.center.y - lh / 2),
-                                      maxWidth: nil, alignment: .leading, scale: context.scaleFactor) {
+        for g in context.fonts.layout(
+            [TextRun(text: title + "  ▾", font: t.font, color: nil)], origin: Vec2(r.minX, r.center.y - lh / 2),
+            maxWidth: nil, alignment: .leading, scale: context.scaleFactor)
+        {
             list.glyphs(g.quads, atlas: g.atlas, color: t.text.withAlpha(o))
         }
     }
@@ -581,11 +641,14 @@ open class UIDropdown: UIElement {
             menu.add(b)
         }
         let size = menu.measure(available: Vec2(frame.width, 400), context: context)
-        menu.anchors = Anchors(min: .zero, max: .zero, offsetMin: Vec2(frame.minX, frame.maxY + 4),
-                               offsetMax: Vec2(frame.minX + max(frame.width, size.x), frame.maxY + 4 + size.y))
+        menu.anchors = Anchors(
+            min: .zero, max: .zero, offsetMin: Vec2(frame.minX, frame.maxY + 4),
+            offsetMax: Vec2(frame.minX + max(frame.width, size.x), frame.maxY + 4 + size.y))
         context.presentPopup(menu, owner: self)
         popup = menu
-        if let first = menu.children.indices.contains(selectedIndex) ? menu.children[selectedIndex] : menu.children.first {
+        if let first = menu.children.indices.contains(selectedIndex)
+            ? menu.children[selectedIndex] : menu.children.first
+        {
             context.focus(first)
         }
     }

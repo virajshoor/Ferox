@@ -164,8 +164,10 @@ public struct UIVertex {
     /// x corner radius, y border width, z mode (0 solid, 1 texture, 2 glyph), w unused.
     public var params: SIMD4<Float>
     public var borderColor: SIMD4<Float>
-    public init(position: SIMD2<Float>, uv: SIMD2<Float>, color: SIMD4<Float>, rect: SIMD4<Float>,
-                params: SIMD4<Float>, borderColor: SIMD4<Float>) {
+    public init(
+        position: SIMD2<Float>, uv: SIMD2<Float>, color: SIMD4<Float>, rect: SIMD4<Float>,
+        params: SIMD4<Float>, borderColor: SIMD4<Float>
+    ) {
         self.position = position
         self.uv = uv
         self.color = color
@@ -216,6 +218,10 @@ public enum BufferIndex {
     public static let cascade = 11
     /// Light view-projection matrices of the point and spot shadow slices.
     public static let localShadowMatrices = 12
+    /// Tier-2 material argument buffer (`MaterialRecord` array).
+    public static let materialTable = 13
+    /// Per instance-index-slot material id, parallel to the instance-index buffer.
+    public static let materialIds = 14
 }
 
 /// Texture argument indices shared with the shaders.

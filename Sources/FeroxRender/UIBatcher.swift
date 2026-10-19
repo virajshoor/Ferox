@@ -59,8 +59,10 @@ public enum UIBatcher {
             flush()
             current = UIBatch(texture: tex, clip: clip, firstIndex: out.indices.count, indexCount: 0)
         }
-        func quad(_ r: Rect, uv: Rect, top: Vec4, bottom: Vec4, mode: Float, radius: Float,
-                  border: Float, borderColor: Vec4, pad: Float) {
+        func quad(
+            _ r: Rect, uv: Rect, top: Vec4, bottom: Vec4, mode: Float, radius: Float,
+            border: Float, borderColor: Vec4, pad: Float
+        ) {
             let q = Rect(x: r.minX - pad, y: r.minY - pad, width: r.width + 2 * pad, height: r.height + 2 * pad)
             let rectInfo = Vec4(r.minX + r.width * 0.5, r.minY + r.height * 0.5, r.width * 0.5, r.height * 0.5)
             let params = Vec4(radius, border, mode, 0)
@@ -75,8 +77,10 @@ public enum UIBatcher {
             ]
             let base = UInt32(out.vertices.count)
             for c in corners {
-                out.vertices.append(UIVertex(position: c.0, uv: c.1, color: c.2, rect: rectInfo, params: params,
-                                             borderColor: borderColor))
+                out.vertices.append(
+                    UIVertex(
+                        position: c.0, uv: c.1, color: c.2, rect: rectInfo, params: params,
+                        borderColor: borderColor))
             }
             out.indices += [base, base + 1, base + 2, base, base + 2, base + 3]
             current?.indexCount += 6
@@ -84,23 +88,26 @@ public enum UIBatcher {
 
         for cmd in list.commands {
             switch cmd {
-            case let .rect(frame, color, bottomColor, radius, borderWidth, borderColor):
+            case .rect(let frame, let color, let bottomColor, let radius, let borderWidth, let borderColor):
                 guard frame.width > 0, frame.height > 0 else { continue }
                 begin(.none)
-                quad(frame, uv: .unit, top: color.premultiplied, bottom: (bottomColor ?? color).premultiplied, mode: 0,
-                     radius: radius, border: borderWidth, borderColor: borderColor.premultiplied, pad: 1)
-            case let .image(frame, texture, uv, tint, radius):
+                quad(
+                    frame, uv: .unit, top: color.premultiplied, bottom: (bottomColor ?? color).premultiplied, mode: 0,
+                    radius: radius, border: borderWidth, borderColor: borderColor.premultiplied, pad: 1)
+            case .image(let frame, let texture, let uv, let tint, let radius):
                 guard frame.width > 0, frame.height > 0 else { continue }
                 begin(.image(texture))
-                quad(frame, uv: uv, top: tint.premultiplied, bottom: tint.premultiplied, mode: 1, radius: radius,
-                     border: 0, borderColor: .zero, pad: radius > 0 ? 1 : 0)
-            case let .glyphs(atlas, quads, color):
+                quad(
+                    frame, uv: uv, top: tint.premultiplied, bottom: tint.premultiplied, mode: 1, radius: radius,
+                    border: 0, borderColor: .zero, pad: radius > 0 ? 1 : 0)
+            case .glyphs(let atlas, let quads, let color):
                 begin(.glyphAtlas(atlas))
                 let c = color.premultiplied
                 for g in quads where g.frame.width > 0 && g.frame.height > 0 {
-                    quad(g.frame, uv: g.uv, top: c, bottom: c, mode: 2, radius: 0, border: 0, borderColor: .zero, pad: 0)
+                    quad(
+                        g.frame, uv: g.uv, top: c, bottom: c, mode: 2, radius: 0, border: 0, borderColor: .zero, pad: 0)
                 }
-            case let .pushClip(r):
+            case .pushClip(let r):
                 flush()
                 clipStack.append(r)
             case .popClip:
@@ -114,8 +121,11 @@ public enum UIBatcher {
 
     /// Converts a clip rectangle in points to a pixel scissor clamped to the drawable.
     /// Returns nil when the clip is empty (the batch can be skipped).
-    public static func scissor(_ clip: Rect?, scale: Float, drawable: SIMD2<Int>) -> (x: Int, y: Int, width: Int, height: Int)? {
-        let w = max(drawable.x, 0), h = max(drawable.y, 0)
+    public static func scissor(_ clip: Rect?, scale: Float, drawable: SIMD2<Int>) -> (
+        x: Int, y: Int, width: Int, height: Int
+    )? {
+        let w = max(drawable.x, 0)
+        let h = max(drawable.y, 0)
         guard let c = clip else { return (0, 0, w, h) }
         let x0 = min(max(Int((c.minX * scale).rounded(.down)), 0), w)
         let y0 = min(max(Int((c.minY * scale).rounded(.down)), 0), h)

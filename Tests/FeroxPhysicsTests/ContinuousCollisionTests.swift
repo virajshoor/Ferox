@@ -1,6 +1,7 @@
+import FeroxCore
 /// Tests for continuous collision: fast dynamic bodies must not tunnel through thin static walls.
 import XCTest
-import FeroxCore
+
 @testable import FeroxPhysics
 
 final class ContinuousCollisionTests: XCTestCase {
@@ -41,7 +42,8 @@ final class ContinuousCollisionTests: XCTestCase {
     func testRestingBodyIsUnaffected() {
         let world = PhysicsWorld3D()
         world.createBody(BodyDesc3D(type: .static, position: .zero, shapes: [.box(Vec3(10, 0.5, 10))]))
-        let box = world.createBody(BodyDesc3D(type: .dynamic, position: Vec3(0, 1, 0), shapes: [.box(Vec3(0.5, 0.5, 0.5))]))
+        let box = world.createBody(
+            BodyDesc3D(type: .dynamic, position: Vec3(0, 1, 0), shapes: [.box(Vec3(0.5, 0.5, 0.5))]))
         world.setLinearVelocity(box, Vec3(3, 0, 0))
         for _ in 0..<30 { world.step(1.0 / 60) }
         XCTAssertGreaterThan(world.body(box)!.position.x, 0.5, "sliding must not be stopped by the floor")

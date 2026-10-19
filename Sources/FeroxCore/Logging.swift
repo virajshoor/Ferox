@@ -1,7 +1,7 @@
 import Foundation
 
 #if canImport(os)
-import os
+    import os
 #endif
 
 /// Severity of a log message.
@@ -61,9 +61,9 @@ public final class Log: @unchecked Sendable {
 
     public init(minimumLevel: LogLevel? = nil) {
         #if FEROX_DEBUG
-        _minimumLevel = minimumLevel ?? .debug
+            _minimumLevel = minimumLevel ?? .debug
         #else
-        _minimumLevel = minimumLevel ?? .info
+            _minimumLevel = minimumLevel ?? .info
         #endif
         sinks = [ConsoleLogSink()]
     }
@@ -89,19 +89,29 @@ public final class Log: @unchecked Sendable {
     }
 
     // Convenience entry points.
-    public static func trace(_ category: String, _ m: @autoclosure () -> String, file: String = #fileID, line: Int = #line) {
+    public static func trace(
+        _ category: String, _ m: @autoclosure () -> String, file: String = #fileID, line: Int = #line
+    ) {
         shared.log(.trace, category, m(), file: file, line: line)
     }
-    public static func debug(_ category: String, _ m: @autoclosure () -> String, file: String = #fileID, line: Int = #line) {
+    public static func debug(
+        _ category: String, _ m: @autoclosure () -> String, file: String = #fileID, line: Int = #line
+    ) {
         shared.log(.debug, category, m(), file: file, line: line)
     }
-    public static func info(_ category: String, _ m: @autoclosure () -> String, file: String = #fileID, line: Int = #line) {
+    public static func info(
+        _ category: String, _ m: @autoclosure () -> String, file: String = #fileID, line: Int = #line
+    ) {
         shared.log(.info, category, m(), file: file, line: line)
     }
-    public static func warning(_ category: String, _ m: @autoclosure () -> String, file: String = #fileID, line: Int = #line) {
+    public static func warning(
+        _ category: String, _ m: @autoclosure () -> String, file: String = #fileID, line: Int = #line
+    ) {
         shared.log(.warning, category, m(), file: file, line: line)
     }
-    public static func error(_ category: String, _ m: @autoclosure () -> String, file: String = #fileID, line: Int = #line) {
+    public static func error(
+        _ category: String, _ m: @autoclosure () -> String, file: String = #fileID, line: Int = #line
+    ) {
         shared.log(.error, category, m(), file: file, line: line)
     }
 }
@@ -110,7 +120,7 @@ public final class Log: @unchecked Sendable {
 public final class ConsoleLogSink: LogSink, @unchecked Sendable {
     private let lock = NSLock()
     #if canImport(os)
-    private var loggers: [String: os.Logger] = [:]
+        private var loggers: [String: os.Logger] = [:]
     #endif
     public var useUnifiedLogging: Bool
 
@@ -121,17 +131,17 @@ public final class ConsoleLogSink: LogSink, @unchecked Sendable {
         lock.locked {
             FileHandle.standardError.write(Data(line.utf8))
             #if canImport(os)
-            if useUnifiedLogging {
-                let logger = loggers[r.category] ?? os.Logger(subsystem: "dev.ferox.engine", category: r.category)
-                loggers[r.category] = logger
-                switch r.level {
-                case .trace, .debug: logger.debug("\(r.message, privacy: .public)")
-                case .info: logger.info("\(r.message, privacy: .public)")
-                case .warning: logger.warning("\(r.message, privacy: .public)")
-                case .error: logger.error("\(r.message, privacy: .public)")
-                case .fault: logger.fault("\(r.message, privacy: .public)")
+                if useUnifiedLogging {
+                    let logger = loggers[r.category] ?? os.Logger(subsystem: "dev.ferox.engine", category: r.category)
+                    loggers[r.category] = logger
+                    switch r.level {
+                    case .trace, .debug: logger.debug("\(r.message, privacy: .public)")
+                    case .info: logger.info("\(r.message, privacy: .public)")
+                    case .warning: logger.warning("\(r.message, privacy: .public)")
+                    case .error: logger.error("\(r.message, privacy: .public)")
+                    case .fault: logger.fault("\(r.message, privacy: .public)")
+                    }
                 }
-            }
             #endif
         }
     }
@@ -169,7 +179,12 @@ public final class RingBufferLogSink: LogSink, @unchecked Sendable {
         lock.locked { storage.count < capacity ? storage : Array(storage[head...] + storage[..<head]) }
     }
 
-    public func clear() { lock.locked { storage.removeAll(keepingCapacity: true); head = 0 } }
+    public func clear() {
+        lock.locked {
+            storage.removeAll(keepingCapacity: true)
+            head = 0
+        }
+    }
 }
 
 extension NSLock {

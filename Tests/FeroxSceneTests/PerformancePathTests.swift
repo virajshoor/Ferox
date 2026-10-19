@@ -4,12 +4,15 @@
 /// with the system's cached world matrices.
 import FeroxCore
 import XCTest
+
 @testable import FeroxScene
 
 final class PerformancePathTests: XCTestCase {
     // Element-wise comparison: matrices composed in a different order differ by rounding.
-    private func assertMatrixEqual(_ a: Mat4, _ b: Mat4, accuracy: Float = 1e-4,
-                                   file: StaticString = #filePath, line: UInt = #line) {
+    private func assertMatrixEqual(
+        _ a: Mat4, _ b: Mat4, accuracy: Float = 1e-4,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
         for c in 0..<4 {
             for r in 0..<4 {
                 XCTAssertEqual(a[c][r], b[c][r], accuracy: accuracy, file: file, line: line)
@@ -73,12 +76,21 @@ final class PerformancePathTests: XCTestCase {
     // worldMatrix(of:) on a 3-deep chain agrees with the matrix cached by TransformSystem.
     func testWorldMatrixOfMatchesTransformSystemForThreeDeepChain() {
         let world = World()
-        let a = world.createEntity(named: "a", transform: Transform(position: Vec3(1, 0, 0),
-            rotation: Quat(angle: 0.5, axis: Vec3(0, 0, 1)), scale: Vec3(2, 2, 2)))
-        let b = world.createEntity(named: "b", transform: Transform(position: Vec3(0, 3, 0),
-            rotation: Quat(angle: -0.3, axis: Vec3(1, 0, 0))), parent: a)
-        let c = world.createEntity(named: "c", transform: Transform(position: Vec3(0, 0, 4),
-            scale: Vec3(0.5, 0.5, 0.5)), parent: b)
+        let a = world.createEntity(
+            named: "a",
+            transform: Transform(
+                position: Vec3(1, 0, 0),
+                rotation: Quat(angle: 0.5, axis: Vec3(0, 0, 1)), scale: Vec3(2, 2, 2)))
+        let b = world.createEntity(
+            named: "b",
+            transform: Transform(
+                position: Vec3(0, 3, 0),
+                rotation: Quat(angle: -0.3, axis: Vec3(1, 0, 0))), parent: a)
+        let c = world.createEntity(
+            named: "c",
+            transform: Transform(
+                position: Vec3(0, 0, 4),
+                scale: Vec3(0.5, 0.5, 0.5)), parent: b)
         TransformSystem.update(world)
         guard let cached = world.get(WorldTransform.self, c)?.matrix else {
             return XCTFail("c has no WorldTransform")

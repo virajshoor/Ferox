@@ -17,10 +17,10 @@ public enum AssetError: Error, CustomStringConvertible, Equatable {
         switch self {
         case .notFound(let p): return "Asset not found: \(p)"
         case .unsupportedFormat(let p): return "Unsupported asset format: \(p)"
-        case let .corrupt(p, r): return "Corrupt asset \(p): \(r)"
-        case let .limitExceeded(p, r): return "Asset \(p) exceeds limits: \(r)"
+        case .corrupt(let p, let r): return "Corrupt asset \(p): \(r)"
+        case .limitExceeded(let p, let r): return "Asset \(p) exceeds limits: \(r)"
         case .invalidPath(let p): return "Invalid asset path: \(p)"
-        case let .dependencyMissing(p, d): return "Asset \(p) depends on missing \(d)"
+        case .dependencyMissing(let p, let d): return "Asset \(p) depends on missing \(d)"
         }
     }
 }
@@ -116,17 +116,20 @@ public struct ImageData: Sendable, Hashable {
         guard format == .rgba8Unorm || format == .rgba8UnormSRGB else { return }
         mips.removeAll()
         let srgb = format == .rgba8UnormSRGB
-        var w = width, h = height
+        var w = width
+        var h = height
         var src = [UInt8](pixels)
         while w > 1 || h > 1 {
-            let nw = max(1, w / 2), nh = max(1, h / 2)
+            let nw = max(1, w / 2)
+            let nh = max(1, h / 2)
             var dst = [UInt8](repeating: 0, count: nw * nh * 4)
             for y in 0..<nh {
                 for x in 0..<nw {
                     for c in 0..<4 {
                         var sum: Float = 0
                         for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
-                            let sx = min(x * 2 + dx, w - 1), sy = min(y * 2 + dy, h - 1)
+                            let sx = min(x * 2 + dx, w - 1)
+                            let sy = min(y * 2 + dy, h - 1)
                             let v = Float(src[(sy * w + sx) * 4 + c]) / 255
                             sum += (srgb && c < 3) ? Color.srgbToLinear(v) : v
                         }
@@ -205,12 +208,15 @@ public struct MeshData: Sendable, Hashable {
         try check(colors, "COLOR_0")
         try check(joints, "JOINTS_0")
         try check(weights, "WEIGHTS_0")
-        if indices.count % 3 != 0 { throw AssetError.corrupt(name, reason: "index count \(indices.count) is not a multiple of 3") }
+        if indices.count % 3 != 0 {
+            throw AssetError.corrupt(name, reason: "index count \(indices.count) is not a multiple of 3")
+        }
         if let bad = indices.first(where: { Int($0) >= n }) {
             throw AssetError.corrupt(name, reason: "index \(bad) out of range (vertex count \(n))")
         }
         for s in submeshes where s.indexOffset < 0 || s.indexOffset + s.indexCount > indices.count {
-            throw AssetError.corrupt(name, reason: "submesh range \(s.indexOffset)+\(s.indexCount) exceeds \(indices.count) indices")
+            throw AssetError.corrupt(
+                name, reason: "submesh range \(s.indexOffset)+\(s.indexCount) exceeds \(indices.count) indices")
         }
     }
 
@@ -218,7 +224,9 @@ public struct MeshData: Sendable, Hashable {
     public mutating func generateNormals() {
         var acc = [Vec3](repeating: .zero, count: positions.count)
         for t in stride(from: 0, to: indices.count - 2, by: 3) {
-            let i0 = Int(indices[t]), i1 = Int(indices[t + 1]), i2 = Int(indices[t + 2])
+            let i0 = Int(indices[t])
+            let i1 = Int(indices[t + 1])
+            let i2 = Int(indices[t + 2])
             let n = (positions[i1] - positions[i0]).cross(positions[i2] - positions[i0])
             acc[i0] += n
             acc[i1] += n
@@ -234,9 +242,13 @@ public struct MeshData: Sendable, Hashable {
         var tan = [Vec3](repeating: .zero, count: positions.count)
         var bit = [Vec3](repeating: .zero, count: positions.count)
         for t in stride(from: 0, to: indices.count - 2, by: 3) {
-            let i0 = Int(indices[t]), i1 = Int(indices[t + 1]), i2 = Int(indices[t + 2])
-            let e1 = positions[i1] - positions[i0], e2 = positions[i2] - positions[i0]
-            let d1 = uv0[i1] - uv0[i0], d2 = uv0[i2] - uv0[i0]
+            let i0 = Int(indices[t])
+            let i1 = Int(indices[t + 1])
+            let i2 = Int(indices[t + 2])
+            let e1 = positions[i1] - positions[i0]
+            let e2 = positions[i2] - positions[i0]
+            let d1 = uv0[i1] - uv0[i0]
+            let d2 = uv0[i2] - uv0[i0]
             let det = d1.x * d2.y - d2.x * d1.y
             guard Swift.abs(det) > 1e-12 else { continue }
             let r = 1 / det
@@ -265,7 +277,10 @@ public struct MeshData: Sendable, Hashable {
             (Vec3(0, 1, 0), Vec3(1, 0, 0), Vec3(0, 0, -1)), (Vec3(0, -1, 0), Vec3(1, 0, 0), Vec3(0, 0, 1)),
             (Vec3(0, 0, 1), Vec3(1, 0, 0), Vec3(0, 1, 0)), (Vec3(0, 0, -1), Vec3(-1, 0, 0), Vec3(0, 1, 0)),
         ]
-        var p: [Vec3] = [], n: [Vec3] = [], uv: [Vec2] = [], idx: [UInt32] = []
+        var p: [Vec3] = []
+        var n: [Vec3] = []
+        var uv: [Vec2] = []
+        var idx: [UInt32] = []
         for (normal, u, v) in faces {
             let base = UInt32(p.count)
             for (su, sv) in [(Float(-1), Float(-1)), (1, -1), (1, 1), (-1, 1)] {
@@ -284,7 +299,10 @@ public struct MeshData: Sendable, Hashable {
 
     /// UV sphere.
     public static func sphere(radius: Float = 0.5, segments: Int = 32, rings: Int = 16) -> MeshData {
-        var p: [Vec3] = [], n: [Vec3] = [], uv: [Vec2] = [], idx: [UInt32] = []
+        var p: [Vec3] = []
+        var n: [Vec3] = []
+        var uv: [Vec2] = []
+        var idx: [UInt32] = []
         for r in 0...rings {
             let v = Float(r) / Float(rings)
             let phi = v * .pi
@@ -300,7 +318,8 @@ public struct MeshData: Sendable, Hashable {
         let stride = UInt32(segments + 1)
         for r in 0..<UInt32(rings) {
             for s in 0..<UInt32(segments) {
-                let a = r * stride + s, b = a + stride
+                let a = r * stride + s
+                let b = a + stride
                 idx += [a, a + 1, b, a + 1, b + 1, b]
             }
         }
@@ -314,10 +333,13 @@ public struct MeshData: Sendable, Hashable {
     /// XZ plane facing +Y.
     public static func plane(size: Float = 1, subdivisions: Int = 1) -> MeshData {
         let n = max(1, subdivisions)
-        var p: [Vec3] = [], uv: [Vec2] = [], idx: [UInt32] = []
+        var p: [Vec3] = []
+        var uv: [Vec2] = []
+        var idx: [UInt32] = []
         for z in 0...n {
             for x in 0...n {
-                let u = Float(x) / Float(n), v = Float(z) / Float(n)
+                let u = Float(x) / Float(n)
+                let v = Float(z) / Float(n)
                 p.append(Vec3((u - 0.5) * size, 0, (v - 0.5) * size))
                 uv.append(Vec2(u, v))
             }
@@ -429,18 +451,25 @@ public struct SpriteAtlas: Codable, Sendable, Hashable {
 
     /// Frames whose names share a prefix, sorted naturally ("run_0", "run_1", …) — for flipbooks.
     public func sequence(prefix: String) -> [Frame] {
-        frames.filter { $0.name.hasPrefix(prefix) }.sorted { $0.name.compare($1.name, options: .numeric) == .orderedAscending }
+        frames.filter { $0.name.hasPrefix(prefix) }.sorted {
+            $0.name.compare($1.name, options: .numeric) == .orderedAscending
+        }
     }
 
     /// Builds an atlas for a uniform grid sprite sheet.
-    public static func grid(texture: AssetID, texturePath: String, size: Vec2, columns: Int, rows: Int, prefix: String = "frame") -> SpriteAtlas {
+    public static func grid(
+        texture: AssetID, texturePath: String, size: Vec2, columns: Int, rows: Int, prefix: String = "frame"
+    ) -> SpriteAtlas {
         var frames: [Frame] = []
-        let cw = 1 / Float(max(columns, 1)), ch = 1 / Float(max(rows, 1))
+        let cw = 1 / Float(max(columns, 1))
+        let ch = 1 / Float(max(rows, 1))
         for r in 0..<rows {
             for c in 0..<columns {
                 frames.append(
-                    Frame(name: "\(prefix)_\(r * columns + c)", uv: Rect(x: Float(c) * cw, y: Float(r) * ch, width: cw, height: ch),
-                          pixelSize: Vec2(size.x * cw, size.y * ch), pivot: Vec2(0.5, 0.5)))
+                    Frame(
+                        name: "\(prefix)_\(r * columns + c)",
+                        uv: Rect(x: Float(c) * cw, y: Float(r) * ch, width: cw, height: ch),
+                        pixelSize: Vec2(size.x * cw, size.y * ch), pivot: Vec2(0.5, 0.5)))
             }
         }
         return SpriteAtlas(texture: texture, texturePath: texturePath, size: size, frames: frames)
@@ -462,8 +491,10 @@ public struct SpriteAtlas: Codable, Sendable, Hashable {
                 let fw = rect["w"]?.floatValue, let fh = rect["h"]?.floatValue
             else { throw AssetError.corrupt(path, reason: "frame '\(name)' lacks x/y/w/h") }
             let pivot = Vec2(f["pivot"]?["x"]?.floatValue ?? 0.5, f["pivot"]?["y"]?.floatValue ?? 0.5)
-            frames.append(Frame(name: name, uv: Rect(x: x / w, y: y / h, width: fw / w, height: fh / h),
-                                pixelSize: Vec2(fw, fh), pivot: pivot))
+            frames.append(
+                Frame(
+                    name: name, uv: Rect(x: x / w, y: y / h, width: fw / w, height: fh / h),
+                    pixelSize: Vec2(fw, fh), pivot: pivot))
         }
         switch root["frames"] {
         case .object(let dict)?:
@@ -483,13 +514,19 @@ public enum TiledImporter {
         guard let root = try? JSONDecoder().decode(JSONValue.self, from: data) else {
             throw AssetError.corrupt(path, reason: "not valid JSON")
         }
-        guard let w = root["width"]?.intValue, let h = root["height"]?.intValue, w > 0, h > 0, w * h <= 16_777_216 else {
+        guard let w = root["width"]?.intValue, let h = root["height"]?.intValue, w > 0, h > 0, w * h <= 16_777_216
+        else {
             throw AssetError.corrupt(path, reason: "invalid map width/height")
         }
         guard let layer = root["layers"]?.arrayValue?.first(where: { $0["type"]?.stringValue == "tilelayer" }),
             let raw = layer["data"]?.arrayValue
-        else { throw AssetError.unsupportedFormat("\(path) (no uncompressed tile layer; export with CSV/JSON array encoding)") }
-        guard raw.count == w * h else { throw AssetError.corrupt(path, reason: "tile data has \(raw.count) entries, expected \(w * h)") }
+        else {
+            throw AssetError.unsupportedFormat(
+                "\(path) (no uncompressed tile layer; export with CSV/JSON array encoding)")
+        }
+        guard raw.count == w * h else {
+            throw AssetError.corrupt(path, reason: "tile data has \(raw.count) entries, expected \(w * h)")
+        }
         guard let ts = root["tilesets"]?[0] else { throw AssetError.corrupt(path, reason: "no tileset") }
         let firstGID = ts["firstgid"]?.intValue ?? 1
         let columns = ts["columns"]?.intValue ?? 1

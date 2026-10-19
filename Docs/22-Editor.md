@@ -59,7 +59,7 @@ The renderer is driven by the same `GameHost` as a game. The editor's own camera
 
 The hierarchy panel is a virtualised `UIListView` of rows. Each row is an entity in depth-first document order, indented by its depth. Clicking a row selects that entity. Escape clears the selection. Delete or Backspace deletes the selected entity and its children, when no text field has focus.
 
-Left-click in the viewport selects the nearest entity hit by a ray from the editor camera. The click is ignored over a UI panel, and it applies only while editing. Meshes are tested by their world-space bounds (AABB). Lights and cameras without a mesh are tested by a 0.3-unit marker sphere. Editor-owned and Disabled entities are skipped. Clicking empty space clears the selection. `Camera.ray(through:aspect:cameraToWorld:)` takes normalized 0...1 viewport coordinates with a top-left origin. It works for perspective and orthographic cameras, and for reverse-Z.
+Left-click in the viewport selects the nearest entity hit by a ray from the editor camera. The click is ignored over a UI panel, and it applies only while editing. A mesh with triangle indices is tested with `MeshRaycast` (front faces, world space). A mesh with no indices uses its world-space bounds. Lights and cameras without a mesh are tested by a 0.3-unit marker sphere. Editor-owned and Disabled entities are skipped. Clicking empty space clears the selection. `Camera.ray(through:aspect:cameraToWorld:)` takes normalized 0...1 viewport coordinates with a top-left origin. It works for perspective and orthographic cameras, and for reverse-Z. `prepassPickFragment` can write the instance index for a GPU pick attachment; the editor does not read that attachment back.
 
 ## 5. Play mode
 

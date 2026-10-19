@@ -5,7 +5,8 @@ import Foundation
 
 /// Loading state of an asset handle.
 public enum AssetState: Sendable, Equatable {
-    case unloaded, loading, loaded, failed(String)
+    case unloaded, loading, loaded
+    case failed(String)
 }
 
 /// Reference-counted handle to a loaded asset. Holding a handle keeps the asset resident;
@@ -103,7 +104,10 @@ public final class AssetManager: @unchecked Sendable {
     public private(set) var loadCount = 0
     public private(set) var totalLoadSeconds: Double = 0
 
-    public init(database: AssetDatabase?, budget: MemoryBudget = MemoryBudget(textureBytes: 1 << 30, meshBytes: 256 << 20, audioBytes: 128 << 20)) {
+    public init(
+        database: AssetDatabase?,
+        budget: MemoryBudget = MemoryBudget(textureBytes: 1 << 30, meshBytes: 256 << 20, audioBytes: 128 << 20)
+    ) {
         self.database = database
         self.budget = budget
     }
@@ -138,11 +142,26 @@ public final class AssetManager: @unchecked Sendable {
     private func reload(_ ids: [AssetID]) {
         var reloaded: [AssetID] = []
         for id in ids {
-            if let h = textures[id] { startTextureLoad(h, srgbHint: nil); reloaded.append(id) }
-            if let h = models[id] { startModelLoad(h); reloaded.append(id) }
-            if let h = materials[id] { startMaterialLoad(h); reloaded.append(id) }
-            if let h = atlases[id] { startAtlasLoad(h); reloaded.append(id) }
-            if let h = raw[id] { startRawLoad(h); reloaded.append(id) }
+            if let h = textures[id] {
+                startTextureLoad(h, srgbHint: nil)
+                reloaded.append(id)
+            }
+            if let h = models[id] {
+                startModelLoad(h)
+                reloaded.append(id)
+            }
+            if let h = materials[id] {
+                startMaterialLoad(h)
+                reloaded.append(id)
+            }
+            if let h = atlases[id] {
+                startAtlasLoad(h)
+                reloaded.append(id)
+            }
+            if let h = raw[id] {
+                startRawLoad(h)
+                reloaded.append(id)
+            }
         }
         if !reloaded.isEmpty {
             Log.info("Assets", "Hot-reloaded \(reloaded.count) asset(s)")
@@ -152,7 +171,9 @@ public final class AssetManager: @unchecked Sendable {
 
     // MARK: Generic helpers
 
-    private func finish<T>(_ h: AssetHandle<T>, _ result: Result<T, any Error>, bytes: Int, started: Double, fallback: T) {
+    private func finish<T>(
+        _ h: AssetHandle<T>, _ result: Result<T, any Error>, bytes: Int, started: Double, fallback: T
+    ) {
         completions.push { [weak self] in
             switch result {
             case .success(let v):
@@ -228,7 +249,10 @@ public final class AssetManager: @unchecked Sendable {
                 var drop = quality.mipBias
                 if settings.maxSize > 0 {
                     var w = img.width
-                    while w > settings.maxSize { w /= 2; drop += 1 }
+                    while w > settings.maxSize {
+                        w /= 2
+                        drop += 1
+                    }
                 }
                 img = AssetManager.dropMips(img, count: drop)
                 return img
@@ -272,7 +296,9 @@ public final class AssetManager: @unchecked Sendable {
             guard let self, let db = self.database else { return }
             let result: Result<LoadedModel, any Error> = Result {
                 var model: ModelData
-                if let cached = db.cachedData(for: id, suffix: "model"), let m = try? AssetManager.decodeModelCache(cached, name: id.rawValue) {
+                if let cached = db.cachedData(for: id, suffix: "model"),
+                    let m = try? AssetManager.decodeModelCache(cached, name: id.rawValue)
+                {
                     model = m
                     Profiler.shared.count("assets.cacheHits")
                 } else {
@@ -281,7 +307,9 @@ public final class AssetManager: @unchecked Sendable {
                     model = try importer.load(url: url, root: db.safePath)
                     let settings = db.entry(id)?.meta.settings.model ?? ModelImportSettings()
                     if settings.scale != 1 {
-                        for i in model.nodes.indices where model.roots.contains(i) { model.nodes[i].transform.scale *= settings.scale }
+                        for i in model.nodes.indices where model.roots.contains(i) {
+                            model.nodes[i].transform.scale *= settings.scale
+                        }
                     }
                     if !settings.importAnimations { model.animations = [] }
                     if !settings.importLights { for i in model.nodes.indices { model.nodes[i].light = nil } }
@@ -292,7 +320,8 @@ public final class AssetManager: @unchecked Sendable {
                 for (tid, idx) in model.textureImageIndex { texIDs[idx] = tid }
                 return LoadedModel(data: model, textureIDs: texIDs)
             }
-            let bytes = (try? result.get().data.meshes.reduce(0) { $0 + $1.vertexCount * 64 + $1.indices.count * 4 }) ?? 0
+            let bytes =
+                (try? result.get().data.meshes.reduce(0) { $0 + $1.vertexCount * 64 + $1.indices.count * 4 }) ?? 0
             self.finish(h, result, bytes: bytes, started: started, fallback: AssetManager.fallbackModel(id))
             // Register embedded images as textures once delivered.
             self.completions.push { [weak self] in
@@ -307,19 +336,27 @@ public final class AssetManager: @unchecked Sendable {
 
     static func fallbackModel(_ id: AssetID) -> LoadedModel {
         let cube = MeshData.cube()
-        let node = ModelData.Node(name: "Missing", transform: TRS(), children: [], mesh: 0, skin: nil, light: nil, camera: nil)
-        let data = ModelData(name: "Missing(\(id))", nodes: [node], roots: [0], meshes: [cube], materials: [.default], images: [],
-                             imageIsColor: [], textureImageIndex: [:], skins: [], animations: [])
+        let node = ModelData.Node(
+            name: "Missing", transform: TRS(), children: [], mesh: 0, skin: nil, light: nil, camera: nil)
+        let data = ModelData(
+            name: "Missing(\(id))", nodes: [node], roots: [0], meshes: [cube], materials: [.default], images: [],
+            imageIsColor: [], textureImageIndex: [:], skins: [], animations: [])
         return LoadedModel(data: data, textureIDs: [:])
     }
 
     static func encodeModelCache(_ m: ModelData) -> Data {
         let header = ModelCacheHeader(
             name: m.name,
-            nodes: m.nodes.map { .init(name: $0.name, transform: $0.transform, children: $0.children, mesh: $0.mesh, skin: $0.skin, light: $0.light, camera: $0.camera) },
+            nodes: m.nodes.map {
+                .init(
+                    name: $0.name, transform: $0.transform, children: $0.children, mesh: $0.mesh, skin: $0.skin,
+                    light: $0.light, camera: $0.camera)
+            },
             roots: m.roots, materials: m.materials, imageIsColor: m.imageIsColor,
-            textureImageIndex: Dictionary(uniqueKeysWithValues: m.textureImageIndex.map { ($0.key.rawValue, $0.value) }),
-            skins: m.skins.map { .init(name: $0.name, joints: $0.joints, skeleton: $0.skeleton) }, animations: m.animations,
+            textureImageIndex: Dictionary(
+                uniqueKeysWithValues: m.textureImageIndex.map { ($0.key.rawValue, $0.value) }),
+            skins: m.skins.map { .init(name: $0.name, joints: $0.joints, skeleton: $0.skeleton) },
+            animations: m.animations,
             imagePresent: m.images.map { $0 != nil })
         var w = BinaryWriter()
         w.write(UInt32(1))  // version
@@ -342,10 +379,17 @@ public final class AssetManager: @unchecked Sendable {
         for present in header.imagePresent { images.append(present ? try ImageData.decodeBinary(&r) : nil) }
         return ModelData(
             name: header.name,
-            nodes: header.nodes.map { .init(name: $0.name, transform: $0.transform, children: $0.children, mesh: $0.mesh, skin: $0.skin, light: $0.light, camera: $0.camera) },
-            roots: header.roots, meshes: meshes, materials: header.materials, images: images, imageIsColor: header.imageIsColor,
-            textureImageIndex: Dictionary(uniqueKeysWithValues: header.textureImageIndex.map { (AssetID($0.key), $0.value) }),
-            skins: header.skins.map { .init(name: $0.name, joints: $0.joints, skeleton: $0.skeleton) }, animations: header.animations)
+            nodes: header.nodes.map {
+                .init(
+                    name: $0.name, transform: $0.transform, children: $0.children, mesh: $0.mesh, skin: $0.skin,
+                    light: $0.light, camera: $0.camera)
+            },
+            roots: header.roots, meshes: meshes, materials: header.materials, images: images,
+            imageIsColor: header.imageIsColor,
+            textureImageIndex: Dictionary(
+                uniqueKeysWithValues: header.textureImageIndex.map { (AssetID($0.key), $0.value) }),
+            skins: header.skins.map { .init(name: $0.name, joints: $0.joints, skeleton: $0.skeleton) },
+            animations: header.animations)
     }
 
     // MARK: Meshes
@@ -435,8 +479,9 @@ public final class AssetManager: @unchecked Sendable {
                     return db?.id(forPath: p) ?? AssetID.derived(fromPath: p)
                 }
             }
-            self.finish(h, result, bytes: 0, started: started,
-                        fallback: SpriteAtlas(texture: .none, texturePath: "", size: Vec2(1, 1), frames: []))
+            self.finish(
+                h, result, bytes: 0, started: started,
+                fallback: SpriteAtlas(texture: .none, texturePath: "", size: Vec2(1, 1), frames: []))
         }
     }
 
@@ -471,10 +516,12 @@ public final class AssetManager: @unchecked Sendable {
     }
 
     private func enforceBudget() {
-        Self.evictUnused(&textures, limit: budget.textureBytes, pinnedBytes: 0, kind: "Texture", warned: &budgetWarnings)
+        Self.evictUnused(
+            &textures, limit: budget.textureBytes, pinnedBytes: 0, kind: "Texture", warned: &budgetWarnings)
         // Registered meshes have no source to reload from, so only cached models are evicted.
-        Self.evictUnused(&models, limit: budget.meshBytes, pinnedBytes: meshes.values.reduce(0) { $0 + $1.byteCount },
-                         kind: "Mesh", warned: &budgetWarnings)
+        Self.evictUnused(
+            &models, limit: budget.meshBytes, pinnedBytes: meshes.values.reduce(0) { $0 + $1.byteCount },
+            kind: "Mesh", warned: &budgetWarnings)
     }
 
     /// Evicts least-recently-used loaded entries of `cache` that nobody else references until
@@ -483,7 +530,10 @@ public final class AssetManager: @unchecked Sendable {
         _ cache: inout [AssetID: AssetHandle<T>], limit: Int, pinnedBytes: Int, kind: String, warned: inout Set<String>
     ) {
         var total = cache.values.reduce(pinnedBytes) { $0 + $1.byteCount }
-        guard total > limit else { warned.remove(kind); return }
+        guard total > limit else {
+            warned.remove(kind)
+            return
+        }
         let candidates = cache.keys.sorted { (cache[$0]?.lastUsedFrame ?? 0) < (cache[$1]?.lastUsedFrame ?? 0) }
         for id in candidates where total > limit {
             guard cache[id]?.state == .loaded, var h = cache.removeValue(forKey: id) else { continue }

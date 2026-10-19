@@ -7,7 +7,10 @@ public struct Quat: Hashable, Codable, Sendable {
     public var x: Float, y: Float, z: Float, w: Float
 
     @inlinable public init(x: Float, y: Float, z: Float, w: Float) {
-        self.x = x; self.y = y; self.z = z; self.w = w
+        self.x = x
+        self.y = y
+        self.z = z
+        self.w = w
     }
 
     @inlinable public init(_ v: Vec4) { self.init(x: v.x, y: v.y, z: v.z, w: v.w) }
@@ -32,10 +35,17 @@ public struct Quat: Hashable, Codable, Sendable {
 
     /// Shortest rotation taking unit vector `from` onto unit vector `to`.
     public init(from: Vec3, to: Vec3) {
-        let f = from.normalized, t = to.normalized
+        let f = from.normalized
+        let t = to.normalized
         let d = f.dot(t)
-        if d >= 1 - 1e-6 { self = .identity; return }
-        if d <= -1 + 1e-6 { self = Quat(angle: .pi, axis: f.anyPerpendicular); return }
+        if d >= 1 - 1e-6 {
+            self = .identity
+            return
+        }
+        if d <= -1 + 1e-6 {
+            self = Quat(angle: .pi, axis: f.anyPerpendicular)
+            return
+        }
         let c = f.cross(t)
         self = Quat(x: c.x, y: c.y, z: c.z, w: 1 + d).normalized
     }
@@ -105,7 +115,10 @@ public struct Quat: Hashable, Codable, Sendable {
     public func slerp(to target: Quat, _ t: Float) -> Quat {
         var b = target
         var cosTheta = dot(b)
-        if cosTheta < 0 { b = Quat(-b.vector); cosTheta = -cosTheta }
+        if cosTheta < 0 {
+            b = Quat(-b.vector)
+            cosTheta = -cosTheta
+        }
         if cosTheta > 0.9995 { return nlerp(to: b, t) }
         let theta = acos(cosTheta)
         let s = sin(theta)

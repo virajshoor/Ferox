@@ -2,6 +2,7 @@
 /// vectors, look-rotations, slerp/nlerp, Euler angles, and the TRS transform value type.
 import Foundation
 import XCTest
+
 @testable import FeroxMath
 
 private func assertVec3(

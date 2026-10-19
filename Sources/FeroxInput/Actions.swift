@@ -24,11 +24,11 @@ public enum InputBinding: Codable, Hashable, Sendable, CustomStringConvertible {
         case .mouseButton(let b): return "Mouse \(b)"
         case .gamepadButton(let b): return "Pad \(b)"
         case .gamepadAxis(let a, let s): return "Pad \(a)\(s < 0 ? " (inverted)" : "")"
-        case let .keyComposite(u, d, l, r): return "\(u)/\(l)/\(d)/\(r)"
+        case .keyComposite(let u, let d, let l, let r): return "\(u)/\(l)/\(d)/\(r)"
         case .mouseDelta: return "Mouse Motion"
         case .scrollWheel: return "Scroll"
         case .stick(let left): return left ? "Left Stick" : "Right Stick"
-        case let .chord(m, b): return "\(m)+\(b)"
+        case .chord(let m, let b): return "\(m)+\(b)"
         }
     }
 }
@@ -71,9 +71,13 @@ public struct ActionMap: Codable, Hashable, Sendable, Identifiable {
     public static let defaultGameplay = ActionMap(
         "Gameplay",
         actions: [
-            InputAction("Move", .vector2, bindings: [.keyComposite(up: .w, down: .s, left: .a, right: .d),
-                                                     .keyComposite(up: .up, down: .down, left: .left, right: .right),
-                                                     .stick(left: true)]),
+            InputAction(
+                "Move", .vector2,
+                bindings: [
+                    .keyComposite(up: .w, down: .s, left: .a, right: .d),
+                    .keyComposite(up: .up, down: .down, left: .left, right: .right),
+                    .stick(left: true),
+                ]),
             InputAction("Look", .vector2, bindings: [.mouseDelta(scale: 0.1), .stick(left: false)]),
             InputAction("Jump", .button, bindings: [.key(.space), .gamepadButton(.south)]),
             InputAction("Fire", .button, bindings: [.mouseButton(.left), .gamepadAxis(.rightTrigger, scale: 1)]),
@@ -85,8 +89,12 @@ public struct ActionMap: Codable, Hashable, Sendable, Identifiable {
     public static let defaultUI = ActionMap(
         "UI",
         actions: [
-            InputAction("Navigate", .vector2, bindings: [.keyComposite(up: .up, down: .down, left: .left, right: .right),
-                                                         .stick(left: true)]),
+            InputAction(
+                "Navigate", .vector2,
+                bindings: [
+                    .keyComposite(up: .up, down: .down, left: .left, right: .right),
+                    .stick(left: true),
+                ]),
             InputAction("Submit", .button, bindings: [.key(.enter), .key(.space), .gamepadButton(.south)]),
             InputAction("Cancel", .button, bindings: [.key(.escape), .gamepadButton(.east)]),
             InputAction("NextTab", .button, bindings: [.key(.tab), .gamepadButton(.rightShoulder)]),
@@ -200,7 +208,8 @@ public final class InputSystem: @unchecked Sendable {
     private func evaluateActions() {
         var newValues: [String: ActionValue] = [:]
         // Walk contexts from top; stop after the first consuming context.
-        let ordered: [Context] = contexts.isEmpty ? [Context("Default", maps: Array(maps.keys), consumes: true)] : contexts.reversed()
+        let ordered: [Context] =
+            contexts.isEmpty ? [Context("Default", maps: Array(maps.keys), consumes: true)] : contexts.reversed()
         var visibleMaps: [ActionMap] = []
         for c in ordered {
             visibleMaps += c.maps.compactMap { maps[$0] }
@@ -220,7 +229,9 @@ public final class InputSystem: @unchecked Sendable {
                         if Swift.abs(bv.x) >= a.pressThreshold || bv.y >= a.pressThreshold { v.isPressed = true }
                     }
                 }
-                if a.kind == .vector2 && v.vector.lengthSquared > 1 && !a.bindings.contains(where: { if case .mouseDelta = $0 { return true } else { return false } }) {
+                if a.kind == .vector2 && v.vector.lengthSquared > 1
+                    && !a.bindings.contains(where: { if case .mouseDelta = $0 { return true } else { return false } })
+                {
                     v.vector = v.vector.normalized
                 }
                 if a.kind != .button { v.isPressed = v.vector.lengthSquared > a.pressThreshold * a.pressThreshold }
@@ -240,11 +251,11 @@ public final class InputSystem: @unchecked Sendable {
         case .key(let k): return state.isDown(k) ? Vec2(1, 0) : .zero
         case .mouseButton(let m): return state.isDown(m) ? Vec2(1, 0) : .zero
         case .gamepadButton(let g): return state.isDown(g) ? Vec2(1, 0) : .zero
-        case let .gamepadAxis(a, scale):
+        case .gamepadAxis(let a, let scale):
             let raw = state.gamepad(player: 0)?.raw(a) ?? 0
             let dz = (a == .leftTrigger || a == .rightTrigger) ? state.triggerDeadZone : DeadZone(shape: .axial)
             return Vec2(dz.apply(raw) * scale, 0)
-        case let .keyComposite(u, d, l, r):
+        case .keyComposite(let u, let d, let l, let r):
             var v = Vec2.zero
             if state.isDown(u) { v.y += 1 }
             if state.isDown(d) { v.y -= 1 }
@@ -254,7 +265,7 @@ public final class InputSystem: @unchecked Sendable {
         case .mouseDelta(let s): return Vec2(state.mouseDelta.x, -state.mouseDelta.y) * s
         case .scrollWheel(let s): return state.scrollDelta * s
         case .stick(let left): return state.stick(left)
-        case let .chord(modifier, inner): return state.isDown(modifier) ? evaluate(inner) : .zero
+        case .chord(let modifier, let inner): return state.isDown(modifier) ? evaluate(inner) : .zero
         }
     }
 
@@ -262,7 +273,9 @@ public final class InputSystem: @unchecked Sendable {
 
     /// Captures the next key/button/axis press as the new binding at `index` of `action`
     /// in `map`. Escape cancels. The completion receives the new binding (or nil).
-    public func beginRebind(action: String, in map: String, bindingIndex: Int, completion: @escaping (InputBinding?) -> Void) {
+    public func beginRebind(
+        action: String, in map: String, bindingIndex: Int, completion: @escaping (InputBinding?) -> Void
+    ) {
         rebind = (action, map, bindingIndex, completion)
     }
 
@@ -279,10 +292,12 @@ public final class InputSystem: @unchecked Sendable {
         case .keyDown(let k, false, _): binding = .key(k)
         case .mouseDown(let b, _): binding = .mouseButton(b)
         case .gamepadButton(_, let b, true): binding = .gamepadButton(b)
-        case let .gamepadAxis(_, a, v) where Swift.abs(v) > 0.6: binding = .gamepadAxis(a, scale: v < 0 ? -1 : 1)
+        case .gamepadAxis(_, let a, let v) where Swift.abs(v) > 0.6: binding = .gamepadAxis(a, scale: v < 0 ? -1 : 1)
         default: return false
         }
-        guard let binding, var m = maps[r.map], let ai = m.actions.firstIndex(where: { $0.name == r.action }) else { return false }
+        guard let binding, var m = maps[r.map], let ai = m.actions.firstIndex(where: { $0.name == r.action }) else {
+            return false
+        }
         if r.index < m.actions[ai].bindings.count {
             m.actions[ai].bindings[r.index] = binding
         } else {
@@ -316,7 +331,8 @@ public final class InputSystem: @unchecked Sendable {
     /// Plays a rumble on the player's gamepad if supported.
     public func rumble(player: Int = 0, intensity: Float, sharpness: Float = 0.5, duration: Double) {
         guard let g = state.gamepad(player: player) else { return }
-        haptics?.rumble(gamepad: g.id, intensity: intensity.saturated, sharpness: sharpness.saturated, duration: duration)
+        haptics?.rumble(
+            gamepad: g.id, intensity: intensity.saturated, sharpness: sharpness.saturated, duration: duration)
     }
 
     /// Mouse capture (relative mode for FPS cameras); implemented by the platform backend.

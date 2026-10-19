@@ -5,7 +5,11 @@ import Foundation
 public struct Mat3: Hashable, Codable, Sendable {
     public var c0: Vec3, c1: Vec3, c2: Vec3
 
-    @inlinable public init(columns c0: Vec3, _ c1: Vec3, _ c2: Vec3) { self.c0 = c0; self.c1 = c1; self.c2 = c2 }
+    @inlinable public init(columns c0: Vec3, _ c1: Vec3, _ c2: Vec3) {
+        self.c0 = c0
+        self.c1 = c1
+        self.c2 = c2
+    }
     @inlinable public init(diagonal d: Vec3) {
         self.init(columns: Vec3(d.x, 0, 0), Vec3(0, d.y, 0), Vec3(0, 0, d.z))
     }
@@ -14,10 +18,18 @@ public struct Mat3: Hashable, Codable, Sendable {
 
     /// Rotation matrix from a quaternion.
     @inlinable public init(_ q: Quat) {
-        let x2 = q.x + q.x, y2 = q.y + q.y, z2 = q.z + q.z
-        let xx = q.x * x2, xy = q.x * y2, xz = q.x * z2
-        let yy = q.y * y2, yz = q.y * z2, zz = q.z * z2
-        let wx = q.w * x2, wy = q.w * y2, wz = q.w * z2
+        let x2 = q.x + q.x
+        let y2 = q.y + q.y
+        let z2 = q.z + q.z
+        let xx = q.x * x2
+        let xy = q.x * y2
+        let xz = q.x * z2
+        let yy = q.y * y2
+        let yz = q.y * z2
+        let zz = q.z * z2
+        let wx = q.w * x2
+        let wy = q.w * y2
+        let wz = q.w * z2
         self.init(
             columns: Vec3(1 - (yy + zz), xy + wz, xz - wy),
             Vec3(xy - wz, 1 - (xx + zz), yz + wx),
@@ -45,7 +57,9 @@ public struct Mat3: Hashable, Codable, Sendable {
     public var inverse: Mat3 {
         let det = determinant
         guard Swift.abs(det) > 1e-20 else { return .zero }
-        let r0 = c1.cross(c2), r1 = c2.cross(c0), r2 = c0.cross(c1)
+        let r0 = c1.cross(c2)
+        let r1 = c2.cross(c0)
+        let r2 = c0.cross(c1)
         return Mat3(columns: r0, r1, r2).transposed * (1 / det)
     }
 
@@ -66,7 +80,10 @@ public struct Mat4: Hashable, Codable, Sendable {
     public var c0: Vec4, c1: Vec4, c2: Vec4, c3: Vec4
 
     @inlinable public init(columns c0: Vec4, _ c1: Vec4, _ c2: Vec4, _ c3: Vec4) {
-        self.c0 = c0; self.c1 = c1; self.c2 = c2; self.c3 = c3
+        self.c0 = c0
+        self.c1 = c1
+        self.c2 = c2
+        self.c3 = c3
     }
     @inlinable public init(diagonal d: Vec4) {
         self.init(columns: Vec4(d.x, 0, 0, 0), Vec4(0, d.y, 0, 0), Vec4(0, 0, d.z, 0), Vec4(0, 0, 0, d.w))
@@ -119,7 +136,8 @@ public struct Mat4: Hashable, Codable, Sendable {
     /// Depth tests must then use `greater` and the depth buffer must be cleared to 0.
     public static func perspective(fovY: Float, aspect: Float, near: Float, far: Float, reverseZ: Bool = true) -> Mat4 {
         let f = 1 / tan(fovY * 0.5)
-        let a: Float, b: Float
+        let a: Float
+        let b: Float
         if reverseZ {
             a = near / (far - near)
             b = far * near / (far - near)
@@ -134,7 +152,9 @@ public struct Mat4: Hashable, Codable, Sendable {
     public static func orthographic(
         left: Float, right: Float, bottom: Float, top: Float, near: Float, far: Float, reverseZ: Bool = true
     ) -> Mat4 {
-        let rl = right - left, tb = top - bottom, fn = far - near
+        let rl = right - left
+        let tb = top - bottom
+        let fn = far - near
         let a: Float = reverseZ ? 1 / fn : -1 / fn
         let b: Float = reverseZ ? far / fn : -near / fn
         return Mat4(
@@ -182,17 +202,35 @@ public struct Mat4: Hashable, Codable, Sendable {
 
     /// General 4×4 inverse via cofactor expansion. Returns the zero matrix when singular.
     public var inverse: Mat4 {
-        let a00 = c0.x, a01 = c0.y, a02 = c0.z, a03 = c0.w
-        let a10 = c1.x, a11 = c1.y, a12 = c1.z, a13 = c1.w
-        let a20 = c2.x, a21 = c2.y, a22 = c2.z, a23 = c2.w
-        let a30 = c3.x, a31 = c3.y, a32 = c3.z, a33 = c3.w
+        let a00 = c0.x
+        let a01 = c0.y
+        let a02 = c0.z
+        let a03 = c0.w
+        let a10 = c1.x
+        let a11 = c1.y
+        let a12 = c1.z
+        let a13 = c1.w
+        let a20 = c2.x
+        let a21 = c2.y
+        let a22 = c2.z
+        let a23 = c2.w
+        let a30 = c3.x
+        let a31 = c3.y
+        let a32 = c3.z
+        let a33 = c3.w
 
-        let b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10
-        let b02 = a00 * a13 - a03 * a10, b03 = a01 * a12 - a02 * a11
-        let b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12
-        let b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30
-        let b08 = a20 * a33 - a23 * a30, b09 = a21 * a32 - a22 * a31
-        let b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32
+        let b00 = a00 * a11 - a01 * a10
+        let b01 = a00 * a12 - a02 * a10
+        let b02 = a00 * a13 - a03 * a10
+        let b03 = a01 * a12 - a02 * a11
+        let b04 = a01 * a13 - a03 * a11
+        let b05 = a02 * a13 - a03 * a12
+        let b06 = a20 * a31 - a21 * a30
+        let b07 = a20 * a32 - a22 * a30
+        let b08 = a20 * a33 - a23 * a30
+        let b09 = a21 * a32 - a22 * a31
+        let b10 = a21 * a33 - a23 * a31
+        let b11 = a22 * a33 - a23 * a32
 
         let detA: Float = b00 * b11 - b01 * b10 + b02 * b09
         let det: Float = detA + b03 * b08 - b04 * b07 + b05 * b06
@@ -243,7 +281,8 @@ public struct Mat4: Hashable, Codable, Sendable {
     }
 
     public func isApproximatelyEqual(to o: Mat4, tolerance: Float = 1e-4) -> Bool {
-        c0.isApproximatelyEqual(to: o.c0, tolerance: tolerance) && c1.isApproximatelyEqual(to: o.c1, tolerance: tolerance)
+        c0.isApproximatelyEqual(to: o.c0, tolerance: tolerance)
+            && c1.isApproximatelyEqual(to: o.c1, tolerance: tolerance)
             && c2.isApproximatelyEqual(to: o.c2, tolerance: tolerance)
             && c3.isApproximatelyEqual(to: o.c3, tolerance: tolerance)
     }
@@ -255,11 +294,16 @@ public struct Affine2D: Hashable, Codable, Sendable {
     /// Columns: x-axis, y-axis, translation.
     public var a: Vec2, b: Vec2, t: Vec2
 
-    @inlinable public init(a: Vec2, b: Vec2, t: Vec2) { self.a = a; self.b = b; self.t = t }
+    @inlinable public init(a: Vec2, b: Vec2, t: Vec2) {
+        self.a = a
+        self.b = b
+        self.t = t
+    }
     public static let identity = Affine2D(a: Vec2(1, 0), b: Vec2(0, 1), t: .zero)
 
     @inlinable public init(translation: Vec2 = .zero, rotation: Float = 0, scale: Vec2 = Vec2(1, 1)) {
-        let c = cos(rotation), s = sin(rotation)
+        let c = cos(rotation)
+        let s = sin(rotation)
         self.init(a: Vec2(c, s) * scale.x, b: Vec2(-s, c) * scale.y, t: translation)
     }
 

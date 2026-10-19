@@ -3,6 +3,7 @@
 /// generational `HandlePool`/`Handle`, `AssetID`, and the engine version string.
 import Foundation
 import XCTest
+
 @testable import FeroxCore
 
 private enum MeshTag {}
@@ -246,6 +247,7 @@ final class HandlePoolTests: XCTestCase {
         _ = pool.insert("c")
         pool.remove(b)
         var seen: [String] = []
+        // swift-format-ignore: ReplaceForEachWithForLoop
         pool.forEach { _, value in seen.append(value) }
         XCTAssertEqual(seen, ["a", "c"])
     }

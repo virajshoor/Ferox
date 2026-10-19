@@ -36,8 +36,9 @@ public struct GraphicsSettings: Codable, Sendable, Hashable {
         case .low:
             antiAliasing.mode = .fxaa
             upscaling = UpscalingSettings(mode: .automaticSpatial, quality: .performance)
-            shadows = ShadowSettings(enabled: true, resolution: 1024, cascades: 2, softness: .hard,
-                                     localShadowSlices: 0, localResolution: 256)
+            shadows = ShadowSettings(
+                enabled: true, resolution: 1024, cascades: 2, softness: .hard,
+                localShadowSlices: 0, localResolution: 256)
             post.bloom.enabled = false
             post.ambientOcclusion.enabled = false
             post.depthOfField.enabled = false
@@ -49,8 +50,9 @@ public struct GraphicsSettings: Codable, Sendable, Hashable {
         case .medium:
             antiAliasing.mode = .taa
             upscaling = UpscalingSettings(mode: .automaticTemporal, quality: .balanced)
-            shadows = ShadowSettings(enabled: true, resolution: 2048, cascades: 3, softness: .pcf,
-                                     localShadowSlices: 6, localResolution: 512)
+            shadows = ShadowSettings(
+                enabled: true, resolution: 2048, cascades: 3, softness: .pcf,
+                localShadowSlices: 6, localResolution: 512)
             post.bloom.enabled = true
             post.ambientOcclusion.enabled = true
             post.ambientOcclusion.quality = .low
@@ -72,8 +74,9 @@ public struct GraphicsSettings: Codable, Sendable, Hashable {
         case .ultra:
             antiAliasing.mode = .taa
             upscaling = UpscalingSettings(mode: .native, quality: .native)
-            shadows = ShadowSettings(enabled: true, resolution: 4096, cascades: 4, softness: .pcss,
-                                     localShadowSlices: 24, localResolution: 1024)
+            shadows = ShadowSettings(
+                enabled: true, resolution: 4096, cascades: 4, softness: .pcss,
+                localShadowSlices: 24, localResolution: 1024)
             post.bloom.enabled = true
             post.ambientOcclusion.enabled = true
             post.ambientOcclusion.quality = .high
@@ -215,11 +218,21 @@ public struct RayTracingSettings: Codable, Sendable, Hashable {
         case .off:
             enabled = false
         case .performance:
-            enabled = true; reflections = false; raysPerPixel = 1; maxBounces = 1; resolutionScale = 0.5
+            enabled = true
+            reflections = false
+            raysPerPixel = 1
+            maxBounces = 1
+            resolutionScale = 0.5
         case .balanced:
-            enabled = true; raysPerPixel = 1; maxBounces = 1; resolutionScale = 0.5
+            enabled = true
+            raysPerPixel = 1
+            maxBounces = 1
+            resolutionScale = 0.5
         case .quality:
-            enabled = true; raysPerPixel = 2; maxBounces = 2; resolutionScale = 1
+            enabled = true
+            raysPerPixel = 2
+            maxBounces = 2
+            resolutionScale = 1
         }
     }
 }
@@ -247,8 +260,10 @@ public struct ShadowSettings: Codable, Sendable, Hashable {
     /// Edge length of each point or spot shadow slice, in texels.
     public var localResolution = 512
 
-    public init(enabled: Bool = true, resolution: Int = 2048, cascades: Int = 4, softness: ShadowSoftness = .pcf,
-                localShadowSlices: Int = 12, localResolution: Int = 512) {
+    public init(
+        enabled: Bool = true, resolution: Int = 2048, cascades: Int = 4, softness: ShadowSoftness = .pcf,
+        localShadowSlices: Int = 12, localResolution: Int = 512
+    ) {
         self.enabled = enabled
         self.resolution = resolution
         self.cascades = cascades
@@ -344,7 +359,11 @@ public struct PostProcessSettings: Codable, Sendable, Hashable {
 /// Small Codable triple so FeroxCore settings don't depend on SIMD Codable layout details.
 public struct Vec3Codable: Codable, Sendable, Hashable {
     public var x: Float, y: Float, z: Float
-    public init(_ x: Float, _ y: Float, _ z: Float) { self.x = x; self.y = y; self.z = z }
+    public init(_ x: Float, _ y: Float, _ z: Float) {
+        self.x = x
+        self.y = y
+        self.z = z
+    }
 }
 
 public struct FramePacingSettings: Codable, Sendable, Hashable {

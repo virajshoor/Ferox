@@ -71,7 +71,10 @@ public struct ParticleEmitter: SerializableComponent, Hashable, Sendable {
 /// Codable integer pair.
 public struct IVec2Codable: Codable, Hashable, Sendable {
     public var x: Int, y: Int
-    public init(_ x: Int, _ y: Int) { self.x = x; self.y = y }
+    public init(_ x: Int, _ y: Int) {
+        self.x = x
+        self.y = y
+    }
 }
 
 /// Structure-of-arrays particle storage. A reference type so emitters can be updated in
@@ -101,7 +104,9 @@ public final class ParticlePool: @unchecked Sendable {
     }
 
     @discardableResult
-    func spawn(position: Vec3, velocity: Vec3, lifetime: Float, size: Float, rotation: Float, angular: Float, seed: Float) -> Bool {
+    func spawn(
+        position: Vec3, velocity: Vec3, lifetime: Float, size: Float, rotation: Float, angular: Float, seed: Float
+    ) -> Bool {
         guard count < capacity else { return false }
         let i = count
         positions[i] = position
@@ -181,7 +186,9 @@ public final class ParticleSystem: System {
                 spawn = Int(st.emitAccumulator)
                 st.emitAccumulator -= Float(spawn)
                 for b in em.bursts {
-                    let crossed = st.time >= previousTime ? (b.time > previousTime && b.time <= st.time)
+                    let crossed =
+                        st.time >= previousTime
+                        ? (b.time > previousTime && b.time <= st.time)
                         : (b.time > previousTime || b.time <= st.time)
                     if crossed || (previousTime == 0 && b.time == 0) { spawn += b.count }
                 }
@@ -196,11 +203,14 @@ public final class ParticleSystem: System {
     }
 
     /// Spawns and integrates particles. Exposed for tests and offline previews.
-    public static func simulate(_ em: ParticleEmitter, _ st: inout ParticleState, spawn: Int, dt: Float, emitterMatrix m: Mat4) {
+    public static func simulate(
+        _ em: ParticleEmitter, _ st: inout ParticleState, spawn: Int, dt: Float, emitterMatrix m: Mat4
+    ) {
         let pool = st.pool
         for _ in 0..<spawn {
             let (lp, ldir) = sampleShape(em.shape, &st.rng)
-            var pos = lp, vel = ldir * st.rng.nextFloat(in: em.startSpeed)
+            var pos = lp
+            var vel = ldir * st.rng.nextFloat(in: em.startSpeed)
             if em.space == .world {
                 pos = m.transformAffine(lp)
                 vel = m.transformDirection(vel)
@@ -223,7 +233,9 @@ public final class ParticleSystem: System {
             if em.turbulence > 0 {
                 let p = pool.positions[i] * em.turbulenceFrequency
                 let s = pool.seeds[i] * 10
-                let n = Vec3(sin(p.y * 1.7 + s) + cos(p.z * 2.3), sin(p.z * 1.3 + s) + cos(p.x * 1.9), sin(p.x * 2.1 + s) + cos(p.y * 1.1))
+                let n = Vec3(
+                    sin(p.y * 1.7 + s) + cos(p.z * 2.3), sin(p.z * 1.3 + s) + cos(p.x * 1.9),
+                    sin(p.x * 2.1 + s) + cos(p.y * 1.1))
                 v += n * (em.turbulence * dt)
             }
             v *= dragFactor
@@ -262,15 +274,17 @@ public final class ParticleSystem: System {
         out.reserveCapacity(n)
         for _ in 0..<n {
             let (lp, ldir) = sampleShape(em.shape, &st.rng)
-            var pos = lp, vel = ldir * st.rng.nextFloat(in: em.startSpeed)
+            var pos = lp
+            var vel = ldir * st.rng.nextFloat(in: em.startSpeed)
             if em.space == .world {
                 pos = m.transformAffine(lp)
                 vel = m.transformDirection(vel)
             }
-            out.append(Spawn(
-                position: pos, velocity: vel, lifetime: st.rng.nextFloat(in: em.lifetime),
-                size: st.rng.nextFloat(in: em.startSize), rotation: st.rng.nextFloat(in: em.startRotation),
-                angularVelocity: st.rng.nextFloat(in: em.angularVelocity)))
+            out.append(
+                Spawn(
+                    position: pos, velocity: vel, lifetime: st.rng.nextFloat(in: em.lifetime),
+                    size: st.rng.nextFloat(in: em.startSize), rotation: st.rng.nextFloat(in: em.startRotation),
+                    angularVelocity: st.rng.nextFloat(in: em.angularVelocity)))
         }
         return out
     }
@@ -279,7 +293,7 @@ public final class ParticleSystem: System {
         switch s {
         case .point:
             return (.zero, rng.nextUnitVector())
-        case let .sphere(r, surface):
+        case .sphere(let r, let surface):
             let d = rng.nextUnitVector()
             let rad = surface ? r : r * pow(rng.nextFloat(), 1 / 3)
             return (d * rad, d)
@@ -290,7 +304,7 @@ public final class ParticleSystem: System {
         case .box(let e):
             let p = Vec3(rng.nextFloat(in: -1...1), rng.nextFloat(in: -1...1), rng.nextFloat(in: -1...1)) * e
             return (p, .up)
-        case let .cone(angle, radius):
+        case .cone(let angle, let radius):
             let disc = rng.nextInUnitDisc()
             let base = Vec3(disc.x, 0, disc.y) * radius
             let a = rng.nextFloat() * angle

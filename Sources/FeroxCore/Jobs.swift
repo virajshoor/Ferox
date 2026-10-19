@@ -11,7 +11,11 @@ public enum Jobs {
 
     /// Runs `body(range)` over `0..<count` split into chunks of at least `minChunk` items.
     /// Executes inline when the workload is too small to be worth parallelising.
-    public static func parallelFor(count: Int, minChunk: Int = 256, _ body: (Range<Int>) -> Void) {
+    ///
+    /// `body` is `@Sendable`. Capture only values that are safe to use from several
+    /// workers at once, such as integers and buffers whose ranges do not overlap.
+    /// Do not capture a `World` or a component store.
+    public static func parallelFor(count: Int, minChunk: Int = 256, _ body: @Sendable (Range<Int>) -> Void) {
         guard count > 0 else { return }
         let workers = max(1, workerCount)
         let chunk = max(minChunk, (count + workers - 1) / workers)
@@ -24,21 +28,6 @@ public enum Jobs {
             let lo = i * chunk
             body(lo..<min(lo + chunk, count))
         }
-    }
-
-    /// Parallel map preserving order.
-    public static func parallelMap<T, R>(_ items: [T], minChunk: Int = 64, _ transform: (T) -> R) -> [R] {
-        guard !items.isEmpty else { return [] }
-        let out = UnsafeMutableBufferPointer<R>.allocate(capacity: items.count)
-        defer { out.deallocate() }
-        items.withUnsafeBufferPointer { src in
-            parallelFor(count: items.count, minChunk: minChunk) { range in
-                for i in range { (out.baseAddress! + i).initialize(to: transform(src[i])) }
-            }
-        }
-        let result = Array(out)
-        _ = out.baseAddress.map { $0.deinitialize(count: items.count) }
-        return result
     }
 }
 

@@ -1,5 +1,5 @@
-import Foundation
 import FeroxCore
+import Foundation
 
 /// Construction parameters for a 2D body.
 public struct BodyDesc2D: Sendable {
@@ -83,14 +83,17 @@ public struct RaycastHit2D: Sendable {
 /// Joint definitions.
 public enum JointDesc2D: Sendable {
     /// Pins two bodies together at a world anchor; optional motor and angle limits.
-    case revolute(a: BodyID, b: BodyID, anchor: Vec2, motor: (speed: Float, maxTorque: Float)? = nil,
-                  limits: ClosedRange<Float>? = nil)
+    case revolute(
+        a: BodyID, b: BodyID, anchor: Vec2, motor: (speed: Float, maxTorque: Float)? = nil,
+        limits: ClosedRange<Float>? = nil)
     /// Keeps the anchors at `length`; `frequency` > 0 makes it a spring; `minLength`/`maxLength`
     /// turn it into a rope/slider range.
-    case distance(a: BodyID, b: BodyID, anchorA: Vec2, anchorB: Vec2, length: Float? = nil, frequency: Float = 0,
-                  dampingRatio: Float = 0.7, minLength: Float? = nil, maxLength: Float? = nil)
+    case distance(
+        a: BodyID, b: BodyID, anchorA: Vec2, anchorB: Vec2, length: Float? = nil, frequency: Float = 0,
+        dampingRatio: Float = 0.7, minLength: Float? = nil, maxLength: Float? = nil)
     /// Soft constraint pulling a body point towards a world target (editor dragging, grabbing).
-    case target(body: BodyID, anchor: Vec2, target: Vec2, maxForce: Float, frequency: Float = 5, dampingRatio: Float = 0.7)
+    case target(
+        body: BodyID, anchor: Vec2, target: Vec2, maxForce: Float, frequency: Float = 5, dampingRatio: Float = 0.7)
 }
 
 /// A 2D rigid-body physics world.
@@ -103,8 +106,8 @@ public enum JointDesc2D: Sendable {
 ///   velocity threshold, Baumgarte stabilisation with slop, and speculative contacts.
 /// - Sleeping: union-find islands over contacts/joints.
 ///
-/// Limitations: continuous collision only sweeps dynamic bodies against static and kinematic
-/// ones (fast dynamic pairs may still tunnel), polygons are convex (≤16 vertices).
+/// Limitations: polygons are convex (≤16 vertices). Continuous collision sweeps fast dynamic
+/// bodies against static and kinematic shapes, then against other dynamic bodies.
 public final class PhysicsWorld2D {
     public var gravity = Vec2(0, -9.81)
     public var settings = SolverSettings()
@@ -186,7 +189,10 @@ public final class PhysicsWorld2D {
         guard isValid(id) else { return }
         let i = Int(id.index)
         f(&bodies[i]!)
-        if wake { bodies[i]!.isAwake = true; bodies[i]!.sleepTime = 0 }
+        if wake {
+            bodies[i]!.isAwake = true
+            bodies[i]!.sleepTime = 0
+        }
     }
 
     public func setTransform(_ id: BodyID, position: Vec2, angle: Float, resetInterpolation: Bool = false) {
@@ -249,7 +255,9 @@ public final class PhysicsWorld2D {
         b.invInertia = 0
         b.localCenter = .zero
         if b.type == .dynamic {
-            var m: Float = 0, c = Vec2.zero, inertia: Float = 0
+            var m: Float = 0
+            var c = Vec2.zero
+            var inertia: Float = 0
             for s in b.shapes where !s.isTrigger {
                 let md = s.massData()
                 m += md.mass
@@ -278,13 +286,17 @@ public final class PhysicsWorld2D {
     func updateAABB(_ i: Int) {
         guard var b = bodies[i] else { return }
         let xf = b.transform
-        var lo = Vec2(repeating: .infinity), hi = Vec2(repeating: -.infinity)
+        var lo = Vec2(repeating: .infinity)
+        var hi = Vec2(repeating: -.infinity)
         for s in b.shapes {
             let (a, c) = s.aabb(xf)
             lo = pointwiseMin(lo, a)
             hi = pointwiseMax(hi, c)
         }
-        if b.shapes.isEmpty { lo = b.position; hi = b.position }
+        if b.shapes.isEmpty {
+            lo = b.position
+            hi = b.position
+        }
         let m = settings.speculativeDistance
         b.aabbMin = lo - m
         b.aabbMax = hi + m
@@ -392,6 +404,7 @@ public final class PhysicsWorld2D {
         }
 
         // 4. Integrate positions.
+        var motions: [(index: Int, dp: Vec2, oldCenter: Vec2, angleDelta: Float, dynamic: Bool)] = []
         for i in 0..<n {
             guard var b = bodies[i], b.type != .static, b.isAwake else { continue }
             var dp = b.linearVelocity * dt
@@ -404,13 +417,18 @@ public final class PhysicsWorld2D {
                 da = da < 0 ? -settings.maxRotation : settings.maxRotation
                 b.angularVelocity = da * inv
             }
-            // Integrate about the centre of mass.
             let oldCenter = b.worldCenter
             if settings.continuousCollision && b.type == .dynamic { dp = clampContinuous(i, b, from: oldCenter, dp) }
-            b.angle += da
-            let newCenter = oldCenter + dp
-            b.position = newCenter - Transform2D(position: .zero, angle: b.angle).rotate(b.localCenter)
             bodies[i] = b
+            motions.append((i, dp, oldCenter, da, b.type == .dynamic))
+        }
+        if settings.continuousCollision { clampDynamicPairs(&motions) }
+        for m in motions {
+            guard var b = bodies[m.index] else { continue }
+            b.angle += m.angleDelta
+            let newCenter = m.oldCenter + m.dp
+            b.position = newCenter - Transform2D(position: .zero, angle: b.angle).rotate(b.localCenter)
+            bodies[m.index] = b
         }
         for i in 0..<n where bodies[i] != nil { updateAABB(i) }
 
@@ -421,29 +439,65 @@ public final class PhysicsWorld2D {
         if let onContact { for e in contactEvents { onContact(e) } }
     }
 
-    /// Continuous collision: shortens a dynamic body's step motion `dp` (from its centre `c`) so
-    /// its core circle stops just short of the first static or kinematic surface in the way; the
-    /// contact solver stops it on the next step. Velocity is kept.
-    /// ponytail: core-circle sweep, Box2D-style; fast dynamic-vs-dynamic pairs can still tunnel.
+    /// Continuous collision against static and kinematic bodies. Dynamic-versus-dynamic pairs
+    /// are a second pass (`clampDynamicPairs`) so each pair is scaled once.
+    /// ponytail: core-circle sweep, Box2D-style.
     private func clampContinuous(_ i: Int, _ b: Body2D, from c: Vec2, _ dp: Vec2) -> Vec2 {
         let ext = (b.aabbMax - b.aabbMin) * 0.5 - settings.speculativeDistance
         let core = 0.5 * min(ext.x, ext.y)
         let len = dp.length
         guard core > 0, len > core, let filter = b.shapes.first(where: { !$0.isTrigger })?.filter else { return dp }
         let to = c + dp
-        let lo = pointwiseMin(c, to) - core, hi = pointwiseMax(c, to) + core
+        let lo = pointwiseMin(c, to) - core
+        let hi = pointwiseMax(c, to) + core
         var best: Float = 1
         for j in bodies.indices where j != i {
             guard let o = bodies[j], o.type != .dynamic, !jointsDisableCollision(i, j),
-                  o.aabbMin.x <= hi.x, o.aabbMax.x >= lo.x, o.aabbMin.y <= hi.y, o.aabbMax.y >= lo.y else { continue }
+                o.aabbMin.x <= hi.x, o.aabbMax.x >= lo.x, o.aabbMin.y <= hi.y, o.aabbMax.y >= lo.y
+            else { continue }
             let xf = o.transform
             for s in o.shapes where !s.isTrigger && filter.shouldCollide(with: s.filter) {
                 guard let (t, n) = Collide2D.raycast(s, xf, origin: c, delta: dp, inflate: core),
-                      t > 0, t < best, n.dot(dp) < 0 else { continue }
+                    t > 0, t < best, n.dot(dp) < 0
+                else { continue }
                 best = t
             }
         }
         return best < 1 ? dp * max(best - settings.linearSlop / len, 0) : dp
+    }
+
+    /// Scales both displacements of each dynamic pair by the earliest hit fraction along
+    /// their relative motion. Each pair is visited once (`i < j`).
+    private func clampDynamicPairs(
+        _ motions: inout [(index: Int, dp: Vec2, oldCenter: Vec2, angleDelta: Float, dynamic: Bool)]
+    ) {
+        for a in motions.indices where motions[a].dynamic {
+            let ia = motions[a].index
+            guard let ba = bodies[ia] else { continue }
+            let ext = (ba.aabbMax - ba.aabbMin) * 0.5 - settings.speculativeDistance
+            let core = 0.5 * min(ext.x, ext.y)
+            guard core > 0, let filter = ba.shapes.first(where: { !$0.isTrigger })?.filter else { continue }
+            for b in (a + 1)..<motions.count where motions[b].dynamic {
+                let ib = motions[b].index
+                guard let bb = bodies[ib], !jointsDisableCollision(ia, ib) else { continue }
+                let rel = motions[a].dp - motions[b].dp
+                let len = rel.length
+                guard len > core else { continue }
+                var best: Float = 1
+                for s in bb.shapes where !s.isTrigger && filter.shouldCollide(with: s.filter) {
+                    guard
+                        let (t, n) = Collide2D.raycast(
+                            s, bb.transform, origin: motions[a].oldCenter, delta: rel, inflate: core),
+                        t > 0, t < best, n.dot(rel) < 0
+                    else { continue }
+                    best = t
+                }
+                guard best < 1 else { continue }
+                let scale = max(best - settings.linearSlop / len, 0)
+                motions[a].dp *= scale
+                motions[b].dp *= scale
+            }
+        }
     }
 
     func updateContacts() {
@@ -473,14 +527,17 @@ public final class PhysicsWorld2D {
             }
             guard a.aabbMin.y <= b.aabbMax.y && b.aabbMin.y <= a.aabbMax.y else { return }
             guard !jointsDisableCollision(ia, ib) else { return }
-            let xa = a.transform, xb = b.transform
+            let xa = a.transform
+            let xb = b.transform
             for (sa, shapeA) in a.shapes.enumerated() {
                 let (alo, ahi) = shapeA.aabb(xa)
                 for (sb, shapeB) in b.shapes.enumerated() {
                     guard shapeA.filter.shouldCollide(with: shapeB.filter) else { continue }
                     let (blo, bhi) = shapeB.aabb(xb)
                     let m = settings.speculativeDistance
-                    guard alo.x - m <= bhi.x && blo.x - m <= ahi.x && alo.y - m <= bhi.y && blo.y - m <= ahi.y else { continue }
+                    guard alo.x - m <= bhi.x && blo.x - m <= ahi.x && alo.y - m <= bhi.y && blo.y - m <= ahi.y else {
+                        continue
+                    }
                     let key = ContactKey(bodyA: ia, shapeA: sa, bodyB: ib, shapeB: sb)
                     // Normalise ordering so A is always the lower shape reference.
                     let flip = ShapeRef(body: ia, shape: sa) > ShapeRef(body: ib, shape: sb)
@@ -521,7 +578,9 @@ public final class PhysicsWorld2D {
 
     func jointsDisableCollision(_ a: Int, _ b: Int) -> Bool {
         for j in joints {
-            if let j, !j.collideConnected, (j.bodyA == a && j.bodyB == b) || (j.bodyA == b && j.bodyB == a) { return true }
+            if let j, !j.collideConnected, (j.bodyA == a && j.bodyB == b) || (j.bodyA == b && j.bodyB == a) {
+                return true
+            }
         }
         return false
     }
@@ -529,7 +588,8 @@ public final class PhysicsWorld2D {
     func bodyID(_ i: Int) -> BodyID { BodyID(index: UInt32(i), generation: generations[i]) }
 
     func emitBegin(_ c: Contact2D) {
-        let ba = bodies[c.bodyA]!, bb = bodies[c.bodyB]!
+        let ba = bodies[c.bodyA]!
+        let bb = bodies[c.bodyB]!
         contactEvents.append(
             ContactEvent(
                 phase: .began, bodyA: bodyID(c.bodyA), bodyB: bodyID(c.bodyB), shapeA: c.shapeA, shapeB: c.shapeB,
@@ -539,7 +599,8 @@ public final class PhysicsWorld2D {
     }
 
     func emitEnd(_ c: Contact2D) {
-        let ua = bodies[c.bodyA]?.userData ?? 0, ub = bodies[c.bodyB]?.userData ?? 0
+        let ua = bodies[c.bodyA]?.userData ?? 0
+        let ub = bodies[c.bodyB]?.userData ?? 0
         contactEvents.append(
             ContactEvent(
                 phase: .ended, bodyA: bodyID(c.bodyA), bodyB: bodyID(c.bodyB), shapeA: c.shapeA, shapeB: c.shapeB,
@@ -553,7 +614,9 @@ public final class PhysicsWorld2D {
             if bodies[c.bodyA]?.type == .dynamic && bodies[c.bodyB]?.type == .dynamic { uf.union(c.bodyA, c.bodyB) }
         }
         for j in joints {
-            if let j, bodies[j.bodyA]?.type == .dynamic, bodies[j.bodyB]?.type == .dynamic { uf.union(j.bodyA, j.bodyB) }
+            if let j, bodies[j.bodyA]?.type == .dynamic, bodies[j.bodyB]?.type == .dynamic {
+                uf.union(j.bodyA, j.bodyB)
+            }
         }
         let lin2 = settings.sleepLinearThreshold * settings.sleepLinearThreshold
         let ang2 = settings.sleepAngularThreshold * settings.sleepAngularThreshold
@@ -565,7 +628,9 @@ public final class PhysicsWorld2D {
         for i in 0..<n {
             guard var b = bodies[i], b.type == .dynamic else { continue }
             if b.isAwake {
-                if !b.allowSleep || b.linearVelocity.lengthSquared > lin2 || b.angularVelocity * b.angularVelocity > ang2 {
+                if !b.allowSleep || b.linearVelocity.lengthSquared > lin2
+                    || b.angularVelocity * b.angularVelocity > ang2
+                {
                     b.sleepTime = 0
                 } else {
                     b.sleepTime += dt
@@ -597,7 +662,9 @@ public final class PhysicsWorld2D {
     // MARK: Queries
 
     /// Closest hit along the segment `from → to`.
-    public func raycast(from: Vec2, to: Vec2, filter: CollisionFilter = .default, includeTriggers: Bool = false) -> RaycastHit2D? {
+    public func raycast(from: Vec2, to: Vec2, filter: CollisionFilter = .default, includeTriggers: Bool = false)
+        -> RaycastHit2D?
+    {
         var best: RaycastHit2D?
         raycastAll(from: from, to: to, filter: filter, includeTriggers: includeTriggers) { hit in
             if hit.fraction < (best?.fraction ?? .infinity) { best = hit }
@@ -612,10 +679,12 @@ public final class PhysicsWorld2D {
         _ visit: (RaycastHit2D) -> Bool
     ) {
         let d = to - from
-        let lo = pointwiseMin(from, to) - radius, hi = pointwiseMax(from, to) + radius
+        let lo = pointwiseMin(from, to) - radius
+        let hi = pointwiseMax(from, to) + radius
         let length = d.length
         for i in bodies.indices {
-            guard let b = bodies[i], b.aabbMin.x <= hi.x, b.aabbMax.x >= lo.x, b.aabbMin.y <= hi.y, b.aabbMax.y >= lo.y else {
+            guard let b = bodies[i], b.aabbMin.x <= hi.x, b.aabbMax.x >= lo.x, b.aabbMin.y <= hi.y, b.aabbMax.y >= lo.y
+            else {
                 continue
             }
             let xf = b.transform
@@ -649,7 +718,8 @@ public final class PhysicsWorld2D {
         for i in bodies.indices {
             guard let b = bodies[i] else { continue }
             let xf = b.transform
-            if b.shapes.contains(where: { filter.shouldCollide(with: $0.filter) && Collide2D.contains($0, xf, point) }) {
+            if b.shapes.contains(where: { filter.shouldCollide(with: $0.filter) && Collide2D.contains($0, xf, point) })
+            {
                 out.append(bodyID(i))
             }
         }
@@ -707,29 +777,38 @@ public final class PhysicsWorld2D {
                     let center = xf.apply(c)
                     let segs = 24
                     for k in 0..<segs {
-                        let a0 = Float(k) / Float(segs) * 2 * .pi, a1 = Float(k + 1) / Float(segs) * 2 * .pi
-                        lines.append(DebugLine(a: center + Vec2(cos(a0), sin(a0)) * r, b: center + Vec2(cos(a1), sin(a1)) * r, kind: kind))
+                        let a0 = Float(k) / Float(segs) * 2 * .pi
+                        let a1 = Float(k + 1) / Float(segs) * 2 * .pi
+                        lines.append(
+                            DebugLine(
+                                a: center + Vec2(cos(a0), sin(a0)) * r, b: center + Vec2(cos(a1), sin(a1)) * r,
+                                kind: kind))
                     }
                     lines.append(DebugLine(a: center, b: center + xf.rotate(Vec2(r, 0)), kind: kind))
                 case .polygon(let p):
                     let v = p.vertices.map(xf.apply)
                     for k in v.indices { lines.append(DebugLine(a: v[k], b: v[(k + 1) % v.count], kind: kind)) }
                 case .capsule(let a, let bb, let r):
-                    let wa = xf.apply(a), wb = xf.apply(bb)
+                    let wa = xf.apply(a)
+                    let wb = xf.apply(bb)
                     let n = (wb - wa).perpendicular.normalized * r
                     lines.append(DebugLine(a: wa + n, b: wb + n, kind: kind))
                     lines.append(DebugLine(a: wa - n, b: wb - n, kind: kind))
                     for (c, dir) in [(wa, Float(1)), (wb, Float(-1))] {
                         let base = atan2(n.y, n.x)
                         for k in 0..<8 {
-                            let a0 = base + dir * Float(k) / 8 * .pi, a1 = base + dir * Float(k + 1) / 8 * .pi
-                            lines.append(DebugLine(a: c + Vec2(cos(a0), sin(a0)) * r, b: c + Vec2(cos(a1), sin(a1)) * r, kind: kind))
+                            let a0 = base + dir * Float(k) / 8 * .pi
+                            let a1 = base + dir * Float(k + 1) / 8 * .pi
+                            lines.append(
+                                DebugLine(
+                                    a: c + Vec2(cos(a0), sin(a0)) * r, b: c + Vec2(cos(a1), sin(a1)) * r, kind: kind))
                         }
                     }
                 }
             }
             if includeAABBs {
-                let lo = b.aabbMin, hi = b.aabbMax
+                let lo = b.aabbMin
+                let hi = b.aabbMax
                 let corners = [lo, Vec2(hi.x, lo.y), hi, Vec2(lo.x, hi.y)]
                 for k in 0..<4 { lines.append(DebugLine(a: corners[k], b: corners[(k + 1) % 4], kind: .aabb)) }
             }
@@ -744,7 +823,8 @@ public final class PhysicsWorld2D {
         }
         for j in joints {
             guard let j, let a = bodies[j.bodyA], let b = bodies[j.bodyB] else { continue }
-            lines.append(DebugLine(a: a.transform.apply(j.localAnchorA), b: b.transform.apply(j.localAnchorB), kind: .joint))
+            lines.append(
+                DebugLine(a: a.transform.apply(j.localAnchorA), b: b.transform.apply(j.localAnchorB), kind: .joint))
         }
         return lines
     }
@@ -803,17 +883,21 @@ struct Contact2D {
     }
 
     mutating func prepare(_ bodies: inout [Body2D?], settings: SolverSettings, invDt: Float) {
-        let a = bodies[bodyA]!, b = bodies[bodyB]!
-        let ca = a.worldCenter, cb = b.worldCenter
+        let a = bodies[bodyA]!
+        let b = bodies[bodyB]!
+        let ca = a.worldCenter
+        let cb = b.worldCenter
         let t = Vec2(normal.y, -normal.x)
         for i in points.indices {
             var p = points[i]
             p.rA = p.point - ca
             p.rB = p.point - cb
-            let rnA = p.rA.cross(normal), rnB = p.rB.cross(normal)
+            let rnA = p.rA.cross(normal)
+            let rnB = p.rB.cross(normal)
             let kN = a.invMass + b.invMass + a.invInertia * rnA * rnA + b.invInertia * rnB * rnB
             p.normalMass = kN > 0 ? 1 / kN : 0
-            let rtA = p.rA.cross(t), rtB = p.rB.cross(t)
+            let rtA = p.rA.cross(t)
+            let rtB = p.rB.cross(t)
             let kT = a.invMass + b.invMass + a.invInertia * rtA * rtA + b.invInertia * rtB * rtB
             p.tangentMass = kT > 0 ? 1 / kT : 0
             if p.separation > 0 {
@@ -850,7 +934,8 @@ struct Contact2D {
     }
 
     func relativeVelocity(_ bodies: [Body2D?], _ p: Point) -> Vec2 {
-        let a = bodies[bodyA]!, b = bodies[bodyB]!
+        let a = bodies[bodyA]!
+        let b = bodies[bodyB]!
         let va = a.linearVelocity + Vec2(-a.angularVelocity * p.rA.y, a.angularVelocity * p.rA.x)
         let vb = b.linearVelocity + Vec2(-b.angularVelocity * p.rB.y, b.angularVelocity * p.rB.x)
         return vb - va
@@ -929,7 +1014,7 @@ struct JointState2D {
 
     init?(_ d: JointDesc2D, world: PhysicsWorld2D) {
         switch d {
-        case let .revolute(a, b, anchor, motor, limits):
+        case .revolute(let a, let b, let anchor, let motor, let limits):
             guard let ba = world.body(a), let bb = world.body(b) else { return nil }
             kind = .revolute
             bodyA = Int(a.index)
@@ -943,7 +1028,9 @@ struct JointState2D {
                 maxMotorTorque = motor.maxTorque
             }
             self.limits = limits
-        case let .distance(a, b, anchorA, anchorB, length, frequency, dampingRatio, minLength, maxLength):
+        case .distance(
+            let a, let b, let anchorA, let anchorB, let length, let frequency, let dampingRatio, let minLength,
+            let maxLength):
             guard let ba = world.body(a), let bb = world.body(b) else { return nil }
             kind = .distance
             bodyA = Int(a.index)
@@ -957,7 +1044,7 @@ struct JointState2D {
             self.minLength = max(0.005, min(minLength ?? rest, rest))
             self.maxLength = max(maxLength ?? rest, rest)
             collideConnected = true
-        case let .target(b, anchor, target, maxForce, frequency, dampingRatio):
+        case .target(let b, let anchor, let target, let maxForce, let frequency, let dampingRatio):
             guard let bb = world.body(b) else { return nil }
             kind = .target
             // Target joints act on a single body; bodyA aliases bodyB and is never modified.
@@ -990,7 +1077,10 @@ struct JointState2D {
         invDt = 1 / dt
         rA = a.transform.rotate(localAnchorA - a.localCenter)
         rB = b.transform.rotate(localAnchorB - b.localCenter)
-        let mA = a.invMass, mB = b.invMass, iA = a.invInertia, iB = b.invInertia
+        let mA = a.invMass
+        let mB = b.invMass
+        let iA = a.invInertia
+        let iB = b.invInertia
         switch kind {
         case .revolute:
             let k11 = mA + mB + iA * rA.y * rA.y + iB * rB.y * rB.y
@@ -1013,7 +1103,8 @@ struct JointState2D {
             let d = (b.worldCenter + rB) - (a.worldCenter + rA)
             currentLength = d.length
             axis = currentLength > 1e-6 ? d / currentLength : Vec2(1, 0)
-            let crA = rA.cross(axis), crB = rB.cross(axis)
+            let crA = rA.cross(axis)
+            let crB = rB.cross(axis)
             let k = mA + mB + iA * crA * crA + iB * crB * crB
             axialMass = k > 0 ? 1 / k : 0
             if frequency > 0 {
@@ -1112,7 +1203,8 @@ struct JointState2D {
             applyPair(&bodies, lambda)
         case .distance:
             func axialVelocity() -> Float {
-                axis.dot(JointState2D.pointVelocity(bodies[bodyB]!, rB) - JointState2D.pointVelocity(bodies[bodyA]!, rA))
+                axis.dot(
+                    JointState2D.pointVelocity(bodies[bodyB]!, rB) - JointState2D.pointVelocity(bodies[bodyA]!, rA))
             }
             if frequency > 0 {
                 // Soft spring towards the rest length.

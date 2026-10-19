@@ -2,6 +2,7 @@
 /// the structured `Log` with its ring-buffer sink, and the thread-safe hand-off queues.
 import Foundation
 import XCTest
+
 @testable import FeroxCore
 
 private struct TestPing: Event {
@@ -165,10 +166,12 @@ final class LogTests: XCTestCase {
         let ring = RingBufferLogSink(capacity: 8)
         log.addSink(ring)
         var built = false
-        log.log(.debug, "Test", { () -> String in
-            built = true
-            return "hidden"
-        }())
+        log.log(
+            .debug, "Test",
+            { () -> String in
+                built = true
+                return "hidden"
+            }())
         XCTAssertFalse(built)
         XCTAssertTrue(ring.records.isEmpty)
     }

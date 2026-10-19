@@ -1,5 +1,5 @@
-import Foundation
 import FeroxCore
+import Foundation
 
 /// Frame phases in execution order. See Docs/05-Engine-Lifecycle.md.
 public enum SystemPhase: Int, Comparable, CaseIterable, Sendable, Codable {

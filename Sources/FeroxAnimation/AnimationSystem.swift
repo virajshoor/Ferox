@@ -18,14 +18,17 @@ public final class AnimationLibrary {
 
 /// Value produced by sampling a channel, before blending.
 enum SampledValue {
-    case vec3(Vec3), quat(Quat), float(Float), color(Color)
+    case vec3(Vec3)
+    case quat(Quat)
+    case float(Float)
+    case color(Color)
 
     func blended(with o: SampledValue, _ w: Float) -> SampledValue {
         switch (self, o) {
-        case let (.vec3(a), .vec3(b)): return .vec3(a.lerp(to: b, w))
-        case let (.quat(a), .quat(b)): return .quat(a.nlerp(to: b, w))
-        case let (.float(a), .float(b)): return .float(Float.lerp(a, b, w))
-        case let (.color(a), .color(b)): return .color(a.lerp(to: b, w))
+        case (.vec3(let a), .vec3(let b)): return .vec3(a.lerp(to: b, w))
+        case (.quat(let a), .quat(let b)): return .quat(a.nlerp(to: b, w))
+        case (.float(let a), .float(let b)): return .float(Float.lerp(a, b, w))
+        case (.color(let a), .color(let b)): return .color(a.lerp(to: b, w))
         default: return w < 0.5 ? self : o
         }
     }
@@ -63,15 +66,22 @@ public final class AnimationSystem: System {
         out.reserveCapacity(clip.channels.count)
         for ch in clip.channels {
             let k = ChannelKey(path: ch.path, target: ch.target)
-            if let v = ch.vec3?.sample(t) { out[k] = .vec3(v) }
-            else if let q = ch.quat?.sample(t) { out[k] = .quat(q) }
-            else if let f = ch.float?.sample(t) { out[k] = .float(f) }
-            else if let c = ch.color?.sample(t) { out[k] = .color(c) }
+            if let v = ch.vec3?.sample(t) {
+                out[k] = .vec3(v)
+            } else if let q = ch.quat?.sample(t) {
+                out[k] = .quat(q)
+            } else if let f = ch.float?.sample(t) {
+                out[k] = .float(f)
+            } else if let c = ch.color?.sample(t) {
+                out[k] = .color(c)
+            }
         }
         return out
     }
 
-    static func blend(_ a: [ChannelKey: SampledValue], _ b: [ChannelKey: SampledValue], _ w: Float) -> [ChannelKey: SampledValue] {
+    static func blend(_ a: [ChannelKey: SampledValue], _ b: [ChannelKey: SampledValue], _ w: Float) -> [ChannelKey:
+        SampledValue]
+    {
         var out = a
         for (k, vb) in b {
             if let va = a[k] { out[k] = va.blended(with: vb, w) } else { out[k] = vb }
@@ -79,7 +89,9 @@ public final class AnimationSystem: System {
         return out
     }
 
-    func sampleState(_ state: AnimatorState, time: Float, params: [String: AnimatorParameter]) -> [ChannelKey: SampledValue] {
+    func sampleState(_ state: AnimatorState, time: Float, params: [String: AnimatorParameter]) -> [ChannelKey:
+        SampledValue]
+    {
         if let id = state.clip, let clip = library.clip(id) { return sample(clip, time) }
         guard !state.blendTree.isEmpty else { return [:] }
         var x: Float = 0
@@ -89,7 +101,8 @@ public final class AnimationSystem: System {
             return library.clip(pts[0].clip).map { sample($0, time) } ?? [:]
         }
         for i in 1..<pts.count where x <= pts[i].threshold {
-            let a = pts[i - 1], b = pts[i]
+            let a = pts[i - 1]
+            let b = pts[i]
             let w = (x - a.threshold) / max(b.threshold - a.threshold, 1e-6)
             // Normalised time keeps clips of different lengths in phase (walk/run sync).
             guard let ca = library.clip(a.clip), let cb = library.clip(b.clip) else { return [:] }
@@ -134,11 +147,14 @@ public final class AnimationSystem: System {
         if let e = pathCache[root]?[path] { return world.isAlive(e) ? e : nil }
         var cursor = root
         for comp in path.split(separator: "/") {
-            guard let next = world.children(of: cursor).first(where: { world.get(Name.self, $0)?.value == String(comp) }) else {
+            guard
+                let next = world.children(of: cursor).first(where: { world.get(Name.self, $0)?.value == String(comp) })
+            else {
                 // Fallback: search the whole subtree for the last component (glTF node names are unique).
                 var found: Entity?
                 let leaf = String(path.split(separator: "/").last ?? "")
-                world.visitSubtree(root) { c, _ in if found == nil, world.get(Name.self, c)?.value == leaf { found = c } }
+                world.visitSubtree(root) { c, _ in if found == nil, world.get(Name.self, c)?.value == leaf { found = c }
+                }
                 if let found { pathCache[root, default: [:]][path] = found }
                 return found
             }
@@ -177,7 +193,8 @@ public final class AnimationSystem: System {
                 if name == "emissive" { o.emissive = c } else { o.baseColor = c }
                 world.add(o, to: e)
             case (.spriteFrame, .float(let f)):
-                guard let anim = world.get(Animator.self, root), let st = anim.controller.state(named: anim.currentState),
+                guard let anim = world.get(Animator.self, root),
+                    let st = anim.controller.state(named: anim.currentState),
                     let id = st.clip, let clip = library.clip(id), !clip.spriteFrames.isEmpty
                 else { continue }
                 let idx = min(max(Int(f), 0), clip.spriteFrames.count - 1)
@@ -208,7 +225,9 @@ public struct Tween: SerializableComponent, Hashable, Sendable {
     public var elapsed: Float = 0
     /// Remove the component when a `.once` tween completes.
     public var removeOnComplete = true
-    public init(_ property: Property, duration: Float, easing: Easing = .easeInOutQuad, loop: Loop = .once, delay: Float = 0) {
+    public init(
+        _ property: Property, duration: Float, easing: Easing = .easeInOutQuad, loop: Loop = .once, delay: Float = 0
+    ) {
         self.property = property
         self.duration = max(duration, 1e-4)
         self.easing = easing
@@ -248,10 +267,10 @@ public final class TweenSystem: System {
         }
         for (e, prop, t) in writes {
             switch prop {
-            case let .position(a, b): world.modify(Transform.self, e) { $0.position = a.lerp(to: b, t) }
-            case let .scale(a, b): world.modify(Transform.self, e) { $0.scale = a.lerp(to: b, t) }
-            case let .rotation(a, b): world.modify(Transform.self, e) { $0.rotation = a.slerp(to: b, t) }
-            case let .spriteColor(a, b): world.modify(SpriteRenderer.self, e) { $0.color = a.lerp(to: b, t) }
+            case .position(let a, let b): world.modify(Transform.self, e) { $0.position = a.lerp(to: b, t) }
+            case .scale(let a, let b): world.modify(Transform.self, e) { $0.scale = a.lerp(to: b, t) }
+            case .rotation(let a, let b): world.modify(Transform.self, e) { $0.rotation = a.slerp(to: b, t) }
+            case .spriteColor(let a, let b): world.modify(SpriteRenderer.self, e) { $0.color = a.lerp(to: b, t) }
             }
         }
         for e in finished {
@@ -313,7 +332,9 @@ public final class TimelineSystem: System {
             let t0 = p.time
             p.time += context.dt * p.speed
             if p.time >= tl.duration {
-                if p.loops { p.time = p.time.truncatingRemainder(dividingBy: max(tl.duration, 1e-4)) } else {
+                if p.loops {
+                    p.time = p.time.truncatingRemainder(dividingBy: max(tl.duration, 1e-4))
+                } else {
                     p.time = tl.duration
                     p.isPlaying = false
                 }
@@ -323,18 +344,23 @@ public final class TimelineSystem: System {
         for (root, tl, t0, t1) in jobs {
             for track in tl.tracks {
                 switch track {
-                case let .animation(path, clipID, start):
-                    guard let clip = animation.library.clip(clipID), t1 >= start, t1 <= start + clip.duration || clip.loops
+                case .animation(let path, let clipID, let start):
+                    guard let clip = animation.library.clip(clipID), t1 >= start,
+                        t1 <= start + clip.duration || clip.loops
                     else { continue }
-                    animation.apply(animation.sample(clip, t1 - start), to: animation.resolve(path, from: root, world: world) ?? root, world: world)
-                case let .activation(path, start, end):
+                    animation.apply(
+                        animation.sample(clip, t1 - start),
+                        to: animation.resolve(path, from: root, world: world) ?? root, world: world)
+                case .activation(let path, let start, let end):
                     guard let e = animation.resolve(path, from: root, world: world) else { continue }
                     let active = t1 >= start && t1 < end
                     if active && world.has(Disabled.self, e) { world.remove(Disabled.self, from: e) }
                     if !active && !world.has(Disabled.self, e) { world.add(Disabled(), to: e) }
-                case let .event(time, name, payload):
+                case .event(let time, let name, let payload):
                     let crossed = t1 >= t0 ? (time > t0 && time <= t1) : (time > t0 || time <= t1)
-                    if crossed { context.events.enqueue(TimelineEventFired(entity: root, name: name, payload: payload)) }
+                    if crossed {
+                        context.events.enqueue(TimelineEventFired(entity: root, name: name, payload: payload))
+                    }
                 }
             }
         }

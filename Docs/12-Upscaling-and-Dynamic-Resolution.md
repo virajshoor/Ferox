@@ -79,7 +79,7 @@ MetalFX is Apple's upscaling framework. The source comments state that the scale
 
 Apple's documentation for the framework is at [https://developer.apple.com/documentation/metalfx](https://developer.apple.com/documentation/metalfx). The temporal scaler is described at [https://developer.apple.com/documentation/metalfx/mtlfxtemporalscaler](https://developer.apple.com/documentation/metalfx/mtlfxtemporalscaler), and the spatial scaler at [https://developer.apple.com/documentation/metalfx/mtlfxspatialscaler](https://developer.apple.com/documentation/metalfx/mtlfxspatialscaler).
 
-Support is checked once, when the render device is created. `MTLFXSpatialScalerDescriptor.supportsDevice(_:)` and `MTLFXTemporalScalerDescriptor.supportsDevice(_:)` set `supportsMetalFXSpatial` and `supportsMetalFXTemporal` in `DeviceCapabilities`.
+Support is checked once, when the render device is created. `MTLFXSpatialScalerDescriptor.supportsDevice(_:)` and `MTLFXTemporalScalerDescriptor.supportsDevice(_:)` set `supportsMetalFXSpatial` and `supportsMetalFXTemporal` in `DeviceCapabilities`. `Renderer` also probes a temporal scaler at init with colour `rgba16Float`, depth `depth32Float_stencil8` and motion `rg16Float`, scaling 16×16 to 32×32. The result is `Renderer.metalFXProbe`. Motion vectors are scaled by `(−width, −height)` and jitter is converted from NDC to input pixels with Y flipped (`MetalFXTemporalMapping`). A nil scaler is recorded and the frame uses Ferox's temporal resolve.
 
 The scalers are created on first use for a given pair of input and output sizes, and cached under that key. A size change creates a new scaler. If a scaler cannot be created for the formats in use, or the textures lack the usage the scaler requires, the renderer logs a warning once and sets a flag, `metalFXTemporalFailed` or `metalFXSpatialFailed`. From then on, the Ferox implementation runs instead. The flag is not reset during the run.
 
@@ -146,7 +146,7 @@ With `automaticTemporal`, the renderer uses MetalFX temporal where it is support
 
 ## 9. Limitations
 
-- **Limitation: MetalFX is unverified here.** The integration follows Apple's API as the code uses it. It has not been run on a device with MetalFX support.
+- **Limitation: MetalFX has no captured frame.** The mapping math is unit-tested, and `metalFXProbe` records whether this process could build a temporal scaler. No upscaled frame has been captured on hardware in this tree.
 - **Limitation: MetalFX temporal has a minimum input scale.** The source uses 0.5 per axis. A lower requested scale is raised.
 - **Limitation: temporal upscaling needs motion vectors and jitter.** Without them, the temporal modes cannot reconstruct detail correctly. The renderer produces both when a temporal mode is in use.
 - **Limitation: dynamic resolution reacts late.** It uses the previous completed frame's GPU time, and waits 30 frames after each change.

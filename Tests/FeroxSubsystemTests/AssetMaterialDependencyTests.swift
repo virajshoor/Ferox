@@ -1,7 +1,8 @@
+import FeroxCore
 /// Regression test: a `.fxmat` material's dependencies resolve its texture asset IDs to project paths,
 /// even when a cold scan reaches the material before the texture it references.
 import XCTest
-import FeroxCore
+
 @testable import FeroxAssets
 
 final class AssetMaterialDependencyTests: XCTestCase {
@@ -10,7 +11,8 @@ final class AssetMaterialDependencyTests: XCTestCase {
             .appendingPathComponent("AssetMaterialDependencyTests-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         for dir in ["a", "b"] {
-            try FileManager.default.createDirectory(at: root.appendingPathComponent(dir), withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: root.appendingPathComponent(dir), withIntermediateDirectories: true)
             try Data([0x89, 0x50, 0x4E, 0x47]).write(to: root.appendingPathComponent("\(dir)/tex.png"))
         }
         let database = AssetDatabase(root: root)

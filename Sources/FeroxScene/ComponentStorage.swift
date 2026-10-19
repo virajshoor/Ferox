@@ -1,5 +1,5 @@
-import Foundation
 import FeroxCore
+import Foundation
 
 /// A component is plain data attached to an entity. Components should be value types
 /// (structs or enums); behaviour lives in systems.

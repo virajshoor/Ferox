@@ -61,10 +61,10 @@ enum FeroxBenchmarks {
         let filter = value(after: "--filter", in: args)?.lowercased()
 
         #if DEBUG
-        let configuration = "debug"
-        print("warning: debug build — numbers are not representative; use `swift run -c release FeroxBenchmarks`")
+            let configuration = "debug"
+            print("warning: debug build — numbers are not representative; use `swift run -c release FeroxBenchmarks`")
         #else
-        let configuration = "release"
+            let configuration = "release"
         #endif
 
         var report = Report(
@@ -77,18 +77,19 @@ enum FeroxBenchmarks {
 
         var benchmarks = cpuBenchmarks
         #if canImport(Metal)
-        if let device = try? RenderDevice() {
-            report.gpu = device.capabilities.deviceName
-            benchmarks.append(contentsOf: gpuBenchmarks(device))
-        }
+            if let device = try? RenderDevice() {
+                report.gpu = device.capabilities.deviceName
+                benchmarks.append(contentsOf: gpuBenchmarks(device))
+            }
         #endif
 
         for b in benchmarks where filter.map({ b.name.lowercased().contains($0) }) ?? true {
             let r = measure(b, quick: quick)
             report.results.append(r)
             var line = r.name.padding(toLength: max(34, r.name.count), withPad: " ", startingAt: 0)
-            line += String(format: " mean %9.3f ms  median %9.3f ms  min %9.3f ms  (n=%d)",
-                           r.meanMs, r.medianMs, r.minMs, r.iterations)
+            line += String(
+                format: " mean %9.3f ms  median %9.3f ms  min %9.3f ms  (n=%d)",
+                r.meanMs, r.medianMs, r.minMs, r.iterations)
             if let t = r.throughput, let u = r.throughputUnit { line += String(format: "  %.3g ", t) + u }
             print(line)
         }
@@ -98,7 +99,8 @@ enum FeroxBenchmarks {
                 // Only plain relative or absolute file paths are accepted; the parent folder is
                 // created if missing so CI can write into a fresh `BenchmarkResults/`.
                 let url = URL(fileURLWithPath: output)
-                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                 try encoder.encode(report).write(to: url, options: .atomic)
@@ -118,7 +120,7 @@ enum FeroxBenchmarks {
     /// Runs one warm-up iteration, then times `iterations` fresh runs (setup excluded).
     static func measure(_ b: Benchmark, quick: Bool) -> Result {
         let iterations = quick ? 5 : 20
-        _ = b.make(quick)() // warm-up: page in code and data, fill caches and pools
+        _ = b.make(quick)()  // warm-up: page in code and data, fill caches and pools
         var samples: [Double] = []
         var work = 0
         for _ in 0..<iterations {
@@ -129,12 +131,15 @@ enum FeroxBenchmarks {
         }
         samples.sort()
         let mean = samples.reduce(0, +) / Double(samples.count)
-        let median = samples.count % 2 == 1 ? samples[samples.count / 2]
+        let median =
+            samples.count % 2 == 1
+            ? samples[samples.count / 2]
             : (samples[samples.count / 2 - 1] + samples[samples.count / 2]) / 2
         let throughput = b.unit != nil && median > 0 ? Double(work) / (median / 1000) : nil
-        return Result(name: b.name, iterations: iterations, meanMs: mean, medianMs: median,
-                      minMs: samples.first ?? 0, maxMs: samples.last ?? 0,
-                      throughput: throughput, throughputUnit: throughput == nil ? nil : b.unit)
+        return Result(
+            name: b.name, iterations: iterations, meanMs: mean, medianMs: median,
+            minMs: samples.first ?? 0, maxMs: samples.last ?? 0,
+            throughput: throughput, throughputUnit: throughput == nil ? nil : b.unit)
     }
 
     // MARK: - CPU benchmarks
@@ -173,7 +178,10 @@ enum FeroxBenchmarks {
             for i in 0..<roots {
                 var parent = world.createEntity(named: "r\(i)", transform: Transform(position: Vec3(Float(i), 0, 0)))
                 rootEntities.append(parent)
-                for _ in 0..<3 { parent = world.createEntity(named: "c", transform: Transform(position: Vec3(0, 1, 0)), parent: parent) }
+                for _ in 0..<3 {
+                    parent = world.createEntity(
+                        named: "c", transform: Transform(position: Vec3(0, 1, 0)), parent: parent)
+                }
             }
             TransformSystem.update(world)
             return {
@@ -188,7 +196,9 @@ enum FeroxBenchmarks {
             let ground = engine.world.createEntity(named: "Ground")
             engine.world.add(Collider2D.box(Vec2(200, 1)), to: ground)
             for i in 0..<n {
-                let e = engine.world.createEntity(named: "Box", transform: Transform(position: Vec3(Float(i % 25) * 1.1 - 13, 1 + Float(i / 25) * 1.1, 0)))
+                let e = engine.world.createEntity(
+                    named: "Box",
+                    transform: Transform(position: Vec3(Float(i % 25) * 1.1 - 13, 1 + Float(i / 25) * 1.1, 0)))
                 engine.world.add(RigidBody2D(), to: e)
                 engine.world.add(Collider2D.box(Vec2(1, 1)), to: e)
             }
@@ -227,7 +237,8 @@ enum FeroxBenchmarks {
         },
         Benchmark(name: "math.mat4-multiply", unit: "products/s") { quick in
             let n = quick ? 200_000 : 1_000_000
-            let a = Mat4(translation: Vec3(1, 2, 3), rotation: Quat(angle: 0.3, axis: Vec3(0, 1, 0)), scale: Vec3(1, 1, 1))
+            let a = Mat4(
+                translation: Vec3(1, 2, 3), rotation: Quat(angle: 0.3, axis: Vec3(0, 1, 0)), scale: Vec3(1, 1, 1))
             return {
                 var m = Mat4.identity
                 for _ in 0..<n { m = m * a }
@@ -263,57 +274,66 @@ enum FeroxBenchmarks {
     // MARK: - GPU benchmarks (macOS)
 
     #if canImport(Metal)
-    /// Times complete offscreen frames (CPU encode + GPU execution + wait) of a lit scene.
-    static func gpuBenchmarks(_ device: RenderDevice) -> [Benchmark] {
-        QualityPreset.allCases.compactMap { preset in
-            // One renderer per preset, created up front: pipeline compilation is a one-off
-            // cost that must not land in the timed loop.
-            let assets = AssetManager(database: nil)
-            guard let renderer = try? Renderer(device: device, settings: GraphicsSettings(preset: preset), assets: assets) else {
-                print("note: skipping gpu.\(preset.rawValue) (renderer creation failed)")
-                return nil
-            }
-            let world = benchmarkScene(assets)
-            return Benchmark(name: "gpu.offscreen-1080p.\(preset.rawValue)", unit: "frames/s") { quick in
-                let frames = quick ? 10 : 60
-                return {
-                    for _ in 0..<frames { _ = renderer.renderOffscreen(world: world, width: 1920, height: 1080) }
-                    renderer.waitUntilIdle()
-                    return frames
+        /// Times complete offscreen frames (CPU encode + GPU execution + wait) of a lit scene.
+        static func gpuBenchmarks(_ device: RenderDevice) -> [Benchmark] {
+            QualityPreset.allCases.compactMap { preset in
+                // One renderer per preset, created up front: pipeline compilation is a one-off
+                // cost that must not land in the timed loop.
+                let assets = AssetManager(database: nil)
+                guard
+                    let renderer = try? Renderer(
+                        device: device, settings: GraphicsSettings(preset: preset), assets: assets)
+                else {
+                    print("note: skipping gpu.\(preset.rawValue) (renderer creation failed)")
+                    return nil
+                }
+                let world = benchmarkScene(assets)
+                return Benchmark(name: "gpu.offscreen-1080p.\(preset.rawValue)", unit: "frames/s") { quick in
+                    let frames = quick ? 10 : 60
+                    return {
+                        for _ in 0..<frames { _ = renderer.renderOffscreen(world: world, width: 1920, height: 1080) }
+                        renderer.waitUntilIdle()
+                        return frames
+                    }
                 }
             }
         }
-    }
 
-    /// 400 lit spheres on a floor with a shadowed sun and four point lights.
-    static func benchmarkScene(_ assets: AssetManager) -> World {
-        let world = World()
-        let sphere = AssetID("bench.sphere"), floor = AssetID("bench.floor")
-        _ = assets.registerMesh(.sphere(radius: 0.4, segments: 32, rings: 16), id: sphere)
-        _ = assets.registerMesh(.plane(size: 60, subdivisions: 1), id: floor)
-        var material = MaterialData(id: AssetID("bench.material"), name: "Bench")
-        material.baseColor = Color(0.8, 0.6, 0.4, 1)
-        material.roughness = 0.4
-        assets.registerMaterial(material)
-        let f = world.createEntity(named: "Floor")
-        world.add(MeshRenderer(mesh: floor, materials: [material.id]), to: f)
-        for x in 0..<20 {
-            for z in 0..<20 {
-                let e = world.createEntity(named: "S", transform: Transform(position: Vec3(Float(x) - 10, 0.4, Float(z) - 10)))
-                world.add(MeshRenderer(mesh: sphere, materials: [material.id]), to: e)
+        /// 400 lit spheres on a floor with a shadowed sun and four point lights.
+        static func benchmarkScene(_ assets: AssetManager) -> World {
+            let world = World()
+            let sphere = AssetID("bench.sphere")
+            let floor = AssetID("bench.floor")
+            _ = assets.registerMesh(.sphere(radius: 0.4, segments: 32, rings: 16), id: sphere)
+            _ = assets.registerMesh(.plane(size: 60, subdivisions: 1), id: floor)
+            var material = MaterialData(id: AssetID("bench.material"), name: "Bench")
+            material.baseColor = Color(0.8, 0.6, 0.4, 1)
+            material.roughness = 0.4
+            assets.registerMaterial(material)
+            let f = world.createEntity(named: "Floor")
+            world.add(MeshRenderer(mesh: floor, materials: [material.id]), to: f)
+            for x in 0..<20 {
+                for z in 0..<20 {
+                    let e = world.createEntity(
+                        named: "S", transform: Transform(position: Vec3(Float(x) - 10, 0.4, Float(z) - 10)))
+                    world.add(MeshRenderer(mesh: sphere, materials: [material.id]), to: e)
+                }
             }
+            let sun = world.createEntity(
+                named: "Sun", transform: Transform(rotation: .lookRotation(forward: Vec3(-0.4, -1, -0.3).normalized)))
+            world.add(Light.directional(), to: sun)
+            for i in 0..<4 {
+                let p = world.createEntity(
+                    named: "Point", transform: Transform(position: Vec3(Float(i) * 5 - 7.5, 2, 0)))
+                world.add(Light(type: .point, color: Color(1, 0.8, 0.6, 1), intensity: 20, range: 8), to: p)
+            }
+            let cam = world.createEntity(
+                named: "Camera",
+                transform: Transform(
+                    position: Vec3(0, 8, 16), rotation: .lookRotation(forward: Vec3(0, -8, -16).normalized)))
+            world.add(Camera.perspective(), to: cam)
+            TransformSystem.update(world)
+            return world
         }
-        let sun = world.createEntity(named: "Sun", transform: Transform(rotation: .lookRotation(forward: Vec3(-0.4, -1, -0.3).normalized)))
-        world.add(Light.directional(), to: sun)
-        for i in 0..<4 {
-            let p = world.createEntity(named: "Point", transform: Transform(position: Vec3(Float(i) * 5 - 7.5, 2, 0)))
-            world.add(Light(type: .point, color: Color(1, 0.8, 0.6, 1), intensity: 20, range: 8), to: p)
-        }
-        let cam = world.createEntity(named: "Camera", transform: Transform(
-            position: Vec3(0, 8, 16), rotation: .lookRotation(forward: Vec3(0, -8, -16).normalized)))
-        world.add(Camera.perspective(), to: cam)
-        TransformSystem.update(world)
-        return world
-    }
     #endif
 }

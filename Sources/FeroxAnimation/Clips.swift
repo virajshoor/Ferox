@@ -99,7 +99,8 @@ public struct AnimationClip: Codable, Hashable, Sendable, Identifiable {
         let keys = frames.indices.map { AnimationCurve<Float>.Key(Float($0) / fps, Float($0)) }
         let curve = AnimationCurve(keys: keys, interpolation: .step)
         return AnimationClip(
-            name: name, channels: [AnimationChannel(path: "", target: .spriteFrame, float: curve)], spriteFrames: frames,
+            name: name, channels: [AnimationChannel(path: "", target: .spriteFrame, float: curve)],
+            spriteFrames: frames,
             duration: Float(frames.count) / fps, loops: loops)
     }
 

@@ -249,7 +249,8 @@ public final class World {
         let driverEntities = sa.count <= sb.count ? sa.entities : sb.entities
         for e in driverEntities {
             guard let ia = sa.denseIndex(e), let ib = sb.denseIndex(e) else { continue }
-            var va = sa.dense[ia], vb = sb.dense[ib]
+            var va = sa.dense[ia]
+            var vb = sb.dense[ib]
             try body(e, &va, &vb)
             sa.dense[ia] = va
             sb.dense[ib] = vb
@@ -265,10 +266,13 @@ public final class World {
         beginIteration()
         defer { endIteration() }
         let smallest = [sa.count, sb.count, sc.count].min() ?? 0
-        let driver: ContiguousArray<Entity> = sa.count == smallest ? sa.entities : (sb.count == smallest ? sb.entities : sc.entities)
+        let driver: ContiguousArray<Entity> =
+            sa.count == smallest ? sa.entities : (sb.count == smallest ? sb.entities : sc.entities)
         for e in driver {
             guard let ia = sa.denseIndex(e), let ib = sb.denseIndex(e), let ic = sc.denseIndex(e) else { continue }
-            var va = sa.dense[ia], vb = sb.dense[ib], vc = sc.dense[ic]
+            var va = sa.dense[ia]
+            var vb = sb.dense[ib]
+            var vc = sc.dense[ic]
             try body(e, &va, &vb, &vc)
             sa.dense[ia] = va
             sb.dense[ib] = vb

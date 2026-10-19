@@ -9,7 +9,7 @@ By contributing, you agree that your contributions are licensed under the Apache
 Requirements:
 
 - macOS 14 or later (Apple Silicon is the primary target)
-- Xcode 15.3 or later, which provides Swift 5.10 or later
+- Xcode 15.3 or later, which provides Swift 5.10 or later. CI on macOS uses Xcode 16.4, and Linux CI also builds with Swift 6.2. Avoid syntax the 5.10 tools reject.
 - Xcode command-line tools (`xcode-select --install`)
 
 Build and test from the command line:

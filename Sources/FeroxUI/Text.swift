@@ -14,7 +14,9 @@ public protocol UIFontProvider: AnyObject {
     /// Size of laid-out text, wrapping at `maxWidth` (nil = single line).
     func measure(_ runs: [TextRun], maxWidth: Float?) -> Vec2
     /// Glyph quads at `origin` (top-left), grouped per atlas page and colour.
-    func layout(_ runs: [TextRun], origin: Vec2, maxWidth: Float?, alignment: TextAlignment, scale: Float) -> [(atlas: Int, color: Color?, quads: [GlyphQuad])]
+    func layout(_ runs: [TextRun], origin: Vec2, maxWidth: Float?, alignment: TextAlignment, scale: Float) -> [(
+        atlas: Int, color: Color?, quads: [GlyphQuad]
+    )]
     /// Line height for a font.
     func lineHeight(_ font: UIFontDescriptor) -> Float
     /// Caret x positions (one per grapheme boundary, starting at 0) for single-line text.
@@ -43,8 +45,12 @@ public enum RichText {
                 let tag = String(s[s.index(after: i)..<close])
                 var handled = true
                 switch tag {
-                case "b": flush(); fontStack.append(fontStack.last!.with(bold: true))
-                case "i": flush(); fontStack.append(fontStack.last!.with(italic: true))
+                case "b":
+                    flush()
+                    fontStack.append(fontStack.last!.with(bold: true))
+                case "i":
+                    flush()
+                    fontStack.append(fontStack.last!.with(italic: true))
                 case "/b", "/i", "/size":
                     flush()
                     if fontStack.count > 1 { fontStack.removeLast() }
@@ -119,22 +125,29 @@ public final class MonospaceFontProvider: UIFontProvider {
     public func measure(_ runs: [TextRun], maxWidth: Float?) -> Vec2 {
         let ls = lines(runs, maxWidth: maxWidth)
         let w = ls.map { $0.reduce(0) { $0 + $1.1.size * 0.6 } }.max() ?? 0
-        let h = ls.reduce(Float(0)) { acc, line in acc + lineHeight(line.first?.1 ?? runs.first?.font ?? UIFontDescriptor(family: "", size: 15)) }
+        let h = ls.reduce(Float(0)) { acc, line in
+            acc + lineHeight(line.first?.1 ?? runs.first?.font ?? UIFontDescriptor(family: "", size: 15))
+        }
         return Vec2(w, h)
     }
 
-    public func layout(_ runs: [TextRun], origin: Vec2, maxWidth: Float?, alignment: TextAlignment, scale: Float) -> [(atlas: Int, color: Color?, quads: [GlyphQuad])] {
+    public func layout(_ runs: [TextRun], origin: Vec2, maxWidth: Float?, alignment: TextAlignment, scale: Float) -> [(
+        atlas: Int, color: Color?, quads: [GlyphQuad]
+    )] {
         var out: [(atlas: Int, color: Color?, quads: [GlyphQuad])] = []
         var y = origin.y
         let ls = lines(runs, maxWidth: maxWidth)
         let blockWidth = maxWidth ?? (ls.map { $0.reduce(0) { $0 + $1.1.size * 0.6 } }.max() ?? 0)
         for line in ls {
             let lw = line.reduce(0) { $0 + $1.1.size * 0.6 }
-            var x = origin.x + (alignment == .center ? (blockWidth - lw) / 2 : alignment == .trailing ? blockWidth - lw : 0)
+            var x =
+                origin.x + (alignment == .center ? (blockWidth - lw) / 2 : alignment == .trailing ? blockWidth - lw : 0)
             let lh = lineHeight(line.first?.1 ?? runs.first?.font ?? UIFontDescriptor(family: "", size: 15))
             var quads: [GlyphQuad] = []
             for (ch, f, _) in line {
-                if ch != " " { quads.append(GlyphQuad(frame: Rect(x: x, y: y, width: f.size * 0.6, height: f.size), uv: .unit)) }
+                if ch != " " {
+                    quads.append(GlyphQuad(frame: Rect(x: x, y: y, width: f.size * 0.6, height: f.size), uv: .unit))
+                }
                 x += f.size * 0.6
             }
             out.append((0, line.first?.2, quads))

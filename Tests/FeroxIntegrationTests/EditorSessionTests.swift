@@ -1,6 +1,7 @@
 /// Tests for `EditorSession`: selection, undo/redo, Play/Stop snapshot restore, pause and
 /// step, duplication, editor-owned entities, and scene save/load validation.
 import XCTest
+
 @testable import Ferox
 
 final class EditorSessionTests: XCTestCase {
@@ -49,10 +50,10 @@ final class EditorSessionTests: XCTestCase {
         let e = session.createEntity(named: "Mover")
         for x in 1...5 { session.setTransform(Transform(position: Vec3(Float(x), 0, 0)), of: e) }
         XCTAssertEqual(position(e).x, 5)
-        session.undo() // reverts all five moves at once
+        session.undo()  // reverts all five moves at once
         let restored = try XCTUnwrap(entityNamed("Mover"))
         XCTAssertEqual(position(restored).x, 0)
-        session.undo() // reverts the creation
+        session.undo()  // reverts the creation
         XCTAssertNil(entityNamed("Mover"))
     }
 
@@ -79,7 +80,10 @@ final class EditorSessionTests: XCTestCase {
         session.maxUndoSteps = 3
         for i in 0..<10 { _ = session.createEntity(named: "E\(i)") }
         var undone = 0
-        while session.canUndo { session.undo(); undone += 1 }
+        while session.canUndo {
+            session.undo()
+            undone += 1
+        }
         XCTAssertEqual(undone, 3)
         XCTAssertEqual(session.sceneEntities.count, 7)
     }
@@ -94,7 +98,7 @@ final class EditorSessionTests: XCTestCase {
         XCTAssertFalse(engine.isEditMode)
         engine.simulate(frames: 60)
         XCTAssertLessThan(position(crate).y, 9, "the crate falls during play")
-        let spawned = engine.world.createEntity(named: "Spawned") // created by gameplay
+        let spawned = engine.world.createEntity(named: "Spawned")  // created by gameplay
         session.stop()
         XCTAssertEqual(session.state, .editing)
         XCTAssertTrue(engine.isEditMode)
@@ -200,7 +204,10 @@ final class EditorSessionTests: XCTestCase {
         XCTAssertThrowsError(try session.load(from: garbage))
 
         let cyclic = dir.appendingPathComponent("ferox-\(UUID().uuidString).fxscene")
-        try Data(#"{"formatVersion":1,"name":"x","metadata":{},"entities":[{"id":0,"parent":1,"components":{}},{"id":1,"parent":0,"components":{}}]}"#.utf8).write(to: cyclic)
+        try Data(
+            #"{"formatVersion":1,"name":"x","metadata":{},"entities":[{"id":0,"parent":1,"components":{}},{"id":1,"parent":0,"components":{}}]}"#
+                .utf8
+        ).write(to: cyclic)
         defer { try? FileManager.default.removeItem(at: cyclic) }
         XCTAssertThrowsError(try session.load(from: cyclic))
 
@@ -224,7 +231,7 @@ final class EditorSessionTests: XCTestCase {
         session.onChange = { changes += 1 }
         let e = engine.world.createEntity(named: "E")
         session.select(e)
-        session.select(e) // unchanged: no notification
+        session.select(e)  // unchanged: no notification
         XCTAssertEqual(changes, 1)
     }
 }

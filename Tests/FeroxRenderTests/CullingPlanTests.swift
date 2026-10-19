@@ -1,16 +1,18 @@
-/// GPU-culling plan: every submesh is visible independently, and indirect draws stay aligned.
-import XCTest
 import Ferox
 import FeroxAssets
 import FeroxCore
 import FeroxMath
 import FeroxScene
+/// GPU-culling plan: every submesh is visible independently, and indirect draws stay aligned.
+import XCTest
+
 @testable import FeroxRender
 
 final class CullingPlanTests: XCTestCase {
     func batch(_ first: Int, _ count: Int, submesh: Int = 0) -> DrawBatch {
-        DrawBatch(mesh: AssetID("m"), submesh: submesh, material: nil, firstInstance: first, instanceCount: count,
-                  skinned: false, alphaTest: false, doubleSided: false, unlit: false, depth: 0)
+        DrawBatch(
+            mesh: AssetID("m"), submesh: submesh, material: nil, firstInstance: first, instanceCount: count,
+            skinned: false, alphaTest: false, doubleSided: false, unlit: false, depth: 0)
     }
 
     func testStrideKeepsEveryBatchAligned() {
@@ -28,10 +30,12 @@ final class CullingPlanTests: XCTestCase {
         let batches = [batch(0, 1, submesh: 0), batch(1, 1, submesh: 1)]
         let plan = CullingPlan.make(batches: batches, instanceIndices: indices)
         XCTAssertEqual(plan.cullable, [true, true])
-        XCTAssertEqual(plan.memberships, [
-            BatchMembership(instance: 0, batch: 0),
-            BatchMembership(instance: 0, batch: 1),
-        ])
+        XCTAssertEqual(
+            plan.memberships,
+            [
+                BatchMembership(instance: 0, batch: 0),
+                BatchMembership(instance: 0, batch: 1),
+            ])
         XCTAssertEqual(plan.drawArgs.count, 16)
         XCTAssertEqual(plan.drawArgs[IndirectDrawLayout.baseInstance], 0)
         XCTAssertEqual(plan.drawArgs[IndirectDrawLayout.words + IndirectDrawLayout.baseInstance], 1)
@@ -71,7 +75,8 @@ final class CullingPlanTests: XCTestCase {
     func shaderSource(_ name: String) throws -> String {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        return try String(contentsOf: root.appendingPathComponent("Sources/FeroxRender/Shaders/\(name)"), encoding: .utf8)
+        return try String(
+            contentsOf: root.appendingPathComponent("Sources/FeroxRender/Shaders/\(name)"), encoding: .utf8)
     }
 }
 
@@ -95,7 +100,8 @@ final class MultiSubmeshExtractionTests: XCTestCase {
         TransformSystem.update(world)
         var options = ExtractionOptions()
         options.frustumCull = false
-        let frame = RenderSceneExtractor.extract(world: world, assets: assets, animations: nil, aspect: 1, options: options)
+        let frame = RenderSceneExtractor.extract(
+            world: world, assets: assets, animations: nil, aspect: 1, options: options)
         XCTAssertEqual(frame.opaque.count, 2)
         XCTAssertEqual(frame.opaque.map(\.submesh), [0, 1])
         let plan = CullingPlan.make(batches: frame.opaque, instanceIndices: frame.instanceIndices)

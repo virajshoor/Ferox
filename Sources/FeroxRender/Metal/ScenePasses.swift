@@ -714,7 +714,9 @@
 
             guard let enc = cb.makeRenderCommandEncoder(descriptor: pass) else { return }
             enc.label = "Ferox.Prepass"
+            targets.aliasSync?.begin(enc)
             defer {
+                targets.aliasSync?.end(enc)
                 enc.endEncoding()
                 Profiler.shared.updateRenderCounters { $0.renderPasses += 1 }
             }
@@ -731,7 +733,11 @@
                 let enc = cb.makeComputeCommandEncoder()
             else { return }
             enc.label = "Ferox.HiZ"
-            defer { enc.endEncoding() }
+            targets.aliasSync?.begin(enc)
+            defer {
+                targets.aliasSync?.end(enc)
+                enc.endEncoding()
+            }
             do {
                 let copy = try shaders.computePipeline("hizCopy")
                 let down = try shaders.computePipeline("hizDownsample")

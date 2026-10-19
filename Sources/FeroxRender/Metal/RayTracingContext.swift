@@ -246,7 +246,8 @@
         func encodeEffects(
             _ cb: any MTLCommandBuffer, frame: RenderFrameData, uniforms: FrameUniforms,
             graphics: ResolvedGraphics, slot: Int, depth: any MTLTexture, normal: any MTLTexture,
-            motion: any MTLTexture, environment: any MTLTexture, resources r: SceneResources
+            motion: any MTLTexture, environment: any MTLTexture, resources r: SceneResources,
+            aliasSync: RenderTargets.AliasSync? = nil
         ) -> Outputs {
             var out = Outputs()
             guard graphics.usesRayTracing,
@@ -266,7 +267,11 @@
 
             guard let enc = cb.makeComputeCommandEncoder() else { return out }
             enc.label = "Ferox.RayTracing"
-            defer { enc.endEncoding() }
+            aliasSync?.begin(enc)
+            defer {
+                aliasSync?.end(enc)
+                enc.endEncoding()
+            }
             // Instanced BLASes are referenced indirectly through the TLAS, so they must be made
             // resident explicitly.
             for b in scene.blas { enc.useResource(b, usage: .read) }

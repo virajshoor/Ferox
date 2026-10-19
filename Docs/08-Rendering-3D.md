@@ -95,7 +95,9 @@ The formats are fixed in `TargetFormat` in `RenderTargets.swift`.
 | Drawable | `bgra8Unorm_srgb` | The presentation format, set in `GameHost`. |
 | Hi-Z pyramid | `r32Float` | The farthest reverse-Z depth per texel. |
 
-Temporal history, the TAA and temporal-upscaler ping-pong pair, is allocated at output size, in `rgba16Float`. The MSAA colour target is created only when MSAA is active. The render targets are reallocated when the render size, output size, MSAA or history configuration changes, and every allocation is reported to `MemoryTracker`.
+Temporal history, the TAA and temporal-upscaler ping-pong pair, is allocated at output size, in `rgba16Float`. The MSAA colour target is created only when MSAA is active. The render targets are reallocated when the render size, output size, MSAA, history or post-feature set changes, and every allocation is reported to `MemoryTracker`.
+
+Transient colour, depth, multisample, ambient-occlusion and post-scratch textures are placed on one `MTLHeap`. `TransientHeapPlan` gives each resource a lifetime in the frame graph and packs non-overlapping lifetimes onto the same bytes. The two LDR targets overlap for the whole post chain, so they never share an offset. History and the Hi-Z pyramid are read on the next frame and are not in the alias set. Aliased textures are created with hazard tracking off. `RenderTargets.AliasSync` updates a fence at the end of each encoder that touches them and waits on that fence at the start of the next one, including across the scene and post command buffers. MSAA attachments stay stored, because the prepass and the main pass are separate encoders; their memory can still be reused by a scratch that starts after the forward pass. If the placement heap cannot be created, each target is allocated on its own and nothing aliases.
 
 ## 5. Reverse-Z depth
 

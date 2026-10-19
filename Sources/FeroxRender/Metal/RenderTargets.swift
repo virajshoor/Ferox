@@ -45,6 +45,28 @@
             var hiz: Bool
             /// Allocates normal and motion. False for a frame that skips the geometry prepass.
             var geometryPrepass: Bool = true
+            /// Which post scratches exist, so the heap can alias them with earlier targets.
+            var features = HeapFeatures()
+        }
+
+        /// Signals between encoders that reuse one heap allocation. The same fence also
+        /// orders the next frame: the first encoder of frame N+1 waits for the last
+        /// encoder of frame N, so one untracked heap is not written while a previous
+        /// frame still reads it. Nil when nothing aliases.
+        final class AliasSync {
+            let fence: any MTLFence
+            private var signaled = false
+            init(fence: any MTLFence) { self.fence = fence }
+            func begin(_ encoder: any MTLCommandEncoder) {
+                if signaled {
+                    encoder.waitForFence(fence)
+                    signaled = false
+                }
+            }
+            func end(_ encoder: any MTLCommandEncoder) {
+                encoder.updateFence(fence)
+                signaled = true
+            }
         }
 
         let device: any MTLDevice
@@ -80,8 +102,15 @@
         var historyValid = false
         /// LDR ping-pong (tone-mapped, sRGB-encoded) at output size.
         private(set) var ldr: [any MTLTexture] = []
+        /// Placed scratches (bloom, depth of field, SSAO raw, SMAA). Empty when the heap
+        /// could not be built and the pool allocated them instead.
+        private var placed: [TransientResource: any MTLTexture] = [:]
+        private(set) var heapLayout = HeapLayout(placements: [], barriers: [], byteSize: 0)
+        var aliasSync: AliasSync?
 
         init(device: any MTLDevice) { self.device = device }
+
+        func scratch(_ resource: TransientResource) -> (any MTLTexture)? { placed[resource] }
 
         deinit { MemoryTracker.shared.free("GPU.RenderTargets", bytes: trackedBytes) }
 
@@ -101,25 +130,36 @@
             let oh = max(c.outputHeight, 1)
             let msaa = c.msaaSamples > 1 ? c.msaaSamples : 1
             let rt: MTLTextureUsage = [.renderTarget, .shaderRead]
-
-            depth = try make("Ferox.Depth", TargetFormat.depth, rw, rh, rt)
-            hdr = try make("Ferox.HDR", TargetFormat.hdr, rw, rh, [.renderTarget, .shaderRead, .shaderWrite])
-            if c.geometryPrepass {
-                normal = try make("Ferox.Normal", TargetFormat.normal, rw, rh, rt)
-                motion = try make("Ferox.Motion", TargetFormat.motion, rw, rh, rt)
-            }
-            if msaa > 1 {
-                // Multisampled attachments stay resident between the prepass and the main pass,
-                // so they cannot be memoryless; only their resolved copies are sampled.
-                depthMSAA = try make("Ferox.DepthMSAA", TargetFormat.depth, rw, rh, .renderTarget, samples: msaa)
-                hdrMSAA = try make("Ferox.HDRMSAA", TargetFormat.hdr, rw, rh, .renderTarget, samples: msaa)
+            do {
+                try placeTransients(c)
+            } catch {
+                // A placement heap can fail on a device that rejects the size. Standalone
+                // textures keep the frame rendering; nothing aliases, so no fence is needed.
+                Log.warning("Render", "Transient heap unavailable (\(error)); allocating targets separately")
+                release()
+                depth = try make("Ferox.Depth", TargetFormat.depth, rw, rh, rt)
+                hdr = try make("Ferox.HDR", TargetFormat.hdr, rw, rh, [.renderTarget, .shaderRead, .shaderWrite])
                 if c.geometryPrepass {
-                    normalMSAA = try make("Ferox.NormalMSAA", TargetFormat.normal, rw, rh, .renderTarget, samples: msaa)
-                    motionMSAA = try make(
-                        "Ferox.MotionMSAA", TargetFormat.motion, rw, rh, .renderTarget, samples: msaa)
+                    normal = try make("Ferox.Normal", TargetFormat.normal, rw, rh, rt)
+                    motion = try make("Ferox.Motion", TargetFormat.motion, rw, rh, rt)
+                }
+                if msaa > 1 {
+                    depthMSAA = try make("Ferox.DepthMSAA", TargetFormat.depth, rw, rh, .renderTarget, samples: msaa)
+                    hdrMSAA = try make("Ferox.HDRMSAA", TargetFormat.hdr, rw, rh, .renderTarget, samples: msaa)
+                    if c.geometryPrepass {
+                        normalMSAA = try make(
+                            "Ferox.NormalMSAA", TargetFormat.normal, rw, rh, .renderTarget, samples: msaa)
+                        motionMSAA = try make(
+                            "Ferox.MotionMSAA", TargetFormat.motion, rw, rh, .renderTarget, samples: msaa)
+                    }
+                }
+                ao = try make("Ferox.AO", TargetFormat.ao, rw, rh, [.renderTarget, .shaderRead, .shaderWrite])
+                ldr = try (0..<2).map { i in
+                    try make(
+                        "Ferox.LDR\(i)", TargetFormat.ldr, ow, oh,
+                        [.renderTarget, .shaderRead, .shaderWrite, .pixelFormatView])
                 }
             }
-            ao = try make("Ferox.AO", TargetFormat.ao, rw, rh, [.renderTarget, .shaderRead, .shaderWrite])
 
             if c.hiz {
                 let mips = RenderMath.mipCount(rw, rh)
@@ -135,12 +175,6 @@
                 history = try (0..<2).map { i in
                     try make("Ferox.History\(i)", TargetFormat.hdr, ow, oh, [.renderTarget, .shaderRead, .shaderWrite])
                 }
-            }
-            ldr = try (0..<2).map { i in
-                // shaderWrite: MetalFX spatial writes its output with compute.
-                try make(
-                    "Ferox.LDR\(i)", TargetFormat.ldr, ow, oh,
-                    [.renderTarget, .shaderRead, .shaderWrite, .pixelFormatView])
             }
             config = c
             historyValid = false
@@ -173,27 +207,120 @@
             hizMips = []
             history = []
             ldr = []
+            placed = [:]
             heap = nil
+            heapLayout = HeapLayout(placements: [], barriers: [], byteSize: 0)
+            aliasSync = nil
             config = nil
             historyValid = false
         }
 
         private var heap: (any MTLHeap)?
 
-        /// One private heap for the view's targets. Allocation falls back to a standalone
-        /// texture when the heap is full. Offset aliasing follows `TransientHeapPlan` and is
-        /// not applied here: bloom and depth of field are created later, and MSAA attachments
-        /// cannot be memoryless across the separate prepass and main encoders.
-        private func ensureHeap() -> (any MTLHeap)? {
-            if let heap { return heap }
-            let desc = MTLHeapDescriptor()
-            desc.storageMode = .private
-            let lower = UInt64(64 << 20)
-            let upper = UInt64(512 << 20)
-            desc.size = Int(min(max(device.recommendedMaxWorkingSetSize / 8, lower), upper))
-            heap = device.makeHeap(descriptor: desc)
-            heap?.label = "Ferox.RenderTargetHeap"
-            return heap
+        /// One placement heap. Offsets come from `TransientHeapPlan`. Aliased textures are
+        /// untracked; `aliasSync` is the fence between a resource and whatever reuses its bytes.
+        private func placeTransients(_ newConfig: Config) throws {
+            var features = newConfig.features
+            features.geometryPrepass = newConfig.geometryPrepass
+            features.msaa = newConfig.msaaSamples > 1
+            let requests = TransientHeapPlan.requests(
+                renderWidth: newConfig.renderWidth, renderHeight: newConfig.renderHeight,
+                outputWidth: newConfig.outputWidth, outputHeight: newConfig.outputHeight,
+                features: features, msaaSamples: newConfig.msaaSamples)
+            var footprints: [TransientFootprint] = []
+            var descriptors: [TransientResource: MTLTextureDescriptor] = [:]
+            for request in requests {
+                let descriptor = self.descriptor(request)
+                let aligned = device.heapTextureSizeAndAlign(descriptor: descriptor)
+                guard aligned.size > 0 else { throw RenderError.allocation(request.resource.rawValue) }
+                footprints.append(
+                    TransientFootprint(
+                        resource: request.resource, byteSize: aligned.size, alignment: max(aligned.align, 1)))
+                descriptors[request.resource] = descriptor
+            }
+            let layout = TransientHeapPlan.layout(footprints: footprints, features: features)
+            let heapDescriptor = MTLHeapDescriptor()
+            heapDescriptor.type = .placement
+            heapDescriptor.storageMode = .private
+            heapDescriptor.size = max(layout.byteSize, 1)
+            let aliasing = !layout.barriers.isEmpty
+            if aliasing { heapDescriptor.hazardTrackingMode = .untracked }
+            guard let heap = device.makeHeap(descriptor: heapDescriptor) else {
+                throw RenderError.allocation("Ferox.RenderTargetHeap")
+            }
+            heap.label = "Ferox.RenderTargetHeap"
+            self.heap = heap
+            var made: [TransientResource: any MTLTexture] = [:]
+            for request in requests {
+                guard let descriptor = descriptors[request.resource],
+                    let placement = layout.placement(of: request.resource)
+                else { throw RenderError.allocation(request.resource.rawValue) }
+                descriptor.heapOffset = placement.offset
+                if aliasing { descriptor.hazardTrackingMode = .untracked }
+                guard let texture = heap.makeTexture(descriptor: descriptor) else {
+                    throw RenderError.allocation(request.resource.rawValue)
+                }
+                texture.label = TransientHeapPlan.label(request.resource) ?? "Ferox.\(request.resource.rawValue)"
+                made[request.resource] = texture
+            }
+            assign(made)
+            heapLayout = layout
+            trackedBytes += layout.byteSize
+            MemoryTracker.shared.allocate("GPU.RenderTargets", bytes: layout.byteSize)
+            if aliasing, let fence = device.makeFence() {
+                fence.label = "Ferox.AliasFence"
+                aliasSync = AliasSync(fence: fence)
+            }
+        }
+
+        private func assign(_ made: [TransientResource: any MTLTexture]) {
+            depth = made[.depth]
+            hdr = made[.hdr]
+            normal = made[.normal]
+            motion = made[.motion]
+            depthMSAA = made[.depthMSAA]
+            hdrMSAA = made[.hdrMSAA]
+            normalMSAA = made[.normalMSAA]
+            motionMSAA = made[.motionMSAA]
+            ao = made[.ambientOcclusion]
+            if let a = made[.ldrA], let b = made[.ldrB] { ldr = [a, b] }
+            placed = made
+        }
+
+        private func descriptor(_ request: TransientHeapPlan.TransientRequest) -> MTLTextureDescriptor {
+            let d = MTLTextureDescriptor()
+            d.textureType = request.sampleCount > 1 ? .type2DMultisample : .type2D
+            d.pixelFormat = format(request.resource)
+            d.width = request.width
+            d.height = request.height
+            d.sampleCount = request.sampleCount
+            d.mipmapLevelCount = request.sampleCount > 1 ? 1 : max(request.mipLevels, 1)
+            d.usage = usage(request.resource)
+            d.storageMode = .private
+            return d
+        }
+
+        private func format(_ resource: TransientResource) -> MTLPixelFormat {
+            switch resource {
+            case .hdr, .hdrMSAA, .depthOfField, .motionBlur, .bloom: return TargetFormat.hdr
+            case .depth, .depthMSAA: return TargetFormat.depth
+            case .normal, .normalMSAA: return TargetFormat.normal
+            case .motion, .motionMSAA: return TargetFormat.motion
+            case .ambientOcclusion, .ssaoRaw: return TargetFormat.ao
+            case .smaaEdges, .smaaWeights: return .rgba8Unorm
+            case .ldrA, .ldrB: return TargetFormat.ldr
+            }
+        }
+
+        private func usage(_ resource: TransientResource) -> MTLTextureUsage {
+            switch resource {
+            case .hdr, .ambientOcclusion:
+                return [.renderTarget, .shaderRead, .shaderWrite]
+            case .ldrA, .ldrB:
+                return [.renderTarget, .shaderRead, .shaderWrite, .pixelFormatView]
+            default:
+                return [.renderTarget, .shaderRead]
+            }
         }
 
         private func make(
@@ -209,14 +336,7 @@
             d.mipmapLevelCount = samples > 1 ? 1 : max(mips, 1)
             d.usage = usage
             d.storageMode = .private
-            let t: any MTLTexture
-            if let heap = ensureHeap(), let placed = heap.makeTexture(descriptor: d) {
-                t = placed
-            } else if let made = device.makeTexture(descriptor: d) {
-                t = made
-            } else {
-                throw RenderError.allocation(label)
-            }
+            guard let t = device.makeTexture(descriptor: d) else { throw RenderError.allocation(label) }
             t.label = label
             trackedBytes += t.allocatedSize
             MemoryTracker.shared.allocate("GPU.RenderTargets", bytes: t.allocatedSize)

@@ -531,11 +531,21 @@
             statistics.renderHeight = rh
             statistics.dynamicScale = dyn
 
+            var features = HeapFeatures()
+            features.ambientOcclusion = resolved.screenSpaceAO
+            features.rayTracing = resolved.usesRayTracing
+            features.temporal = resolved.jitter || resolved.upscaler.isTemporal
+            features.depthOfField = resolved.settings.post.depthOfField.enabled
+            features.motionBlur = resolved.settings.post.motionBlur.enabled
+            features.bloom = resolved.settings.post.bloom.enabled
+            features.smaa = resolved.antiAliasing == .smaa
+            features.msaa = resolved.msaaSamples > 1
+            features.geometryPrepass = true
             let cfg = RenderTargets.Config(
                 renderWidth: rw, renderHeight: rh, outputWidth: ow, outputHeight: oh,
                 msaaSamples: resolved.msaaSamples, temporalHistory: resolved.jitter,
                 hiz: resolved.settings.gpuDrivenCulling && resolved.settings.occlusionCulling,
-                geometryPrepass: true)
+                geometryPrepass: true, features: features)
             do {
                 if try targets.ensure(cfg) {
                     invalidateHistory()
@@ -639,8 +649,11 @@
             if targets.config?.geometryPrepass != needsPrepass {
                 var resized = cfg
                 resized.geometryPrepass = needsPrepass
+                resized.features.geometryPrepass = needsPrepass
                 _ = try? targets.ensure(resized)
             }
+            post.aliasSync = targets.aliasSync
+            post.scratchSource = targets
             if needsPrepass {
                 passes.encodePrepass(cb, frame: frame, state: state, targets: targets, resources: r)
                 if cfg.hiz { passes.encodeHiZ(cb, state: state, targets: targets) }
@@ -657,7 +670,7 @@
                 rt = rayTracing.encodeEffects(
                     cb, frame: frame, uniforms: state.uniforms, graphics: resolved, slot: slot,
                     depth: depth, normal: normal, motion: motion,
-                    environment: environment.environment, resources: r)
+                    environment: environment.environment, resources: r, aliasSync: targets.aliasSync)
             }
             let ssao = resolved.screenSpaceAO && rt.ambientOcclusion == nil && targets.ao != nil
             if ssao {
@@ -699,8 +712,10 @@
                     red: Double(cc.x), green: Double(cc.y), blue: Double(cc.z), alpha: 1)
                 if let enc = cb.makeRenderCommandEncoder(descriptor: spritePass) {
                     enc.label = "Ferox.SpritesLDR"
+                    targets.aliasSync?.begin(enc)
                     overlays.encodeSprites(
                         enc, data: sprites, samples: 1, resources: r, colorFormat: TargetFormat.ldr, depth: false)
+                    targets.aliasSync?.end(enc)
                     enc.endEncoding()
                 }
                 directLDR = ldr
@@ -711,6 +726,7 @@
                 let enc = cb.makeRenderCommandEncoder(descriptor: pass)
             {
                 enc.label = "Ferox.MainPass"
+                targets.aliasSync?.begin(enc)
                 passes.encodeOpaque(enc, frame: frame, state: state, lighting: lighting, resources: r)
                 runHooks(.afterOpaque) {
                     hookContext(.afterOpaque, cb, enc, state.uniforms, targets.hdr, rw, rh, state.samples)
@@ -732,6 +748,7 @@
                 runHooks(.afterTransparent) {
                     hookContext(.afterTransparent, cb, enc, state.uniforms, targets.hdr, rw, rh, state.samples)
                 }
+                targets.aliasSync?.end(enc)
                 enc.endEncoding()
             }
 

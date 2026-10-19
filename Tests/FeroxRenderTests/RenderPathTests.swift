@@ -62,15 +62,61 @@ final class FramePathTests: XCTestCase {
 }
 
 final class TransientHeapPlanTests: XCTestCase {
-    func testPostScratchAliasesAndLDRTargetsDoNot() {
+    private func overlaps(_ a: HeapPlacement, _ b: HeapPlacement) -> Bool {
+        let aEnd = a.offset + a.size
+        let bEnd = b.offset + b.size
+        return !(aEnd <= b.offset || bEnd <= a.offset)
+    }
+
+    func testLifetimesAliasScratchesAndKeepThePingPongDistinct() {
         XCTAssertFalse(TransientHeapPlan.msaaAttachmentsAreMemoryless)
-        let groups = TransientHeapPlan.aliasGroups(ambientOcclusion: true, bloom: true, depthOfField: true)
-        XCTAssertTrue(TransientHeapPlan.mayAlias(.ambientOcclusion, .bloom, groups: groups))
-        XCTAssertTrue(TransientHeapPlan.mayAlias(.bloom, .depthOfField, groups: groups))
-        XCTAssertFalse(TransientHeapPlan.mayAlias(.ldrA, .ldrB, groups: groups))
-        XCTAssertFalse(TransientHeapPlan.mayAlias(.hdr, .ambientOcclusion, groups: groups))
-        let alone = TransientHeapPlan.aliasGroups(ambientOcclusion: true, bloom: false, depthOfField: false)
-        XCTAssertFalse(TransientHeapPlan.mayAlias(.ambientOcclusion, .bloom, groups: alone))
+        var features = HeapFeatures()
+        features.geometryPrepass = true
+        features.ambientOcclusion = true
+        features.bloom = true
+        features.depthOfField = true
+        features.motionBlur = true
+        features.smaa = true
+        features.msaa = true
+        let lives = Dictionary(uniqueKeysWithValues: TransientHeapPlan.lifetimes(features).map { ($0.resource, $0) })
+        XCTAssertFalse(TransientHeapPlan.overlaps(lives[.ambientOcclusion]!, lives[.bloom]!))
+        XCTAssertFalse(TransientHeapPlan.overlaps(lives[.normal]!, lives[.hdr]!))
+        XCTAssertTrue(TransientHeapPlan.overlaps(lives[.ldrA]!, lives[.ldrB]!))
+        XCTAssertTrue(TransientHeapPlan.overlaps(lives[.smaaEdges]!, lives[.smaaWeights]!))
+        XCTAssertTrue(TransientHeapPlan.overlaps(lives[.depth]!, lives[.hdr]!))
+        XCTAssertFalse(TransientHeapPlan.overlaps(lives[.hdrMSAA]!, lives[.bloom]!))
+
+        let footprints = TransientHeapPlan.requests(
+            renderWidth: 128, renderHeight: 64, outputWidth: 256, outputHeight: 128, features: features,
+            msaaSamples: 4
+        ).map {
+            TransientFootprint(resource: $0.resource, byteSize: max($0.width * $0.height * 8, 256), alignment: 256)
+        }
+        let layout = TransientHeapPlan.layout(footprints: footprints, features: features)
+        let ldrA = layout.placement(of: .ldrA)!
+        let ldrB = layout.placement(of: .ldrB)!
+        let depth = layout.placement(of: .depth)!
+        let hdr = layout.placement(of: .hdr)!
+        let edges = layout.placement(of: .smaaEdges)!
+        let weights = layout.placement(of: .smaaWeights)!
+        XCTAssertFalse(overlaps(ldrA, ldrB))
+        XCTAssertFalse(overlaps(depth, hdr))
+        XCTAssertFalse(overlaps(edges, weights))
+        XCTAssertFalse(layout.barriers.isEmpty)
+        XCTAssertTrue(layout.barriers.contains { $0.destination == .bloom || $0.destination == .depthOfField })
+        let sum = footprints.reduce(0) { $0 + $1.byteSize }
+        XCTAssertLessThan(layout.byteSize, sum)
+        XCTAssertTrue(layout.placements.allSatisfy { $0.offset % 256 == 0 })
+        XCTAssertEqual(TransientHeapPlan.resource(forLabel: "Ferox.Bloom"), .bloom)
+        XCTAssertEqual(
+            TransientHeapPlan.requests(
+                renderWidth: 64, renderHeight: 64, outputWidth: 128, outputHeight: 128,
+                features: {
+                    var f = features
+                    f.temporal = true
+                    return f
+                }(), msaaSamples: 1
+            ).first { $0.resource == .depthOfField }?.width, 128)
     }
 }
 

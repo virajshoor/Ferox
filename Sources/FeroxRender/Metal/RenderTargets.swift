@@ -188,7 +188,9 @@
             if let heap { return heap }
             let desc = MTLHeapDescriptor()
             desc.storageMode = .private
-            desc.size = min(max(device.recommendedMaxWorkingSetSize / 8, 64 << 20), 512 << 20)
+            let lower = UInt64(64 << 20)
+            let upper = UInt64(512 << 20)
+            desc.size = Int(min(max(device.recommendedMaxWorkingSetSize / 8, lower), upper))
             heap = device.makeHeap(descriptor: desc)
             heap?.label = "Ferox.RenderTargetHeap"
             return heap

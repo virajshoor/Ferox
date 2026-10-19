@@ -80,6 +80,8 @@ final class DrawPolicyTests: XCTestCase {
         XCTAssertTrue(DrawPolicy.useMaterialArgumentBuffers(argumentBuffersTier: 2))
         XCTAssertEqual(DrawPolicy.submission(indirectCommandBuffers: true), .indirectCommandBuffer)
         XCTAssertEqual(DrawPolicy.submission(indirectCommandBuffers: false), .immediate)
+        XCTAssertEqual(
+            DrawPolicy.submission(indirectCommandBuffers: true, gpuIndirectDraws: true), .immediate)
         let box = NSObject()
         let other = NSObject()
         let id = ObjectIdentifier(box)

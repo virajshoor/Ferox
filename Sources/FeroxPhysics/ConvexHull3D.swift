@@ -47,7 +47,7 @@ public struct ConvexHull3D: Sendable, Hashable {
         var interior = Vec3.zero
         for i in seed.corners { interior = interior + unique[i] }
         interior = interior / 4
-        var assigned = Set(seed.corners)
+        let assigned = Set(seed.corners)
         for face in faces.indices {
             for (index, point) in unique.enumerated() where !assigned.contains(index) {
                 if faces[face].distance(point) > epsilon {

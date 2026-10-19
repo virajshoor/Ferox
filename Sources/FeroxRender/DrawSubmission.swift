@@ -1,6 +1,8 @@
 /// How one opaque pass submits its draws. Tier-2 devices bind materials from an argument
-/// buffer. Devices that can encode indirect command buffers do that as well; everyone
-/// else draws immediately and skips rebinding a vertex buffer that did not change.
+/// buffer. Metal 3 devices encode an indirect command buffer when every draw's index
+/// count is known on the CPU. GPU-culled batches stay immediate: `MTLIndirectRenderCommand`
+/// on the macOS 15 SDK has no indirect-argument draw, and the culled counts live in the
+/// draw-args buffer. Immediate draws skip rebinding a vertex buffer that did not change.
 public enum DrawSubmission: Equatable, Sendable {
     case immediate
     case indirectCommandBuffer
@@ -11,8 +13,10 @@ public enum DrawPolicy {
         argumentBuffersTier >= 2
     }
 
-    public static func submission(indirectCommandBuffers: Bool) -> DrawSubmission {
-        indirectCommandBuffers ? .indirectCommandBuffer : .immediate
+    /// `gpuIndirectDraws` is true when any batch in the pass will read GPU-written
+    /// indirect arguments. Those batches cannot be encoded into an indirect command buffer.
+    public static func submission(indirectCommandBuffers: Bool, gpuIndirectDraws: Bool = false) -> DrawSubmission {
+        indirectCommandBuffers && !gpuIndirectDraws ? .indirectCommandBuffer : .immediate
     }
 
     /// The vertex buffer is rebound only when the `MTLBuffer` identity changes.

@@ -916,7 +916,13 @@
             // Indirect commands do not inherit textures. The argument-buffer path keeps every
             // material texture in one buffer, so that is the path that can submit an ICB.
             // Mixed double-sided state stays immediate because cull mode is encoder state.
+            let gpuIndirectDraws = frame.opaque.indices.contains { i in
+                indirectCullingActive && state.gpuCulling && i < state.cullable.count && state.cullable[i]
+            }
             if let materials, !mixedCull,
+                DrawPolicy.submission(
+                    indirectCommandBuffers: capabilities.supportsMetal3, gpuIndirectDraws: gpuIndirectDraws)
+                    == .indirectCommandBuffer,
                 encodeIndirectCommands(
                     enc, kind: kind, frame: frame, state: state, resources: r, materials: materials)
             {
@@ -959,6 +965,8 @@
         /// Encodes the opaque pass into an indirect command buffer. Buffers are stored on each
         /// command (`inheritBuffers` is false) because each mesh has its own vertex buffer.
         /// Textures stay on the encoder; materials therefore come from `materials`.
+        /// Draws use the direct indexed form. The macOS 15 SDK's `MTLIndirectRenderCommand`
+        /// has no `indirectBuffer` overload, so GPU-culled batches never reach this function.
         private func encodeIndirectCommands(
             _ enc: any MTLRenderCommandEncoder, kind: MeshPassKind, frame: RenderFrameData,
             state: SceneFrameState, resources r: SceneResources, materials: MaterialArgumentBind
@@ -980,7 +988,7 @@
             var encoded = 0
             let cullBack = frame.opaque.allSatisfy { !$0.doubleSided }
             enc.setCullMode(cullBack ? .back : .none)
-            for (i, b) in frame.opaque.enumerated() {
+            for b in frame.opaque {
                 guard let mesh = r.meshes.mesh(b.mesh, assets: r.assets, frame: r.frameIndex) else { continue }
                 let skinned = b.skinned && mesh.skinBuffer != nil
                 var variant = Self.variant(for: b, skinned: skinned, clusters: state.useClusters)
@@ -988,22 +996,21 @@
                 guard let pso = try? meshPipeline(kind, variant: variant, samples: state.samples) else { continue }
                 let range = mesh.range(ofSubmesh: b.submesh)
                 guard range.count > 0 else { continue }
-                let gpu = indirectCullingActive && state.gpuCulling && i < state.cullable.count && state.cullable[i]
-                let indices = gpu ? (state.culledIndices ?? staticIndices) : staticIndices
                 let command = icb.indirectRenderCommandAt(encoded)
                 command.setRenderPipelineState(pso)
-                command.setVertexBuffer(mesh.vertexBuffer, offset: 0, index: BufferIndex.vertices)
+                command.setVertexBuffer(mesh.vertexBuffer, offset: 0, at: BufferIndex.vertices)
                 if skinned, let skin = mesh.skinBuffer {
-                    command.setVertexBuffer(skin, offset: 0, index: BufferIndex.skin)
+                    command.setVertexBuffer(skin, offset: 0, at: BufferIndex.skin)
                 }
-                command.setVertexBuffer(frameSlice.buffer, offset: frameSlice.offset, index: BufferIndex.frame)
-                command.setFragmentBuffer(frameSlice.buffer, offset: frameSlice.offset, index: BufferIndex.frame)
-                command.setVertexBuffer(instances.buffer, offset: instances.offset, index: BufferIndex.instances)
-                command.setFragmentBuffer(instances.buffer, offset: instances.offset, index: BufferIndex.instances)
+                command.setVertexBuffer(frameSlice.buffer, offset: frameSlice.offset, at: BufferIndex.frame)
+                command.setFragmentBuffer(frameSlice.buffer, offset: frameSlice.offset, at: BufferIndex.frame)
+                command.setVertexBuffer(instances.buffer, offset: instances.offset, at: BufferIndex.instances)
+                command.setFragmentBuffer(instances.buffer, offset: instances.offset, at: BufferIndex.instances)
                 if let joints = state.joints {
-                    command.setVertexBuffer(joints.buffer, offset: joints.offset, index: BufferIndex.joints)
+                    command.setVertexBuffer(joints.buffer, offset: joints.offset, at: BufferIndex.joints)
                 }
-                command.setVertexBuffer(indices.buffer, offset: indices.offset, index: BufferIndex.instanceIndices)
+                command.setVertexBuffer(
+                    staticIndices.buffer, offset: staticIndices.offset, at: BufferIndex.instanceIndices)
                 if kind == .forward {
                     bindIndirectFragment(command, state.lights ?? staticIndices, index: BufferIndex.lights)
                     bindIndirectFragment(
@@ -1014,20 +1021,13 @@
                     bindIndirectFragment(
                         command, state.localMatrices ?? staticIndices, index: BufferIndex.localShadowMatrices)
                 }
-                command.setFragmentBuffer(materials.table, offset: 0, index: BufferIndex.materialTable)
+                command.setFragmentBuffer(materials.table, offset: 0, at: BufferIndex.materialTable)
                 command.setFragmentBuffer(
-                    materials.ids.buffer, offset: materials.ids.offset, index: BufferIndex.materialIds)
-                if gpu, let args = state.drawArgs {
-                    command.drawIndexedPrimitives(
-                        type: .triangle, indexType: .uint32, indexBuffer: mesh.indexBuffer, indexBufferOffset: 0,
-                        indirectBuffer: args.buffer,
-                        indirectBufferOffset: args.offset + i * Self.drawArgsStride)
-                } else {
-                    command.drawIndexedPrimitives(
-                        type: .triangle, indexCount: range.count, indexType: .uint32,
-                        indexBuffer: mesh.indexBuffer, indexBufferOffset: range.offset * MemoryLayout<UInt32>.stride,
-                        instanceCount: b.instanceCount, baseVertex: 0, baseInstance: b.firstInstance)
-                }
+                    materials.ids.buffer, offset: materials.ids.offset, at: BufferIndex.materialIds)
+                command.drawIndexedPrimitives(
+                    .triangle, indexCount: range.count, indexType: .uint32,
+                    indexBuffer: mesh.indexBuffer, indexBufferOffset: range.offset * MemoryLayout<UInt32>.stride,
+                    instanceCount: b.instanceCount, baseVertex: 0, baseInstance: b.firstInstance)
                 encoded += 1
             }
             guard encoded > 0 else { return false }
@@ -1041,7 +1041,7 @@
         private func bindIndirectFragment(
             _ command: any MTLIndirectRenderCommand, _ slice: BufferSlice, index: Int
         ) {
-            command.setFragmentBuffer(slice.buffer, offset: slice.offset, index: index)
+            command.setFragmentBuffer(slice.buffer, offset: slice.offset, at: index)
         }
 
         /// Binds one argument buffer for every material in the opaque pass. Returns nil when
@@ -1060,9 +1060,8 @@
             guard let ids = r.allocator.upload(plan.slots.isEmpty ? [UInt32(0)] : plan.slots) else { return nil }
             let variant = ShaderVariant(clusters: state.useClusters, materialArguments: true)
             let functionName = kind == .prepass ? "prepassFragment" : "forwardFragment"
-            guard let function = try? shaders.function(functionName, variant: variant),
-                let encoder = function.makeArgumentEncoder(bufferIndex: BufferIndex.materialTable)
-            else { return nil }
+            guard let function = try? shaders.function(functionName, variant: variant) else { return nil }
+            let encoder = function.makeArgumentEncoder(bufferIndex: BufferIndex.materialTable)
             let alignment = max(encoder.alignment, 1)
             let stride = (encoder.encodedLength + alignment - 1) / alignment * alignment
             guard let table = device.makeBuffer(length: stride * max(plan.keys.count, 1), options: .storageModeShared)

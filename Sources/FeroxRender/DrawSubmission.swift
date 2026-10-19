@@ -1,22 +1,34 @@
 /// How one opaque pass submits its draws. Tier-2 devices bind materials from an argument
 /// buffer. Metal 3 devices encode an indirect command buffer when every draw's index
-/// count is known on the CPU. GPU-culled batches stay immediate: `MTLIndirectRenderCommand`
-/// on the macOS 15 SDK has no indirect-argument draw, and the culled counts live in the
-/// draw-args buffer. Immediate draws skip rebinding a vertex buffer that did not change.
+/// count is known on the CPU. When culling wrote the instance counts, a compute kernel
+/// encodes that buffer on the GPU instead. Immediate draws skip rebinding a vertex buffer
+/// that did not change.
 public enum DrawSubmission: Equatable, Sendable {
     case immediate
     case indirectCommandBuffer
+    /// One command per batch. The instance count is copied from the cull draw-args.
+    case gpuEncodedIndirectCommandBuffer
 }
 
 public enum DrawPolicy {
+    /// Above this, the GPU encode falls back to immediate indirect draws.
+    /// ponytail: one argument buffer of pipeline states; chunk it if a pass exceeds this.
+    public static let maxGPUEncodedDraws = 256
+
     public static func useMaterialArgumentBuffers(argumentBuffersTier: Int) -> Bool {
         argumentBuffersTier >= 2
     }
 
-    /// `gpuIndirectDraws` is true when any batch in the pass will read GPU-written
-    /// indirect arguments. Those batches cannot be encoded into an indirect command buffer.
-    public static func submission(indirectCommandBuffers: Bool, gpuIndirectDraws: Bool = false) -> DrawSubmission {
-        indirectCommandBuffers && !gpuIndirectDraws ? .indirectCommandBuffer : .immediate
+    /// `gpuIndirectDraws` is true when the pass reads GPU-written instance counts.
+    /// `encodesOnGPU` selects the compute-kernel encode of those commands.
+    public static func submission(
+        indirectCommandBuffers: Bool, gpuIndirectDraws: Bool = false, encodesOnGPU: Bool = false
+    ) -> DrawSubmission {
+        guard indirectCommandBuffers else { return .immediate }
+        if gpuIndirectDraws {
+            return encodesOnGPU ? .gpuEncodedIndirectCommandBuffer : .immediate
+        }
+        return .indirectCommandBuffer
     }
 
     /// The vertex buffer is rebound only when the `MTLBuffer` identity changes.

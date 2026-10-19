@@ -150,6 +150,12 @@ final class DrawPolicyTests: XCTestCase {
         XCTAssertEqual(DrawPolicy.submission(indirectCommandBuffers: false), .immediate)
         XCTAssertEqual(
             DrawPolicy.submission(indirectCommandBuffers: true, gpuIndirectDraws: true), .immediate)
+        XCTAssertEqual(
+            DrawPolicy.submission(indirectCommandBuffers: true, gpuIndirectDraws: true, encodesOnGPU: true),
+            .gpuEncodedIndirectCommandBuffer)
+        XCTAssertEqual(
+            DrawPolicy.submission(indirectCommandBuffers: false, gpuIndirectDraws: true, encodesOnGPU: true),
+            .immediate)
         let box = NSObject()
         let other = NSObject()
         let id = ObjectIdentifier(box)
@@ -328,6 +334,11 @@ final class MeshPickingTests: XCTestCase {
         XCTAssertTrue(common.contains("struct MaterialRecord"))
         XCTAssertTrue(common.contains("BUF_MATERIAL_TABLE 13"))
         XCTAssertTrue(common.contains("function_constant(5)"))
+        let encode = try String(
+            contentsOf: root.appendingPathComponent("Sources/FeroxRender/Shaders/IndirectEncode.metal"))
+        XCTAssertTrue(encode.contains("kernel void encodeCulledDraws"))
+        XCTAssertTrue(encode.contains("drawArgs[base + 1u]"))
+        XCTAssertEqual(IndirectDrawLayout.skinned, 5)
     }
 }
 
@@ -347,6 +358,8 @@ final class MeshPickingTests: XCTestCase {
             let renderer = try Renderer(assets: assets)
             XCTAssertTrue(renderer.shaders.failures.isEmpty, "\(renderer.shaders.failures)")
             XCTAssertEqual(renderer.shaders.module(of: "prepassPickFragment"), "Mesh")
+            XCTAssertEqual(renderer.shaders.module(of: "encodeCulledDraws"), "IndirectEncode")
+            XCTAssertNil(renderer.shaders.failures["IndirectEncode"])
             XCTAssertTrue(renderer.metalFXProbe.attempted)
             XCTAssertFalse(renderer.metalFXProbe.depthFormat.isEmpty)
             let world = World()

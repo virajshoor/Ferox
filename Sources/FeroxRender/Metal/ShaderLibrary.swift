@@ -51,8 +51,8 @@
     public final class ShaderLibrary {
         /// Every shader module, in compilation order.
         public static let modules = [
-            "Mesh", "Post", "Sky", "Clusters", "Culling", "Debug", "Particles", "Sprite", "UI",
-            "RayTracing",
+            "Mesh", "Post", "Sky", "Clusters", "Culling", "IndirectEncode", "Debug", "Particles", "Sprite",
+            "UI", "RayTracing",
         ]
         /// Modules the renderer cannot run without.
         public static let requiredModules: Set<String> = ["Mesh", "Post", "Sky", "Sprite", "UI", "Debug"]

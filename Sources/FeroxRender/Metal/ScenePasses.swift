@@ -52,6 +52,7 @@
     struct MaterialArgumentBind {
         var table: any MTLBuffer
         var ids: BufferSlice
+        var textures: [any MTLTexture] = []
     }
 
     /// The frame's GPU-side scene data, uploaded once and shared by every pass.
@@ -130,6 +131,15 @@
         private(set) var indirectCullingActive = false
         /// Indirect command buffers still referenced by in-flight frames.
         private var liveIndirectBuffers: [any MTLIndirectCommandBuffer] = []
+        /// GPU-encoded commands for the pass that is about to open. Nil when that pass stays immediate.
+        private struct CulledCommands {
+            var kind: MeshPassKind
+            var commands: any MTLIndirectCommandBuffer
+            var count: Int
+            var buffers: [any MTLBuffer]
+            var textures: [any MTLTexture]
+        }
+        private var culledCommands: CulledCommands?
 
         init(device: any MTLDevice, shaders: ShaderLibrary, capabilities: DeviceCapabilities) {
             self.device = device
@@ -717,6 +727,7 @@
             pass.stencilAttachment.loadAction = .dontCare
             pass.stencilAttachment.storeAction = .dontCare
 
+            prepareCulledIndirectCommands(cb, kind: .prepass, frame: frame, state: state, resources: r)
             guard let enc = cb.makeRenderCommandEncoder(descriptor: pass) else { return }
             enc.label = "Ferox.Prepass"
             targets.aliasSync?.begin(enc)
@@ -992,6 +1003,7 @@
             _ enc: any MTLRenderCommandEncoder, kind: MeshPassKind, frame: RenderFrameData,
             state: SceneFrameState, resources r: SceneResources, lighting: LightingTextures?
         ) {
+            if executeCulledCommands(enc, kind: kind, frame: frame) { return }
             let materials = bindMaterialArguments(enc, frame: frame, kind: kind, state: state, resources: r)
             let arguments = materials != nil
             let mixedCull = frame.opaque.contains { $0.doubleSided } && frame.opaque.contains { !$0.doubleSided }
@@ -1132,6 +1144,18 @@
             _ enc: any MTLRenderCommandEncoder, frame: RenderFrameData, kind: MeshPassKind,
             state: SceneFrameState, resources r: SceneResources
         ) -> MaterialArgumentBind? {
+            guard let made = makeMaterialArguments(frame: frame, kind: kind, state: state, resources: r) else {
+                return nil
+            }
+            enc.setFragmentBuffer(made.table, offset: 0, index: BufferIndex.materialTable)
+            enc.setFragmentSlice(made.ids, index: BufferIndex.materialIds)
+            for texture in made.textures { enc.useResource(texture, usage: .sample) }
+            return made
+        }
+
+        private func makeMaterialArguments(
+            frame: RenderFrameData, kind: MeshPassKind, state: SceneFrameState, resources r: SceneResources
+        ) -> MaterialArgumentBind? {
             guard kind != .shadow, kind != .pick,
                 DrawPolicy.useMaterialArgumentBuffers(argumentBuffersTier: capabilities.argumentBuffersTier)
             else { return nil }
@@ -1162,10 +1186,136 @@
                 }
                 encoder.setBuffer(uniforms.buffer, offset: uniforms.offset, index: 5)
             }
-            enc.setFragmentBuffer(table, offset: 0, index: BufferIndex.materialTable)
-            enc.setFragmentSlice(ids, index: BufferIndex.materialIds)
-            for texture in textures { enc.useResource(texture, usage: .sample) }
-            return MaterialArgumentBind(table: table, ids: ids)
+            return MaterialArgumentBind(table: table, ids: ids, textures: textures)
+        }
+
+        /// After culling, encodes one indirect command per opaque batch on the GPU. The instance
+        /// count is the value in the draw-args buffer. Failure leaves the pass on immediate draws.
+        func prepareCulledIndirectCommands(
+            _ cb: any MTLCommandBuffer, kind: MeshPassKind, frame: RenderFrameData,
+            state: SceneFrameState, resources r: SceneResources
+        ) {
+            culledCommands = nil
+            let count = frame.opaque.count
+            guard kind == .prepass || kind == .forward, capabilities.supportsMetal3, indirectCullingActive,
+                state.gpuCulling, shaders.isAvailable("IndirectEncode"), count > 0,
+                count <= DrawPolicy.maxGPUEncodedDraws,
+                DrawPolicy.submission(indirectCommandBuffers: true, gpuIndirectDraws: true, encodesOnGPU: true)
+                    == .gpuEncodedIndirectCommandBuffer
+            else { return }
+            let mixed = frame.opaque.contains { $0.doubleSided } && frame.opaque.contains { !$0.doubleSided }
+            guard !mixed, frame.opaque.indices.allSatisfy({ i in i < state.cullable.count && state.cullable[i] })
+            else { return }
+            guard let drawArgs = state.drawArgs, let culled = state.culledIndices, let instances = state.instances,
+                let joints = state.joints,
+                let materials = makeMaterialArguments(
+                    frame: frame, kind: kind, state: state, resources: r),
+                let frameSlice = r.allocator.upload(value: state.uniforms)
+            else { return }
+            let words = IndirectDrawLayout.words
+            let args = (drawArgs.buffer.contents() + drawArgs.offset).bindMemory(
+                to: UInt32.self, capacity: count * words)
+            var pipelines: [any MTLRenderPipelineState] = []
+            var vertexBuffers: [any MTLBuffer] = []
+            var indexBuffers: [any MTLBuffer] = []
+            var skinBuffers: [any MTLBuffer] = []
+            pipelines.reserveCapacity(count)
+            for (i, b) in frame.opaque.enumerated() {
+                guard let mesh = r.meshes.mesh(b.mesh, assets: r.assets, frame: r.frameIndex) else { return }
+                let skinned = b.skinned && mesh.skinBuffer != nil
+                var variant = Self.variant(for: b, skinned: skinned, clusters: state.useClusters)
+                variant.materialArguments = true
+                guard let pso = try? meshPipeline(kind, variant: variant, samples: state.samples) else { return }
+                pipelines.append(pso)
+                vertexBuffers.append(mesh.vertexBuffer)
+                indexBuffers.append(mesh.indexBuffer)
+                skinBuffers.append(mesh.skinBuffer ?? mesh.vertexBuffer)
+                args[i * words + IndirectDrawLayout.skinned] = skinned ? 1 : 0
+            }
+            guard let function = try? shaders.function("encodeCulledDraws"),
+                let encode = try? shaders.computePipeline("encodeCulledDraws")
+            else { return }
+            let drawsEncoder = function.makeArgumentEncoder(bufferIndex: 1)
+            let drawAlign = max(drawsEncoder.alignment, 1)
+            let drawStride = (drawsEncoder.encodedLength + drawAlign - 1) / drawAlign * drawAlign
+            let icbEncoder = function.makeArgumentEncoder(bufferIndex: 0)
+            guard let drawTable = device.makeBuffer(length: drawStride * count, options: .storageModeShared),
+                let icbArgs = device.makeBuffer(length: max(icbEncoder.encodedLength, 1), options: .storageModeShared)
+            else { return }
+            drawTable.label = "Ferox.GPUDraws"
+            for i in 0..<count {
+                drawsEncoder.setArgumentBuffer(drawTable, startOffset: 0, arrayElement: i)
+                drawsEncoder.setRenderPipelineState(pipelines[i], index: 0)
+                drawsEncoder.setBuffer(vertexBuffers[i], offset: 0, index: 1)
+                drawsEncoder.setBuffer(indexBuffers[i], offset: 0, index: 2)
+                drawsEncoder.setBuffer(skinBuffers[i], offset: 0, index: 3)
+            }
+            let desc = MTLIndirectCommandBufferDescriptor()
+            desc.commandTypes = [.drawIndexed]
+            desc.inheritBuffers = false
+            desc.inheritPipelineState = false
+            desc.maxVertexBufferBindCount = BufferIndex.instanceIndices + 1
+            desc.maxFragmentBufferBindCount = BufferIndex.materialIds + 1
+            guard let icb = device.makeIndirectCommandBuffer(descriptor: desc, maxCommandCount: count, options: [])
+            else { return }
+            icb.label = "Ferox.CulledCommands"
+            icb.reset(0..<count)
+            icbEncoder.setArgumentBuffer(icbArgs, offset: 0)
+            icbEncoder.setIndirectCommandBuffer(icb, index: 0)
+            let fallback = state.staticIndices ?? culled
+            let lights = state.lights ?? fallback
+            let clusterCounts = state.clusterCounts ?? fallback
+            let clusterIndices = state.clusterIndices ?? fallback
+            let probes = state.probes ?? fallback
+            let localMatrices = state.localMatrices ?? fallback
+            let limits = SIMD2<UInt32>(UInt32(count), kind == .forward ? 1 : 0)
+            guard let limitSlice = r.allocator.upload(value: limits),
+                let enc = cb.makeComputeCommandEncoder()
+            else { return }
+            enc.label = "Ferox.EncodeCulledCommands"
+            enc.setBuffer(icbArgs, offset: 0, index: 0)
+            enc.setBuffer(drawTable, offset: 0, index: 1)
+            enc.setBuffer(drawArgs.buffer, offset: drawArgs.offset, index: 2)
+            enc.setBuffer(frameSlice.buffer, offset: frameSlice.offset, index: 3)
+            enc.setBuffer(instances.buffer, offset: instances.offset, index: 4)
+            enc.setBuffer(culled.buffer, offset: culled.offset, index: 5)
+            enc.setBuffer(joints.buffer, offset: joints.offset, index: 6)
+            enc.setBuffer(materials.table, offset: 0, index: 7)
+            enc.setBuffer(materials.ids.buffer, offset: materials.ids.offset, index: 8)
+            enc.setBuffer(lights.buffer, offset: lights.offset, index: 9)
+            enc.setBuffer(clusterCounts.buffer, offset: clusterCounts.offset, index: 10)
+            enc.setBuffer(clusterIndices.buffer, offset: clusterIndices.offset, index: 11)
+            enc.setBuffer(probes.buffer, offset: probes.offset, index: 12)
+            enc.setBuffer(localMatrices.buffer, offset: localMatrices.offset, index: 13)
+            enc.setBuffer(limitSlice.buffer, offset: limitSlice.offset, index: 14)
+            enc.useResource(icb, usage: .write)
+            for buffer in vertexBuffers + indexBuffers + skinBuffers { enc.useResource(buffer, usage: .read) }
+            enc.dispatch1D(encode, count: count)
+            enc.endEncoding()
+            if liveIndirectBuffers.count >= 3 { liveIndirectBuffers.removeFirst() }
+            liveIndirectBuffers.append(icb)
+            var buffers = vertexBuffers + indexBuffers + skinBuffers
+            buffers.append(contentsOf: [
+                drawTable, icbArgs, materials.table, frameSlice.buffer, instances.buffer, culled.buffer,
+                joints.buffer, materials.ids.buffer,
+            ])
+            culledCommands = CulledCommands(
+                kind: kind, commands: icb, count: count, buffers: buffers, textures: materials.textures)
+            Profiler.shared.updateRenderCounters { $0.computeDispatches += 1 }
+        }
+
+        /// Executes commands prepared by `prepareCulledIndirectCommands` for this pass.
+        private func executeCulledCommands(
+            _ enc: any MTLRenderCommandEncoder, kind: MeshPassKind, frame: RenderFrameData
+        ) -> Bool {
+            guard let prepared = culledCommands, prepared.kind == kind else { return false }
+            culledCommands = nil
+            enc.setCullMode(frame.opaque.allSatisfy { !$0.doubleSided } ? .back : .none)
+            for buffer in prepared.buffers { enc.useResource(buffer, usage: .read) }
+            for texture in prepared.textures { enc.useResource(texture, usage: .sample) }
+            enc.executeCommandsInBuffer(prepared.commands, range: 0..<prepared.count)
+            Profiler.shared.updateRenderCounters { $0.drawCalls += prepared.count }
+            return true
         }
 
         /// Issues one batch, directly or from GPU-written indirect arguments.

@@ -25,7 +25,7 @@ The renderer as a whole is described in [07-Rendering-2D.md](07-Rendering-2D.md)
 
 | Area | Status |
 | --- | --- |
-| Runtime compilation of ten shader modules | Implemented: `ShaderLibrary.compileAll()`. **Not compiled on hardware.** |
+| Runtime compilation of the shader modules | Implemented: `ShaderLibrary.compileAll()`. **Not compiled on hardware.** |
 | Shader directory from code or `FEROX_SHADER_DIR` | Implemented: `ShaderLibrary.init`, `EngineConfiguration.shaderDirectory`. |
 | Hot reload by polling modification dates | Implemented: `ShaderLibrary.reloadIfChanged()`, called from `Renderer.render`. |
 | Function-constant variants | Implemented: `ShaderVariant`. |
@@ -38,7 +38,7 @@ The renderer as a whole is described in [07-Rendering-2D.md](07-Rendering-2D.md)
 
 `Common.metal` is not a module. It holds the shared structures, constants and function-constant declarations that every other file needs, and it is prepended to each module at compile time. Its header says its structures must match `GPUTypes.swift` exactly. Any change to those structures therefore touches every module.
 
-The ten compiled modules, in compilation order, are:
+The compiled modules, in compilation order, are:
 
 | Module | File | Role (from each file's header) |
 | --- | --- | --- |
@@ -47,6 +47,7 @@ The ten compiled modules, in compilation order, are:
 | `Sky` | `Sky.metal` | Sky rendering and image-based-lighting precomputation. |
 | `Clusters` | `Clusters.metal` | Clustered light assignment for Forward+ shading. |
 | `Culling` | `Culling.metal` | GPU-driven culling. |
+| `IndirectEncode` | `IndirectEncode.metal` | GPU encode of culled indirect commands. Optional: a compile failure keeps immediate draws. |
 | `Debug` | `Debug.metal` | Debug line rendering for physics shapes, bounds and gizmos. |
 | `Particles` | `Particles.metal` | GPU particles. |
 | `Sprite` | `Sprite.metal` | 2D sprites, shapes, tilemaps, 2D lights and masks. |
@@ -55,7 +56,7 @@ The ten compiled modules, in compilation order, are:
 
 `Mesh.metal` defines the entry points the renderer names directly, such as `meshVertex`, `shadowVertex`, `shadowAlphaTestFragment`, `prepassFragment` and `forwardFragment`. `Sprite.metal` defines `spriteVertex`, `spriteFragment` and `spriteMaskFragment`.
 
-`ShaderLibrary.modules` lists the ten modules in that order. `ShaderLibrary.requiredModules` names the six the renderer cannot run without: `Mesh`, `Post`, `Sky`, `Sprite`, `UI` and `Debug`. The other four are optional.
+`ShaderLibrary.modules` lists the modules in that order. `ShaderLibrary.requiredModules` names the six the renderer cannot run without: `Mesh`, `Post`, `Sky`, `Sprite`, `UI` and `Debug`. `IndirectEncode` is optional, as are `Clusters`, `Culling`, `Particles` and `RayTracing`.
 
 ## 3. How modules are compiled
 

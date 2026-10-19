@@ -815,6 +815,10 @@
                 directLDR = ldr
             }
 
+            if !directSprites {
+                passes.prepareCulledIndirectCommands(
+                    cb, kind: .forward, frame: frame, state: state, resources: r)
+            }
             if !directSprites,
                 let pass = passes.mainPassDescriptor(targets: targets, clearColor: camera.camera.clearColor),
                 let enc = cb.makeRenderCommandEncoder(descriptor: pass)

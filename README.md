@@ -62,7 +62,7 @@ The engine is a set of small Swift modules. The parts that do not need Metal are
 | --- | --- |
 | **Core** | Archetype-free sparse-set ECS, hierarchy, fixed-timestep loop with interpolation, events, job system, profiler, logging |
 | **2D** | Batched sprites, shapes, tilemaps (chunk cached), 2D lights with normal maps, sprite masks, parallax, pixel-perfect cameras |
-| **3D** | Forward+ clustered PBR (metallic-roughness, glTF compatible), skinned meshes, LOD, frustum culling, GPU-driven culling with Hi-Z occlusion, tier-2 material argument buffers, indirect command buffers, render-target cameras at their own resolution |
+| **3D** | Forward+ clustered PBR (metallic-roughness, glTF compatible), skinned meshes, LOD, frustum culling, GPU-driven culling with Hi-Z occlusion, tier-2 material argument buffers, indirect command buffers including a GPU encode of culled draws, render-target cameras at their own resolution |
 | **Lighting** | Cascaded shadow maps (stable, PCF and PCSS), point and spot lights, image-based lighting, reflection probes, procedural sky |
 | **Ray tracing** | Hybrid ray-traced shadows, reflections and ambient occlusion where the GPU supports them, with raster fallbacks |
 | **Post-processing** | Bloom, SSAO, depth of field, motion blur, colour grading, auto exposure, tone mapping (Reinhard, ACES, AgX) |

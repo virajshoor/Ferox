@@ -14,6 +14,8 @@ public enum IndirectDrawLayout {
     public static let indexStart = 2
     public static let baseVertex = 3
     public static let baseInstance = 4
+    /// CPU flag read by `encodeCulledDraws`. Not part of the Metal draw-argument struct.
+    public static let skinned = 5
 
     public static func byteOffset(ofBatch index: Int, base: Int = 0) -> Int {
         base + index * strideBytes

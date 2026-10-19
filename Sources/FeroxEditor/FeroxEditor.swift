@@ -341,7 +341,19 @@ enum FeroxEditorMain {
                     let size = engine.viewportPoints
                     let ray = camera.ray(
                         through: input.mousePosition / size, aspect: size.x / max(size.y, 1), cameraToWorld: m)
-                    session.select(session.pick(ray))
+                    let pixel = (x: Int(input.mousePosition.x), y: Int(input.mousePosition.y))
+                    session.select(session.pick(ray, pixel: pixel))
+                    if let serial = session.gpuPickSerial {
+                        host.renderer.scheduleInstancePick(
+                            x: pixel.x, y: pixel.y, serial: serial,
+                            viewWidth: Int(size.x), viewHeight: Int(size.y))
+                    }
+                }
+                if let sample = host.renderer.takeInstancePick(),
+                    let entity = session.completeInstancePick(
+                        serial: sample.serial, instance: sample.instance, entities: sample.entities)
+                {
+                    session.select(entity)
                 }
                 drawGizmos(host.renderer.debugDraw)
             }

@@ -24,7 +24,7 @@ The most important limitation is the first one: Ferox has been verified on one A
 
 ## 2. Rendering
 
-- **Limitation: one screen camera.** The drawable shows one camera: the enabled camera with the highest `priority` and no `renderTarget`, and the lowest entity index on a tie. Other active cameras that set `renderTarget` are drawn into textures (`Renderer.renderedCameraTarget`). Those textures share the screen view's pixel size and are not a second presented view, so split-screen of two drawables is still one renderer per view.
+- **Limitation: one screen camera.** The drawable shows one camera: the enabled camera with the highest `priority` and no `renderTarget`, and the lowest entity index on a tie. Other active cameras that set `renderTarget` are drawn into textures (`Renderer.renderedCameraTarget`) at `Camera.targetSize`, or at the screen size when that is nil. Each distinct size has its own G-buffer. Those textures are not a second presented view, so split-screen of two drawables is still one renderer per view.
 - **Limitation: the sky is drawn only for perspective cameras.** For an orthographic camera the background is the clear colour (`Renderer`'s doc comment).
 - **Limitation: changing `maxFramesInFlight` needs the renderer recreated.** The renderer logs a warning when the value changes at run time. See [section 7 of 24-Graphics-Settings-and-Presets.md](24-Graphics-Settings-and-Presets.md#7-changing-settings-at-run-time).
 - **Limitation: the monospace font provider renders white boxes.** `MonospaceFontProvider` emits glyph quads with placeholder texture coordinates, so the glyphs do not show. The engine uses it only where CoreText is unavailable. On macOS, the engine uses `CoreTextFontProvider` instead.
@@ -56,7 +56,7 @@ See [11-Ray-Tracing.md](11-Ray-Tracing.md) for the budget rules, and [24-Graphic
 
 ## 6. Editor
 
-- **Limitation: picking is CPU-side.** Left-clicking in the viewport selects the nearest entity. A mesh with indices is tested with a front-face triangle raycast (`MeshRaycast`); a mesh without indices uses its world bounds. Lights and cameras without a mesh use a 0.3-unit marker sphere. `prepassPickFragment` can write an instance id into an `r32Uint` attachment, and `InstancePickMap` turns that id into an entity, but the editor does not read a GPU attachment back. The editor's own guide is [22-Editor.md](22-Editor.md).
+- Viewport picking reads one `r32Uint` pixel back through a staging buffer. The CPU raycast is the fallback until that read finishes, and it is what hits lights, cameras and meshes without indices. The GPU pass draws opaque meshes only. The inspector, asset browser and prefab editing are still absent. See [22-Editor.md](22-Editor.md).
 
 ## 7. Networking
 
@@ -77,7 +77,7 @@ The items below are plans. They are based on gaps that the source records or tha
 
 - **Verify on more hardware.** The package has been built, tested and rendered on one M1 Max. Repeat the build, the tests and `FeroxDiag --render` on other named Apple Silicon Macs and on other GPUs. Record the Mac model, chip, macOS version and commit, as [CONTRIBUTING.md](../CONTRIBUTING.md) asks, and then update [25-Platform-Support.md](25-Platform-Support.md) and this document.
 - **Verify MetalFX on a captured frame.** The probe records whether a temporal scaler can be created for the prepass depth format. A captured frame on hardware that supports MetalFX, and on hardware that does not, is still needed.
-- **Independent camera targets.** Render-target cameras already draw into textures at the screen view's size. Per-camera resolution, a depth buffer that outlives the blit, and presenting two viewports in one drawable are not done.
+- **Two presented views.** Render-target cameras draw at their own resolution into their own G-buffer. Presenting two viewports in one drawable is not done.
 - **Sky for other projections.** Draw the sky for orthographic cameras, or document the clear-colour behaviour as the intended design.
 - **Reflection probes.** Support per-probe face sizes, blending between overlapping probes, and review the limit of 16 probes.
 - **GPU particles.** Support colour over lifetime on the GPU path, and let local-space emitters follow the emitter.

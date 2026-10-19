@@ -62,15 +62,61 @@ final class FramePathTests: XCTestCase {
 }
 
 final class TransientHeapPlanTests: XCTestCase {
-    func testPostScratchAliasesAndLDRTargetsDoNot() {
+    private func overlaps(_ a: HeapPlacement, _ b: HeapPlacement) -> Bool {
+        let aEnd = a.offset + a.size
+        let bEnd = b.offset + b.size
+        return !(aEnd <= b.offset || bEnd <= a.offset)
+    }
+
+    func testLifetimesAliasScratchesAndKeepThePingPongDistinct() {
         XCTAssertFalse(TransientHeapPlan.msaaAttachmentsAreMemoryless)
-        let groups = TransientHeapPlan.aliasGroups(ambientOcclusion: true, bloom: true, depthOfField: true)
-        XCTAssertTrue(TransientHeapPlan.mayAlias(.ambientOcclusion, .bloom, groups: groups))
-        XCTAssertTrue(TransientHeapPlan.mayAlias(.bloom, .depthOfField, groups: groups))
-        XCTAssertFalse(TransientHeapPlan.mayAlias(.ldrA, .ldrB, groups: groups))
-        XCTAssertFalse(TransientHeapPlan.mayAlias(.hdr, .ambientOcclusion, groups: groups))
-        let alone = TransientHeapPlan.aliasGroups(ambientOcclusion: true, bloom: false, depthOfField: false)
-        XCTAssertFalse(TransientHeapPlan.mayAlias(.ambientOcclusion, .bloom, groups: alone))
+        var features = HeapFeatures()
+        features.geometryPrepass = true
+        features.ambientOcclusion = true
+        features.bloom = true
+        features.depthOfField = true
+        features.motionBlur = true
+        features.smaa = true
+        features.msaa = true
+        let lives = Dictionary(uniqueKeysWithValues: TransientHeapPlan.lifetimes(features).map { ($0.resource, $0) })
+        XCTAssertFalse(TransientHeapPlan.overlaps(lives[.ambientOcclusion]!, lives[.bloom]!))
+        XCTAssertFalse(TransientHeapPlan.overlaps(lives[.normal]!, lives[.hdr]!))
+        XCTAssertTrue(TransientHeapPlan.overlaps(lives[.ldrA]!, lives[.ldrB]!))
+        XCTAssertTrue(TransientHeapPlan.overlaps(lives[.smaaEdges]!, lives[.smaaWeights]!))
+        XCTAssertTrue(TransientHeapPlan.overlaps(lives[.depth]!, lives[.hdr]!))
+        XCTAssertFalse(TransientHeapPlan.overlaps(lives[.hdrMSAA]!, lives[.bloom]!))
+
+        let footprints = TransientHeapPlan.requests(
+            renderWidth: 128, renderHeight: 64, outputWidth: 256, outputHeight: 128, features: features,
+            msaaSamples: 4
+        ).map {
+            TransientFootprint(resource: $0.resource, byteSize: max($0.width * $0.height * 8, 256), alignment: 256)
+        }
+        let layout = TransientHeapPlan.layout(footprints: footprints, features: features)
+        let ldrA = layout.placement(of: .ldrA)!
+        let ldrB = layout.placement(of: .ldrB)!
+        let depth = layout.placement(of: .depth)!
+        let hdr = layout.placement(of: .hdr)!
+        let edges = layout.placement(of: .smaaEdges)!
+        let weights = layout.placement(of: .smaaWeights)!
+        XCTAssertFalse(overlaps(ldrA, ldrB))
+        XCTAssertFalse(overlaps(depth, hdr))
+        XCTAssertFalse(overlaps(edges, weights))
+        XCTAssertFalse(layout.barriers.isEmpty)
+        XCTAssertTrue(layout.barriers.contains { $0.destination == .bloom || $0.destination == .depthOfField })
+        let sum = footprints.reduce(0) { $0 + $1.byteSize }
+        XCTAssertLessThan(layout.byteSize, sum)
+        XCTAssertTrue(layout.placements.allSatisfy { $0.offset % 256 == 0 })
+        XCTAssertEqual(TransientHeapPlan.resource(forLabel: "Ferox.Bloom"), .bloom)
+        XCTAssertEqual(
+            TransientHeapPlan.requests(
+                renderWidth: 64, renderHeight: 64, outputWidth: 128, outputHeight: 128,
+                features: {
+                    var f = features
+                    f.temporal = true
+                    return f
+                }(), msaaSamples: 1
+            ).first { $0.resource == .depthOfField }?.width, 128)
     }
 }
 
@@ -212,6 +258,18 @@ final class CameraTargetSelectionTests: XCTestCase {
         let found = CameraTargets.offscreen(in: world)
         XCTAssertEqual(found.map(\.target.rawValue), ["high", "low"])
     }
+
+    func testOffscreenResolutionIsPerCamera() {
+        var screen = Camera.perspective()
+        XCTAssertEqual(CameraTargets.resolution(screen, screenWidth: 1920, screenHeight: 1080).width, 1920)
+        XCTAssertEqual(CameraTargets.resolution(screen, screenWidth: 1920, screenHeight: 1080).height, 1080)
+        screen.targetSize = CameraTargetSize(width: 320, height: 180)
+        let sized = CameraTargets.resolution(screen, screenWidth: 1920, screenHeight: 1080)
+        XCTAssertEqual(sized.width, 320)
+        XCTAssertEqual(sized.height, 180)
+        screen.targetSize = CameraTargetSize(width: 0, height: -4)
+        XCTAssertEqual(CameraTargets.resolution(screen, screenWidth: 10, screenHeight: 10).width, 1)
+    }
 }
 
 final class MeshPickingTests: XCTestCase {
@@ -240,6 +298,26 @@ final class MeshPickingTests: XCTestCase {
         XCTAssertNil(map.entity(forInstance: 4))
     }
 
+    func testInstancePickReadbackKeepsTheLatestSerial() {
+        var readback = InstancePickReadback()
+        let first = readback.request(x: 3, y: 4)
+        let second = readback.request(x: -2, y: 9)
+        XCTAssertEqual(first.serial, 1)
+        XCTAssertEqual(second.x, 0)
+        XCTAssertGreaterThan(second.serial, first.serial)
+        readback.complete(serial: first.serial, word: 7)
+        XCTAssertNil(readback.sample)
+        readback.complete(serial: second.serial, word: 0)
+        let world = World()
+        let entity = world.createEntity()
+        XCTAssertEqual(readback.entity(serial: second.serial, map: InstancePickMap(entities: [entity])), entity)
+        let pixel = InstancePickStaging.renderPixel(
+            viewX: 10, viewY: 20, viewWidth: 100, viewHeight: 50, renderWidth: 200, renderHeight: 100)
+        XCTAssertEqual(pixel.x, 20)
+        XCTAssertEqual(pixel.y, 40)
+        XCTAssertEqual(InstancePickStaging.byteCount, 256)
+    }
+
     func testShadersDeclareTheNewPaths() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -263,11 +341,28 @@ final class MeshPickingTests: XCTestCase {
                 throw XCTSkip(
                     "No Metal device in this process. Renderer construction and shader compilation need a GPU.")
             }
-            let renderer = try Renderer(assets: AssetManager(database: nil))
+            let assets = AssetManager(database: nil)
+            let mesh = AssetID("pick.cube")
+            assets.registerMesh(.cube(), id: mesh)
+            let renderer = try Renderer(assets: assets)
             XCTAssertTrue(renderer.shaders.failures.isEmpty, "\(renderer.shaders.failures)")
             XCTAssertEqual(renderer.shaders.module(of: "prepassPickFragment"), "Mesh")
             XCTAssertTrue(renderer.metalFXProbe.attempted)
             XCTAssertFalse(renderer.metalFXProbe.depthFormat.isEmpty)
+            let world = World()
+            let cameraEntity = world.createEntity(
+                named: "Camera",
+                transform: Transform(position: Vec3(0, 0, 4), rotation: .lookRotation(forward: Vec3(0, 0, -1))))
+            world.add(Camera.perspective(), to: cameraEntity)
+            let cube = world.createEntity(named: "Cube")
+            world.add(MeshRenderer(mesh: mesh), to: cube)
+            renderer.scheduleInstancePick(x: 32, y: 32, serial: 1, viewWidth: 64, viewHeight: 64)
+            XCTAssertNotNil(renderer.renderOffscreen(world: world, width: 64, height: 64))
+            let sample = renderer.takeInstancePick()
+            XCTAssertEqual(sample?.serial, 1)
+            XCTAssertEqual(sample?.instance, 0)
+            XCTAssertEqual(sample?.entities.first, cube)
+
             if renderer.device.supportsFamily(.metal3) {
                 let desc = MTLIndirectCommandBufferDescriptor()
                 desc.commandTypes = [.drawIndexed]

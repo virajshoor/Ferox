@@ -159,9 +159,11 @@
                 let pso = try pipeline(fragment, format: target.pixelFormat, additive: additive)
                 guard let enc = cb.makeRenderCommandEncoder(descriptor: pass) else { return }
                 enc.label = label
+                aliasSync?.begin(enc)
                 enc.setRenderPipelineState(pso)
                 bind(enc)
                 enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+                aliasSync?.end(enc)
                 enc.endEncoding()
             } catch {
                 Log.error("Render", "Post pass \(label) unavailable: \(error)")
@@ -183,11 +185,24 @@
             return p
         }
 
+        /// Fence and placed scratches for the frame currently being encoded.
+        var aliasSync: RenderTargets.AliasSync?
+        weak var scratchSource: RenderTargets?
+
         private func transient(
             _ w: Int, _ h: Int, _ format: MTLPixelFormat, _ label: String,
             usage: MTLTextureUsage = [.renderTarget, .shaderRead], mips: Int = 1
         ) -> (any MTLTexture)? {
-            pool.texture(TextureKey(width: w, height: h, format: format, usage: usage, mipLevels: mips), label: label)
+            if let resource = TransientHeapPlan.resource(forLabel: label),
+                let planned = scratchSource?.scratch(resource),
+                planned.width == w, planned.height == h, planned.pixelFormat == format,
+                mips <= 1 || planned.mipmapLevelCount == mips
+            {
+                planned.label = label
+                return planned
+            }
+            return pool.texture(
+                TextureKey(width: w, height: h, format: format, usage: usage, mipLevels: mips), label: label)
         }
 
         // MARK: - SSAO
@@ -430,7 +445,11 @@
                     let enc = cb.makeComputeCommandEncoder()
                 else { return }
                 enc.label = "Ferox.AutoExposure"
-                defer { enc.endEncoding() }
+                aliasSync?.begin(enc)
+                defer {
+                    aliasSync?.end(enc)
+                    enc.endEncoding()
+                }
                 let group =
                     histogram.maxTotalThreadsPerThreadgroup >= 256
                     ? MTLSize(width: 16, height: 16, depth: 1) : MTLSize(width: 16, height: 8, depth: 1)
@@ -717,6 +736,7 @@
                 let pso = try pipeline("blitFragment", format: destination.pixelFormat)
                 guard let enc = cb.makeRenderCommandEncoder(descriptor: pass) else { return }
                 enc.label = "Ferox.Present"
+                aliasSync?.begin(enc)
                 enc.setRenderPipelineState(pso)
                 enc.setFragmentTexture(view, index: 0)
                 setViewport(enc, rect)
@@ -724,6 +744,7 @@
                 // The UI overlay covers the whole drawable, whatever the camera viewport.
                 if rect != full { setViewport(enc, full) }
                 overlay?(enc, destination.pixelFormat)
+                aliasSync?.end(enc)
                 enc.endEncoding()
             } catch {
                 Log.error("Render", "Present pass unavailable: \(error)")

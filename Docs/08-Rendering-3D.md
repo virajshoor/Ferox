@@ -60,7 +60,7 @@ Within `encodeFrame`, the steps are:
 8. Shadow maps are rendered for the sun, one depth pass per cascade.
 9. The compute encoder assigns lights to clusters, and runs GPU culling if enabled.
 10. GPU particles are updated.
-11. The prepass writes depth, normals with roughness, and motion vectors.
+11. The prepass writes depth, normals with roughness, and motion vectors. A scheduled pick then draws opaque meshes into an `r32Uint` instance-id target and blits one pixel into a staging buffer.
 12. If Hi-Z is enabled, the depth pyramid is built for the next frame.
 13. Ray-traced effects run if enabled. Otherwise SSAO runs if enabled.
 14. The main HDR pass draws opaque geometry, the sky for perspective cameras, transparent geometry, particles, the 2D layer and debug lines. The `afterOpaque` and `afterTransparent` hooks run inside it.
@@ -95,7 +95,9 @@ The formats are fixed in `TargetFormat` in `RenderTargets.swift`.
 | Drawable | `bgra8Unorm_srgb` | The presentation format, set in `GameHost`. |
 | Hi-Z pyramid | `r32Float` | The farthest reverse-Z depth per texel. |
 
-Temporal history, the TAA and temporal-upscaler ping-pong pair, is allocated at output size, in `rgba16Float`. The MSAA colour target is created only when MSAA is active. The render targets are reallocated when the render size, output size, MSAA or history configuration changes, and every allocation is reported to `MemoryTracker`.
+Temporal history, the TAA and temporal-upscaler ping-pong pair, is allocated at output size, in `rgba16Float`. The MSAA colour target is created only when MSAA is active. The render targets are reallocated when the render size, output size, MSAA, history or post-feature set changes, and every allocation is reported to `MemoryTracker`.
+
+Transient colour, depth, multisample, ambient-occlusion and post-scratch textures are placed on one `MTLHeap`. `TransientHeapPlan` gives each resource a lifetime in the frame graph and packs non-overlapping lifetimes onto the same bytes. The two LDR targets overlap for the whole post chain, so they never share an offset. History and the Hi-Z pyramid are read on the next frame and are not in the alias set. Aliased textures are created with hazard tracking off. `RenderTargets.AliasSync` updates a fence at the end of each encoder that touches them and waits on that fence at the start of the next one, including across the scene and post command buffers. MSAA attachments stay stored, because the prepass and the main pass are separate encoders; their memory can still be reused by a scratch that starts after the forward pass. If the placement heap cannot be created, each target is allocated on its own and nothing aliases.
 
 ## 5. Reverse-Z depth
 
@@ -260,7 +262,7 @@ GPU time is measured from the command buffers' start and end times. The scene an
 ## 14. Limitations
 
 - **Limitation: one screen camera.** The image presented to the drawable is the highest-priority enabled camera that is active in the hierarchy and has no `renderTarget`. `Engine.activeCamera()` uses that same choice, including priority ties (lowest entity index). The active camera's `viewport` is honoured: the scene is presented into that normalised rectangle of the drawable (`RenderMath.viewportPixels`), the rest is cleared to black, and UI still covers the whole drawable.
-- **Render-target cameras.** Every other active camera with `renderTarget` set is drawn, in priority order, into a private `rgba16Float` texture at the screen view's pixel size. Read it with `Renderer.renderedCameraTarget(_:)`. GPU culling and shadows are off for those views. They share the screen view's render targets and are copied out before the screen camera writes them, so two target cameras do not keep independent G-buffers, and the texture is not resized to a per-camera resolution.
+- **Render-target cameras.** Every other active camera with `renderTarget` set is drawn, in priority order, into a private `rgba16Float` texture. `Camera.targetSize` is the pixel size; when it is nil the texture matches the screen. Read it with `Renderer.renderedCameraTarget(_:)`. GPU culling and shadows are off for those views. Each distinct size has its own depth, normal, motion and colour targets, separate from the screen G-buffer. The colour is copied out before the next camera of that size reuses the buffer.
 - **Limitation: the sky is drawn only for perspective cameras.** An orthographic camera shows `clearColor`.
 - **Limitation: Hi-Z uses the previous frame.** Objects revealed by fast motion can be culled for one frame.
 - **Limitation: `MeshRenderer.isStatic` is not read by the renderer.** The value is copied onto ray-traced instances, where nothing reads it. The component's comment says it enables batched submission and BLAS reuse, which the source does not show.

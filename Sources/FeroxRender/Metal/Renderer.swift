@@ -159,16 +159,54 @@
         /// The handlers capture this clock, not `Renderer`.
         private let gpuClock: GPUFrameClock
 
+        /// One scheduled instance-id read and the sample the GPU has finished. The completion
+        /// handler writes `ready` from a Metal thread.
+        private final class InstancePickSlot: @unchecked Sendable {
+            struct Request {
+                var x: Int
+                var y: Int
+                var serial: UInt64
+                var viewWidth: Int
+                var viewHeight: Int
+            }
+            let lock = NSLock()
+            var request: Request?
+            var ready: InstancePickSample?
+        }
+        private let instancePicks = InstancePickSlot()
+
         private var offscreen: (any MTLTexture)?
         private var offscreenBytes = 0
-        /// Colour of each camera that has a `renderTarget`, at the main viewport size.
+        /// Colour of each camera that has a `renderTarget`, at that camera's pixel size.
         private var cameraTargets: [AssetID: any MTLTexture] = [:]
+        /// G-buffer per offscreen resolution. Not the screen view's targets.
+        private var offscreenBuffers: [String: RenderTargets] = [:]
 
         /// Texture last rendered for `Camera.renderTarget == id`, or nil if that camera has not drawn.
         public func renderedCameraTarget(_ id: AssetID) -> (any MTLTexture)? { cameraTargets[id] }
 
         /// Result of the MetalFX temporal-scaler probe performed at init.
         public var metalFXProbe: MetalFXProbeResult { post.metalFXProbe }
+
+        /// Asks the next frame to write the instance id at a view pixel into a staging buffer.
+        /// `serial` comes from `EditorSession.gpuPickSerial`. The result is read with `takeInstancePick`.
+        public func scheduleInstancePick(x: Int, y: Int, serial: UInt64, viewWidth: Int, viewHeight: Int) {
+            let slot = instancePicks
+            slot.lock.lock()
+            slot.request = InstancePickSlot.Request(
+                x: x, y: y, serial: serial, viewWidth: max(viewWidth, 1), viewHeight: max(viewHeight, 1))
+            slot.lock.unlock()
+        }
+
+        /// The latest finished GPU pick, if the readback has landed. Clears it.
+        public func takeInstancePick() -> InstancePickSample? {
+            let slot = instancePicks
+            slot.lock.lock()
+            defer { slot.lock.unlock() }
+            let ready = slot.ready
+            slot.ready = nil
+            return ready
+        }
 
         /// Camera moves longer than this in one frame are treated as cuts (teleports), which
         /// discard temporal history instead of smearing it.
@@ -274,8 +312,9 @@
             if let url { shaders.saveBinaryArchive(to: url) }
         }
 
-        /// Renders every active render-target camera into a texture at the main view's pixel size.
-        /// Encoded before the screen view writes the shared HDR target, then copied out.
+        /// Renders every active render-target camera into its own texture and G-buffer.
+        /// `targetSize` sets the pixel size; otherwise the camera uses the screen size.
+        /// Encoded before the screen view writes the screen G-buffer.
         private func encodeCameraTargets(
             world: World, width: Int, height: Int, commandBuffer cb: any MTLCommandBuffer, resources r: SceneResources
         ) {
@@ -285,27 +324,36 @@
             graphics.settings.gpuDrivenCulling = false
             graphics.settings.shadows.enabled = false
             for camera in cameras {
-                let texture = ensureCameraTarget(camera.target, width: width, height: height)
+                let size = CameraTargets.resolution(camera.camera, screenWidth: width, screenHeight: height)
+                let texture = ensureCameraTarget(camera.target, width: size.width, height: size.height)
+                let gbuffer = ensureOffscreenBuffer(size.width, size.height)
                 guard let texture else { continue }
+                var offscreenFeatures = HeapFeatures()
+                offscreenFeatures.geometryPrepass = true
+                let offscreenConfig = RenderTargets.Config(
+                    renderWidth: size.width, renderHeight: size.height, outputWidth: size.width,
+                    outputHeight: size.height, msaaSamples: 1, temporalHistory: false, hiz: false,
+                    geometryPrepass: true, features: offscreenFeatures)
+                guard (try? gbuffer.ensure(offscreenConfig)) != nil else { continue }
                 var options = ExtractionOptions()
                 options.frustumCull = true
                 options.cameraOverride = RenderCamera(
                     entity: camera.entity, camera: camera.camera,
                     worldMatrix: world.get(WorldTransform.self, camera.entity)?.matrix
                         ?? world.worldMatrix(of: camera.entity),
-                    aspect: Float(width) / Float(max(height, 1)))
+                    aspect: Float(size.width) / Float(max(size.height, 1)))
                 let frame = RenderSceneExtractor.extract(
                     world: world, assets: assets, animations: animations, aspect: options.cameraOverride?.aspect ?? 1,
                     options: options)
                 guard frame.camera != nil else { continue }
                 let uniforms = FrameUniformsBuilder.make(
-                    camera: frame.camera!, width: width, height: height, jitter: .zero, previous: nil,
+                    camera: frame.camera!, width: size.width, height: size.height, jitter: .zero, previous: nil,
                     environment: frame.environment, exposure: 1, time: 0, frameIndex: frameIndex,
                     environmentMips: environment.prefilteredMipCount)
                 let state = passes.prepare(
-                    frame, uniforms: uniforms, graphics: graphics, probes: [], targets: targets, resources: r)
-                passes.encodePrepass(cb, frame: frame, state: state, targets: targets, resources: r)
-                guard let pass = passes.mainPassDescriptor(targets: targets, clearColor: camera.camera.clearColor),
+                    frame, uniforms: uniforms, graphics: graphics, probes: [], targets: gbuffer, resources: r)
+                passes.encodePrepass(cb, frame: frame, state: state, targets: gbuffer, resources: r)
+                guard let pass = passes.mainPassDescriptor(targets: gbuffer, clearColor: camera.camera.clearColor),
                     let enc = cb.makeRenderCommandEncoder(descriptor: pass)
                 else { continue }
                 enc.label = "Ferox.CameraTarget"
@@ -320,7 +368,7 @@
                     passes.encodeSky(enc, environment: environment.environment, state: state, resources: r)
                 }
                 enc.endEncoding()
-                guard let hdr = targets.hdr, let blit = cb.makeBlitCommandEncoder() else { continue }
+                guard let hdr = gbuffer.hdr, let blit = cb.makeBlitCommandEncoder() else { continue }
                 blit.label = "Ferox.CameraTargetCopy"
                 blit.copy(
                     from: hdr, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(),
@@ -328,6 +376,14 @@
                     to: texture, destinationSlice: 0, destinationLevel: 0, destinationOrigin: MTLOrigin())
                 blit.endEncoding()
             }
+        }
+
+        private func ensureOffscreenBuffer(_ width: Int, _ height: Int) -> RenderTargets {
+            let key = "\(width)x\(height)"
+            if let existing = offscreenBuffers[key] { return existing }
+            let created = RenderTargets(device: device)
+            offscreenBuffers[key] = created
+            return created
         }
 
         private func ensureCameraTarget(_ id: AssetID, width: Int, height: Int) -> (any MTLTexture)? {
@@ -381,6 +437,8 @@
             spriteBatcher.removeAllCaches()
             rayTracing?.release()
             targets.release()
+            for buffer in offscreenBuffers.values { buffer.release() }
+            offscreenBuffers.removeAll()
             probes.invalidateAll()
             invalidateHistory()
         }
@@ -502,6 +560,40 @@
             return true
         }
 
+        /// Encodes a scheduled instance-id pick into `cb` and publishes the word when the buffer finishes.
+        private func encodeScheduledInstancePick(
+            _ cb: any MTLCommandBuffer, frame: RenderFrameData, state: SceneFrameState,
+            resources r: SceneResources, renderWidth: Int, renderHeight: Int
+        ) {
+            let slot = instancePicks
+            slot.lock.lock()
+            let request = slot.request
+            slot.request = nil
+            slot.lock.unlock()
+            guard let request,
+                let staging = device.makeBuffer(length: InstancePickStaging.byteCount, options: .storageModeShared)
+            else { return }
+            staging.label = "Ferox.InstancePickStaging"
+            let pixel = InstancePickStaging.renderPixel(
+                viewX: request.x, viewY: request.y, viewWidth: request.viewWidth, viewHeight: request.viewHeight,
+                renderWidth: renderWidth, renderHeight: renderHeight)
+            let entities = frame.instanceEntities
+            let serial = request.serial
+            guard
+                passes.encodeInstancePick(
+                    cb, frame: frame, state: state, resources: r, width: renderWidth, height: renderHeight,
+                    pixelX: pixel.x, pixelY: pixel.y, staging: staging)
+            else { return }
+            cb.addCompletedHandler { [staging] buffer in
+                guard buffer.status == .completed else { return }
+                let word = staging.contents().load(
+                    fromByteOffset: InstancePickStaging.wordOffset, as: UInt32.self)
+                slot.lock.lock()
+                slot.ready = InstancePickSample(serial: serial, instance: word, entities: entities)
+                slot.lock.unlock()
+            }
+        }
+
         private func encodeFrame(
             world: World, output: RenderOutput, time: Double, deltaTime: Float, ui: UIContext?,
             slot: Int, scene cb: any MTLCommandBuffer, post cbPost: any MTLCommandBuffer,
@@ -531,11 +623,21 @@
             statistics.renderHeight = rh
             statistics.dynamicScale = dyn
 
+            var features = HeapFeatures()
+            features.ambientOcclusion = resolved.screenSpaceAO
+            features.rayTracing = resolved.usesRayTracing
+            features.temporal = resolved.jitter || resolved.upscaler.isTemporal
+            features.depthOfField = resolved.settings.post.depthOfField.enabled
+            features.motionBlur = resolved.settings.post.motionBlur.enabled
+            features.bloom = resolved.settings.post.bloom.enabled
+            features.smaa = resolved.antiAliasing == .smaa
+            features.msaa = resolved.msaaSamples > 1
+            features.geometryPrepass = true
             let cfg = RenderTargets.Config(
                 renderWidth: rw, renderHeight: rh, outputWidth: ow, outputHeight: oh,
                 msaaSamples: resolved.msaaSamples, temporalHistory: resolved.jitter,
                 hiz: resolved.settings.gpuDrivenCulling && resolved.settings.occlusionCulling,
-                geometryPrepass: true)
+                geometryPrepass: true, features: features)
             do {
                 if try targets.ensure(cfg) {
                     invalidateHistory()
@@ -639,12 +741,17 @@
             if targets.config?.geometryPrepass != needsPrepass {
                 var resized = cfg
                 resized.geometryPrepass = needsPrepass
+                resized.features.geometryPrepass = needsPrepass
                 _ = try? targets.ensure(resized)
             }
+            post.aliasSync = targets.aliasSync
+            post.scratchSource = targets
             if needsPrepass {
                 passes.encodePrepass(cb, frame: frame, state: state, targets: targets, resources: r)
                 if cfg.hiz { passes.encodeHiZ(cb, state: state, targets: targets) }
             }
+            encodeScheduledInstancePick(
+                cb, frame: frame, state: state, resources: r, renderWidth: rw, renderHeight: rh)
 
             let postUniforms = PostUniformsBuilder.make(
                 resolved.settings.post, antiAliasing: resolved.settings.antiAliasing,
@@ -657,7 +764,7 @@
                 rt = rayTracing.encodeEffects(
                     cb, frame: frame, uniforms: state.uniforms, graphics: resolved, slot: slot,
                     depth: depth, normal: normal, motion: motion,
-                    environment: environment.environment, resources: r)
+                    environment: environment.environment, resources: r, aliasSync: targets.aliasSync)
             }
             let ssao = resolved.screenSpaceAO && rt.ambientOcclusion == nil && targets.ao != nil
             if ssao {
@@ -699,8 +806,10 @@
                     red: Double(cc.x), green: Double(cc.y), blue: Double(cc.z), alpha: 1)
                 if let enc = cb.makeRenderCommandEncoder(descriptor: spritePass) {
                     enc.label = "Ferox.SpritesLDR"
+                    targets.aliasSync?.begin(enc)
                     overlays.encodeSprites(
                         enc, data: sprites, samples: 1, resources: r, colorFormat: TargetFormat.ldr, depth: false)
+                    targets.aliasSync?.end(enc)
                     enc.endEncoding()
                 }
                 directLDR = ldr
@@ -711,6 +820,7 @@
                 let enc = cb.makeRenderCommandEncoder(descriptor: pass)
             {
                 enc.label = "Ferox.MainPass"
+                targets.aliasSync?.begin(enc)
                 passes.encodeOpaque(enc, frame: frame, state: state, lighting: lighting, resources: r)
                 runHooks(.afterOpaque) {
                     hookContext(.afterOpaque, cb, enc, state.uniforms, targets.hdr, rw, rh, state.samples)
@@ -732,6 +842,7 @@
                 runHooks(.afterTransparent) {
                     hookContext(.afterTransparent, cb, enc, state.uniforms, targets.hdr, rw, rh, state.samples)
                 }
+                targets.aliasSync?.end(enc)
                 enc.endEncoding()
             }
 

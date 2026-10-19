@@ -90,7 +90,7 @@ The workflow is `.github/workflows/ci.yml`. It has four jobs. Image tags are pin
 
 **Linux Swift 5.10** is the tools-version floor (`swift:5.10` by digest). It builds `Ferox` and runs all seven test targets with warnings as errors. It does not pass `--enable-xctest`.
 
-**Linux Swift 6.2** (`swift:6.2` by digest) lints with `swift format` and runs `swift test --enable-xctest --parallel`.
+**Linux Swift 6.2** (`swift:6.2` by digest) lints with `swift format`, builds `FeroxMath` and `FeroxCore` with `-strict-concurrency=complete` and warnings as errors, and runs `swift test --enable-xctest --parallel`. The rest of the package stays in Swift 5 mode.
 
 **Markdown links** runs lychee in offline mode over `README.md` and `Docs/**/*.md`, and fails on a broken relative link.
 

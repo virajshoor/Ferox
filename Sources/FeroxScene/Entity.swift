@@ -29,7 +29,9 @@ public struct Entity: Hashable, Sendable, Comparable, CustomStringConvertible {
 /// Maps entities to compact document-local identifiers while saving, and back while
 /// loading, so references between entities (parents, joint targets, camera follow targets)
 /// survive a save/load round trip even though runtime indices differ.
-public final class EntityRemapTable {
+/// Not shared across threads. `@unchecked Sendable` lets it sit in encoder `userInfo`,
+/// which Swift 6 requires to be `Sendable`. Encode and decode use one table on one thread.
+public final class EntityRemapTable: @unchecked Sendable {
     public private(set) var toLocal: [Entity: Int] = [:]
     public private(set) var fromLocal: [Int: Entity] = [:]
     public init() {}

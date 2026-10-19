@@ -77,6 +77,13 @@ jobs:
       - name: Lint
         run: swift format lint --strict --recursive Sources Tests Package.swift
 
+      - name: Strict concurrency on leaf modules
+        # The package stays in Swift 5 mode. Complete checking is limited to the
+        # leaves so the floor toolchain, which treats warnings as errors, is unchanged.
+        run: |
+          swift build --target FeroxMath -Xswiftc -strict-concurrency=complete -Xswiftc -warnings-as-errors
+          swift build --target FeroxCore -Xswiftc -strict-concurrency=complete -Xswiftc -warnings-as-errors
+
       - name: Test
         run: swift test --enable-xctest --parallel
 

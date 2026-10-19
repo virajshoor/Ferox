@@ -260,7 +260,6 @@
             var u = uniforms
             var state = SceneFrameState(uniforms: u)
             let a = r.allocator
-            cullBatchIds = nil
             state.samples = targets.config?.msaaSamples ?? 1
             state.useClusters = graphics.settings.renderPath == .clusteredForward
 

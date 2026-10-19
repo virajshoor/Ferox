@@ -172,8 +172,14 @@ enum FeroxEditorMain {
                     playButton, pauseButton,
                     button("Step") { [unowned self] in self.session.step() },
                     button("New") { [unowned self] in self.perform { try self.session.newScene() } },
-                    button("Open…") { [unowned self] in MainActor.assumeIsolated { self.openScene() } },
-                    button("Save…") { [unowned self] in MainActor.assumeIsolated { self.saveScene() } },
+                    button("Open…") { [unowned self] in
+                        nonisolated(unsafe) let editor = self
+                        MainActor.assumeIsolated { editor.openScene() }
+                    },
+                    button("Save…") { [unowned self] in
+                        nonisolated(unsafe) let editor = self
+                        MainActor.assumeIsolated { editor.saveScene() }
+                    },
                     button("Undo") { [unowned self] in self.session.undo() },
                     button("Redo") { [unowned self] in self.session.redo() },
                     button("+Cube") { [unowned self] in self.add("Cube") },

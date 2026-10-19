@@ -6,6 +6,17 @@ import Foundation
 
 public enum ProjectionMode: String, Codable, Sendable, CaseIterable { case perspective, orthographic }
 
+/// Pixel size of a camera that renders into `Camera.renderTarget`. Absent means the
+/// screen view's size.
+public struct CameraTargetSize: Codable, Hashable, Sendable {
+    public var width: Int
+    public var height: Int
+    public init(width: Int, height: Int) {
+        self.width = max(width, 1)
+        self.height = max(height, 1)
+    }
+}
+
 /// A camera. The active camera is the enabled one with the highest `priority`.
 public struct Camera: Component, Codable, Hashable, Sendable {
     public var projection: ProjectionMode = .perspective
@@ -26,6 +37,8 @@ public struct Camera: Component, Codable, Hashable, Sendable {
     public var pixelsPerUnit: Float = 16
     /// Optional render-target asset; nil renders to the screen.
     public var renderTarget: AssetID?
+    /// Pixel size of `renderTarget`. Nil uses the screen view's size.
+    public var targetSize: CameraTargetSize?
     /// Physical camera exposure in EV100 (used when auto exposure is off).
     public var exposureEV100: Float = 0
 

@@ -37,6 +37,10 @@ public final class EditorSession {
     public let engine: Engine
     public private(set) var state: PlayState = .editing
     public private(set) var selection: Entity?
+    /// Serial of the latest GPU pick request. Nil until `pick(_:pixel:)` is given a pixel.
+    public private(set) var gpuPickSerial: UInt64?
+    private var instancePick = InstancePickReadback()
+    private var pickMap = InstancePickMap(entities: [])
     /// Name written into saved documents.
     public var sceneName = "Untitled"
     /// The file the scene was last saved to or loaded from.
@@ -103,9 +107,34 @@ public final class EditorSession {
         onChange?()
     }
 
-    /// The nearest scene entity hit by `ray`: meshes by their world-space bounds, lights and
-    /// cameras by a small marker sphere. Editor-owned and disabled entities are skipped.
-    public func pick(_ ray: Ray) -> Entity? {
+    /// The entity under `ray`. A pixel requests an async GPU readback (`scheduleInstancePick`
+    /// on the renderer). Until that serial completes with a hit, and whenever the GPU reports
+    /// a miss, this returns the CPU raycast. A completed hit stays in effect for later calls
+    /// that pass no pixel, so the GPU result replaces the raycast.
+    public func pick(_ ray: Ray, pixel: (x: Int, y: Int)? = nil) -> Entity? {
+        if let pixel {
+            let request = instancePick.request(x: pixel.x, y: pixel.y)
+            gpuPickSerial = request.serial
+        }
+        if let serial = gpuPickSerial, let entity = instancePick.entity(serial: serial, map: pickMap) {
+            return entity
+        }
+        return cpuPick(ray)
+    }
+
+    /// Stores a finished GPU readback. Returns the entity when `serial` is still the latest
+    /// request and the word is a hit. A miss or a stale serial returns nil; the CPU pick stands.
+    @discardableResult
+    public func completeInstancePick(serial: UInt64, instance: UInt32, entities: [Entity]) -> Entity? {
+        pickMap = InstancePickMap(entities: entities)
+        instancePick.complete(serial: serial, word: instance)
+        guard serial == gpuPickSerial else { return nil }
+        return pickMap.entity(forInstance: instance)
+    }
+
+    /// The nearest scene entity hit by `ray`: meshes by their triangles or world-space bounds,
+    /// lights and cameras by a small marker sphere. Editor-owned and disabled entities are skipped.
+    private func cpuPick(_ ray: Ray) -> Entity? {
         let world = engine.world
         var best: (entity: Entity, t: Float)?
         func consider(_ e: Entity, _ t: Float?) {

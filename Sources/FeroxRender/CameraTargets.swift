@@ -16,6 +16,14 @@ public struct OffscreenCamera: Equatable, Sendable {
 }
 
 public enum CameraTargets {
+    /// Pixel size of an offscreen camera. A positive `targetSize` wins; otherwise the screen size.
+    public static func resolution(_ camera: Camera, screenWidth: Int, screenHeight: Int) -> (width: Int, height: Int) {
+        if let size = camera.targetSize {
+            return (max(size.width, 1), max(size.height, 1))
+        }
+        return (max(screenWidth, 1), max(screenHeight, 1))
+    }
+
     public static func offscreen(in world: World) -> [OffscreenCamera] {
         var found: [OffscreenCamera] = []
         world.read(Camera.self) { entity, camera in

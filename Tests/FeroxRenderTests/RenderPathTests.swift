@@ -431,7 +431,7 @@ final class MeshPickingTests: XCTestCase {
             var settings = GraphicsSettings()
             settings.upscaling.mode = .metalFXTemporal
             settings.upscaling.quality = .balanced
-            let renderer = try Renderer(assets: AssetManager(database: nil), settings: settings)
+            let renderer = try Renderer(settings: settings, assets: AssetManager(database: nil))
             guard renderer.metalFXProbe.scalerCreated else {
                 throw XCTSkip(
                     "MetalFX temporal scaler is not available (\(renderer.metalFXProbe.unavailableReason ?? "no reason"))."

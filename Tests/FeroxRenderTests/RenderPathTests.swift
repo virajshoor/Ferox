@@ -150,6 +150,12 @@ final class DrawPolicyTests: XCTestCase {
         XCTAssertEqual(DrawPolicy.submission(indirectCommandBuffers: false), .immediate)
         XCTAssertEqual(
             DrawPolicy.submission(indirectCommandBuffers: true, gpuIndirectDraws: true), .immediate)
+        XCTAssertEqual(
+            DrawPolicy.submission(indirectCommandBuffers: true, gpuIndirectDraws: true, encodesOnGPU: true),
+            .gpuEncodedIndirectCommandBuffer)
+        XCTAssertEqual(
+            DrawPolicy.submission(indirectCommandBuffers: false, gpuIndirectDraws: true, encodesOnGPU: true),
+            .immediate)
         let box = NSObject()
         let other = NSObject()
         let id = ObjectIdentifier(box)
@@ -328,6 +334,11 @@ final class MeshPickingTests: XCTestCase {
         XCTAssertTrue(common.contains("struct MaterialRecord"))
         XCTAssertTrue(common.contains("BUF_MATERIAL_TABLE 13"))
         XCTAssertTrue(common.contains("function_constant(5)"))
+        let encode = try String(
+            contentsOf: root.appendingPathComponent("Sources/FeroxRender/Shaders/IndirectEncode.metal"))
+        XCTAssertTrue(encode.contains("kernel void encodeCulledDraws"))
+        XCTAssertTrue(encode.contains("drawArgs[base + 1u]"))
+        XCTAssertEqual(IndirectDrawLayout.skinned, 5)
     }
 }
 
@@ -347,6 +358,8 @@ final class MeshPickingTests: XCTestCase {
             let renderer = try Renderer(assets: assets)
             XCTAssertTrue(renderer.shaders.failures.isEmpty, "\(renderer.shaders.failures)")
             XCTAssertEqual(renderer.shaders.module(of: "prepassPickFragment"), "Mesh")
+            XCTAssertEqual(renderer.shaders.module(of: "encodeCulledDraws"), "IndirectEncode")
+            XCTAssertNil(renderer.shaders.failures["IndirectEncode"])
             XCTAssertTrue(renderer.metalFXProbe.attempted)
             XCTAssertFalse(renderer.metalFXProbe.depthFormat.isEmpty)
             let world = World()
@@ -373,6 +386,67 @@ final class MeshPickingTests: XCTestCase {
                 let icb = renderer.device.makeIndirectCommandBuffer(descriptor: desc, maxCommandCount: 1, options: [])
                 XCTAssertNotNil(icb)
             }
+        }
+
+        func testOffscreenFrameShowsTheCube() throws {
+            guard MTLCreateSystemDefaultDevice() != nil else {
+                throw XCTSkip("No Metal device in this process.")
+            }
+            let assets = AssetManager(database: nil)
+            let mesh = AssetID("gpu.cube")
+            assets.registerMesh(.cube(), id: mesh)
+            var material = MaterialData(id: AssetID("gpu.white"), name: "White")
+            material.unlit = true
+            material.baseColor = .white
+            assets.registerMaterial(material)
+            let renderer = try Renderer(assets: assets)
+            let world = World()
+            let camera = world.createEntity(
+                named: "Camera",
+                transform: Transform(position: Vec3(0, 0, 4), rotation: .lookRotation(forward: Vec3(0, 0, -1))))
+            var cam = Camera.perspective()
+            cam.clearColor = .black
+            world.add(cam, to: camera)
+            let cube = world.createEntity(named: "Cube")
+            world.add(MeshRenderer(mesh: mesh, materials: [material.id]), to: cube)
+            world.add(Light.directional(), to: world.createEntity(named: "Sun"))
+            guard let texture = renderer.renderOffscreen(world: world, width: 64, height: 64),
+                let pixels = renderer.readPixels(texture)
+            else {
+                return XCTFail("Offscreen frame did not produce pixels")
+            }
+            let center = (64 / 2) * 64 + 32
+            let offset = center * 4
+            let brightest = max(pixels[offset], pixels[offset + 1], pixels[offset + 2])
+            XCTAssertGreaterThan(brightest, 80, "centre pixel was \(Array(pixels[offset..<(offset + 4)]))")
+            if renderer.device.supportsFamily(.metal3), renderer.capabilities.argumentBuffersTier >= 2 {
+                XCTAssertGreaterThan(renderer.statistics.gpuEncodedCommands, 0)
+            }
+        }
+
+        func testMetalFXTemporalFrameWhenTheScalerExists() throws {
+            guard MTLCreateSystemDefaultDevice() != nil else {
+                throw XCTSkip("No Metal device in this process.")
+            }
+            var settings = GraphicsSettings()
+            settings.upscaling.mode = .metalFXTemporal
+            settings.upscaling.quality = .balanced
+            let renderer = try Renderer(settings: settings, assets: AssetManager(database: nil))
+            guard renderer.metalFXProbe.scalerCreated else {
+                throw XCTSkip(
+                    "MetalFX temporal scaler is not available (\(renderer.metalFXProbe.unavailableReason ?? "no reason"))."
+                )
+            }
+            let assets = renderer.assets
+            let mesh = AssetID("fx.cube")
+            assets.registerMesh(.cube(), id: mesh)
+            let world = World()
+            let camera = world.createEntity(
+                named: "Camera",
+                transform: Transform(position: Vec3(0, 0, 4), rotation: .lookRotation(forward: Vec3(0, 0, -1))))
+            world.add(Camera.perspective(), to: camera)
+            world.add(MeshRenderer(mesh: mesh), to: world.createEntity(named: "Cube"))
+            XCTAssertNotNil(renderer.renderOffscreen(world: world, width: 64, height: 64))
         }
     }
 #endif

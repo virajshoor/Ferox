@@ -360,6 +360,30 @@
             self.unifiedMemory = unifiedMemory
         }
 
+        /// Allocates `length` bytes and lets `fill` write them before the GPU sees the buffer.
+        /// Unified memory fills the shared buffer in place. A discrete GPU fills a staging
+        /// buffer and blits it into private storage.
+        func makeBuffer(length: Int, label: String, fill: (UnsafeMutableRawPointer) -> Void) -> (any MTLBuffer)? {
+            guard length > 0 else { return nil }
+            if unifiedMemory {
+                guard let b = device.makeBuffer(length: length, options: .storageModeShared) else { return nil }
+                fill(b.contents())
+                b.label = label
+                return b
+            }
+            guard let staging = device.makeBuffer(length: length, options: .storageModeShared),
+                let dst = device.makeBuffer(length: length, options: .storageModePrivate),
+                let cb = queue.makeCommandBuffer(), let blit = cb.makeBlitCommandEncoder()
+            else { return nil }
+            fill(staging.contents())
+            dst.label = label
+            cb.label = "Ferox.Upload \(label)"
+            blit.copy(from: staging, sourceOffset: 0, to: dst, destinationOffset: 0, size: length)
+            blit.endEncoding()
+            cb.commit()
+            return dst
+        }
+
         func makeBuffer(bytes: UnsafeRawPointer, length: Int, label: String) -> (any MTLBuffer)? {
             guard length > 0 else { return nil }
             if unifiedMemory {
@@ -472,13 +496,21 @@
             MemoryTracker.shared.free("GPU.Meshes", bytes: m.byteCount)
         }
 
-        /// Releases meshes that have not been drawn recently.
-        func evict(frame: UInt64) {
-            for (id, m) in meshes where frame > m.lastUsedFrame + maxIdleFrames {
+        /// Drops meshes that have been idle, then the least-recently-used ones until the real
+        /// resident bytes fit `budgetBytes` (the asset mesh budget). A mesh drawn this frame stays.
+        func evict(frame: UInt64, budgetBytes: Int = .max) {
+            let residents = meshes.map {
+                ResidentMesh(key: $0.key.rawValue, byteCount: $0.value.byteCount, lastUsedFrame: $0.value.lastUsedFrame)
+            }
+            let drop = MeshResidencyPlanner.victims(
+                residents: residents, frame: frame, maxIdleFrames: maxIdleFrames, budgetBytes: budgetBytes)
+            guard !drop.isEmpty else { return }
+            let doomed = Set(drop)
+            for (id, m) in meshes where doomed.contains(id.rawValue) {
                 release(m)
                 meshes[id] = nil
-                generation &+= 1
             }
+            generation &+= 1
         }
 
         func removeAll() {
@@ -490,60 +522,20 @@
         /// Interleaves the mesh into `MeshVertexLayout` (18 floats per vertex) with defaults
         /// for missing attributes: normal +Y, tangent +X (w = 1), colour white.
         static func interleave(_ d: MeshData) -> [Float] {
-            let n = d.positions.count
-            let floatsPerVertex = MeshVertexLayout.stride / 4
-            var v = [Float](repeating: 0, count: n * floatsPerVertex)
-            let hasN = d.normals.count == n
-            let hasT = d.tangents.count == n
-            let hasUV0 = d.uv0.count == n
-            let hasUV1 = d.uv1.count == n
-            let hasC = d.colors.count == n
-            for i in 0..<n {
-                let o = i * floatsPerVertex
-                let p = d.positions[i]
-                v[o] = p.x
-                v[o + 1] = p.y
-                v[o + 2] = p.z
-                let nn = hasN ? d.normals[i] : Vec3(0, 1, 0)
-                v[o + 3] = nn.x
-                v[o + 4] = nn.y
-                v[o + 5] = nn.z
-                let t = hasT ? d.tangents[i] : Vec4(1, 0, 0, 1)
-                v[o + 6] = t.x
-                v[o + 7] = t.y
-                v[o + 8] = t.z
-                v[o + 9] = t.w
-                let a = hasUV0 ? d.uv0[i] : .zero
-                v[o + 10] = a.x
-                v[o + 11] = a.y
-                let b = hasUV1 ? d.uv1[i] : a
-                v[o + 12] = b.x
-                v[o + 13] = b.y
-                let c = hasC ? d.colors[i] : Vec4(1, 1, 1, 1)
-                v[o + 14] = c.x
-                v[o + 15] = c.y
-                v[o + 16] = c.z
-                v[o + 17] = c.w
+            let count = d.positions.count * MeshVertexWriter.floatsPerVertex
+            var v = [Float](repeating: 0, count: count)
+            v.withUnsafeMutableBytes { raw in
+                if let base = raw.baseAddress { MeshVertexWriter.writeInterleaved(d, to: base) }
             }
             return v
         }
 
         /// Packs the skin stream: two words of joint indices (ushort4) then four float weights.
         static func packSkin(_ d: MeshData) -> [UInt32] {
-            let n = d.positions.count
-            var out = [UInt32](repeating: 0, count: n * 6)
-            for i in 0..<n {
-                let j = d.joints[i]
-                var w = d.weights.count == n ? d.weights[i] : Vec4(1, 0, 0, 0)
-                let sum = w.x + w.y + w.z + w.w
-                w = sum > 1e-6 ? w / sum : Vec4(1, 0, 0, 0)  // normalise so the vertex keeps its size
-                let o = i * 6
-                out[o] = UInt32(j.x) | (UInt32(j.y) << 16)
-                out[o + 1] = UInt32(j.z) | (UInt32(j.w) << 16)
-                out[o + 2] = w.x.bitPattern
-                out[o + 3] = w.y.bitPattern
-                out[o + 4] = w.z.bitPattern
-                out[o + 5] = w.w.bitPattern
+            let count = d.positions.count * MeshVertexWriter.skinWordsPerVertex
+            var out = [UInt32](repeating: 0, count: count)
+            out.withUnsafeMutableBytes { raw in
+                if let base = raw.baseAddress { MeshVertexWriter.writeSkin(d, to: base) }
             }
             return out
         }
@@ -557,10 +549,23 @@
                 Log.error("Render", "Mesh '\(label)' has out-of-range indices; not uploaded")
                 return nil
             }
-            guard let vb = uploader.makeBuffer(Self.interleave(d), label: "\(label).vertices"),
-                let ib = uploader.makeBuffer(d.indices, label: "\(label).indices")
+            let vertexBytes = MeshVertexWriter.interleavedByteCount(vertexCount: d.positions.count)
+            guard
+                let vb = uploader.makeBuffer(
+                    length: vertexBytes, label: "\(label).vertices",
+                    fill: { pointer in
+                        MeshVertexWriter.writeInterleaved(d, to: pointer)
+                    }), let ib = uploader.makeBuffer(d.indices, label: "\(label).indices")
             else { return nil }
-            let sb = d.isSkinned ? uploader.makeBuffer(Self.packSkin(d), label: "\(label).skin") : nil
+            let sb: (any MTLBuffer)?
+            if d.isSkinned {
+                let skinBytes = MeshVertexWriter.skinByteCount(vertexCount: d.positions.count)
+                sb = uploader.makeBuffer(length: skinBytes, label: "\(label).skin") { pointer in
+                    MeshVertexWriter.writeSkin(d, to: pointer)
+                }
+            } else {
+                sb = nil
+            }
             return GPUMesh(
                 vertexBuffer: vb, skinBuffer: sb, indexBuffer: ib, indexCount: d.indices.count,
                 submeshes: d.submeshes, vertexCount: d.positions.count, revision: revision)

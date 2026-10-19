@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Render-target cameras. An active camera with `Camera.renderTarget` set is drawn into a texture (`Renderer.renderedCameraTarget`). The screen camera is still the highest-priority camera with no render target. GPU culling and shadows are off for the offscreen views, and they share the screen view's pixel size.
+- Tier-2 material argument buffers (`MaterialRecord` in `Common.metal`, `BufferIndex.materialTable` / `materialIds`) and Metal 3 indirect command buffers for opaque draws when every material in the pass uses that table. Tier 1 and mixed double-sided batches stay on immediate draws, which skip rebinding an unchanged vertex buffer.
+- Optional shader metallib (`FEROX_METALLIB` or bundled `FeroxShaders.metallib`) when hot reload is off, and mesh-pipeline prewarm into `FeroxPipelines.binaryarchive` under the caches directory. No metallib is committed.
+- A private `MTLHeap` for render targets, with `TransientHeapPlan` describing which post textures may alias. MSAA attachments stay stored. Offset aliasing of bloom with ambient occlusion is not applied, because those textures are created in different passes.
+- GPU mesh eviction against `MemoryBudget.meshBytes` using real buffer sizes, after idle eviction. A mesh drawn this frame stays. Mesh uploads write straight into the shared buffer on unified memory.
+- `Renderer.metalFXProbe`: a temporal MetalFX scaler is requested at init for `depth32Float_stencil8`. A nil scaler is recorded and the frame uses Ferox's resolve. Motion scale and jitter live in `MetalFXTemporalMapping`.
+- `prepassPickFragment` writes the instance index. The editor picks with `MeshRaycast` on the CPU. There is no GPU readback.
+- 3D convex hulls: `ConvexHull3D`, `Shape3D.convex`, and `ColliderShape3D.Geometry.convex(vertices:)`. Dynamic-versus-dynamic continuous collision scales both bodies in a pair.
 - `Website/`: the static site for swengine.net, with a landing page, a 404 page, Open Graph and JSON-LD metadata, a sitemap and a web manifest. Package it with `cd Website && zip -r ../dist.zip . -x README.md`.
 - The project's full name, Swift Engine Ferox, now appears in the README, the overview, CONTRIBUTING, SECURITY, NOTICE and `Package.swift`. Code names (package, modules, tools) are unchanged.
 - Shadows for point and spot lights with `castsShadows`. They are budgeted by the new `ShadowSettings.localShadowSlices` (default 12; a spot light takes one slice, a point light six) and `localResolution` (default 512), nearest lights first, and planned by `LocalShadowPlanner`.
@@ -18,6 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Source-breaking for external switches:** `ShapeGeometry3D` and `ColliderShape3D.Geometry` gained `.convex`. A `switch` that was exhaustive must handle the new case. Degenerate point sets make `Shape3D.convex` return nil, and the physics system skips a collider it cannot build.
+- `ShaderVariant` gained `materialArguments` (default `false`). Existing call sites keep the discrete texture binds.
+- A sprite-only frame with tone mapping, bloom, depth of field, SSAO, TAA, motion blur, ray tracing, stencil masks and debug lines all off draws sprites into the LDR target and skips the HDR scene pass. The default tone mapper is AgX, so this path is off unless those features are off.
 - CI pins `swift:5.10` and `swift:6.2` by digest, adds a Swift 6.2 job that lints with `swift format` and runs `swift test --enable-xctest`, treats warnings as errors on the Swift 5.10 job, and moves the Mac job to `macos-15` with a required Xcode 16.4. That job compiles every shader with `Scripts/compile-shaders.sh`.
 - Sources and tests are formatted with `swift format` (`.swift-format`).
 

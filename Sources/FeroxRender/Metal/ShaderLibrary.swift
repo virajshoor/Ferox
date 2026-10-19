@@ -10,26 +10,31 @@
         public var vertexColor = false
         public var clusters = true
         public var unlit = false
+        /// Sample material textures from the tier-2 argument buffer instead of texture slots 0...4.
+        public var materialArguments = false
         public init(
             skinning: Bool = false, alphaTest: Bool = false, vertexColor: Bool = false, clusters: Bool = true,
-            unlit: Bool = false
+            unlit: Bool = false, materialArguments: Bool = false
         ) {
             self.skinning = skinning
             self.alphaTest = alphaTest
             self.vertexColor = vertexColor
             self.clusters = clusters
             self.unlit = unlit
+            self.materialArguments = materialArguments
         }
 
         var constantValues: MTLFunctionConstantValues {
             let v = MTLFunctionConstantValues()
-            var flags = [skinning, alphaTest, vertexColor, clusters, unlit]
+            // Index 5 selects the argument buffer. Index 6 is its complement so the discrete
+            // texture arguments stay present on the default path.
+            var flags = [skinning, alphaTest, vertexColor, clusters, unlit, materialArguments, !materialArguments]
             for i in flags.indices { v.setConstantValue(&flags[i], type: .bool, index: i) }
             return v
         }
 
         var key: String {
-            "\(skinning ? 1 : 0)\(alphaTest ? 1 : 0)\(vertexColor ? 1 : 0)\(clusters ? 1 : 0)\(unlit ? 1 : 0)"
+            "\(skinning ? 1 : 0)\(alphaTest ? 1 : 0)\(vertexColor ? 1 : 0)\(clusters ? 1 : 0)\(unlit ? 1 : 0)\(materialArguments ? 1 : 0)"
         }
     }
 
@@ -67,10 +72,13 @@
         private var computePipelines: [String: any MTLComputePipelineState] = [:]
         private var modificationDates: [String: Date] = [:]
         private var lastPoll: Double = 0
+        /// Pipelines recorded here are serialised by `saveBinaryArchive` for the next launch.
+        private var binaryArchive: (any MTLBinaryArchive)?
 
         public init(device: any MTLDevice, sourceDirectory: URL? = nil) throws {
             self.device = device
             let env = ProcessInfo.processInfo.environment["FEROX_SHADER_DIR"].flatMap { $0.isEmpty ? nil : $0 }
+            let metallib = ProcessInfo.processInfo.environment["FEROX_METALLIB"].flatMap { $0.isEmpty ? nil : $0 }
             if let dir = sourceDirectory {
                 self.sourceDirectory = dir
                 hotReloadEnabled = true
@@ -82,6 +90,24 @@
                 hotReloadEnabled = false
             } else {
                 throw RenderError.shaderSourceMissing("Shaders (bundle resource)")
+            }
+            let policy = ShaderSourcePolicy.resolve(
+                shaderDirectorySet: hotReloadEnabled, metallibPresent: metallib != nil)
+            if policy == .compiledMetallib, let metallib {
+                let lib = try device.makeLibrary(URL: URL(fileURLWithPath: metallib))
+                lib.label = "Ferox.Metallib"
+                install(lib, module: "FeroxShaders")
+                generation &+= 1
+                return
+            }
+            if !hotReloadEnabled,
+                let bundled = Bundle.module.url(forResource: "FeroxShaders", withExtension: "metallib")
+            {
+                let lib = try device.makeLibrary(URL: bundled)
+                lib.label = "Ferox.Metallib"
+                install(lib, module: "FeroxShaders")
+                generation &+= 1
+                return
             }
             try compileAll()
         }
@@ -253,9 +279,11 @@
             if let p = renderPipelines[key] { return p }
             let d = MTLRenderPipelineDescriptor()
             d.label = key
+            if let binaryArchive { d.binaryArchives = [binaryArchive] }
             try configure(d)
             do {
                 let p = try device.makeRenderPipelineState(descriptor: d)
+                try? binaryArchive?.addRenderPipelineFunctions(descriptor: d)
                 renderPipelines[key] = p
                 return p
             } catch {
@@ -278,5 +306,17 @@
 
         /// Number of cached pipeline states (diagnostics).
         public var cachedPipelineCount: Int { renderPipelines.count + computePipelines.count }
+
+        /// Opens a binary archive at `url` (creating it when absent) so the next
+        /// `renderPipeline` calls are recorded. Missing archives are not an error.
+        public func openBinaryArchive(at url: URL) {
+            let desc = MTLBinaryArchiveDescriptor()
+            if FileManager.default.fileExists(atPath: url.path) { desc.url = url }
+            binaryArchive = try? device.makeBinaryArchive(descriptor: desc)
+        }
+
+        public func saveBinaryArchive(to url: URL) {
+            try? binaryArchive?.serialize(to: url)
+        }
     }
 #endif

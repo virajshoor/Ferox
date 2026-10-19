@@ -107,6 +107,8 @@ public struct RenderFrameData {
     public var rayTracingInstances: [RayTracingInstance] = []
     public var visibleObjects = 0
     public var culledObjects = 0
+    /// Parallel to `instances`. A GPU instance-id attachment stores this index.
+    public var instanceEntities: [Entity] = []
     public init() {}
 }
 
@@ -250,6 +252,7 @@ public enum RenderSceneExtractor {
             }
             let index = frame.instances.count
             frame.instances.append(inst)
+            frame.instanceEntities.append(e)
 
             if options.collectRayTracingInstances {
                 let mat = materials.first.flatMap { assets.loadedMaterial($0) } ?? .default

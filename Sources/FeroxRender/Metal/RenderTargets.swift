@@ -43,6 +43,8 @@
             var temporalHistory: Bool
             /// Allocates the Hi-Z pyramid (GPU occlusion culling).
             var hiz: Bool
+            /// Allocates normal and motion. False for a frame that skips the geometry prepass.
+            var geometryPrepass: Bool = true
         }
 
         let device: any MTLDevice
@@ -102,15 +104,20 @@
 
             depth = try make("Ferox.Depth", TargetFormat.depth, rw, rh, rt)
             hdr = try make("Ferox.HDR", TargetFormat.hdr, rw, rh, [.renderTarget, .shaderRead, .shaderWrite])
-            normal = try make("Ferox.Normal", TargetFormat.normal, rw, rh, rt)
-            motion = try make("Ferox.Motion", TargetFormat.motion, rw, rh, rt)
+            if c.geometryPrepass {
+                normal = try make("Ferox.Normal", TargetFormat.normal, rw, rh, rt)
+                motion = try make("Ferox.Motion", TargetFormat.motion, rw, rh, rt)
+            }
             if msaa > 1 {
                 // Multisampled attachments stay resident between the prepass and the main pass,
                 // so they cannot be memoryless; only their resolved copies are sampled.
                 depthMSAA = try make("Ferox.DepthMSAA", TargetFormat.depth, rw, rh, .renderTarget, samples: msaa)
                 hdrMSAA = try make("Ferox.HDRMSAA", TargetFormat.hdr, rw, rh, .renderTarget, samples: msaa)
-                normalMSAA = try make("Ferox.NormalMSAA", TargetFormat.normal, rw, rh, .renderTarget, samples: msaa)
-                motionMSAA = try make("Ferox.MotionMSAA", TargetFormat.motion, rw, rh, .renderTarget, samples: msaa)
+                if c.geometryPrepass {
+                    normalMSAA = try make("Ferox.NormalMSAA", TargetFormat.normal, rw, rh, .renderTarget, samples: msaa)
+                    motionMSAA = try make(
+                        "Ferox.MotionMSAA", TargetFormat.motion, rw, rh, .renderTarget, samples: msaa)
+                }
             }
             ao = try make("Ferox.AO", TargetFormat.ao, rw, rh, [.renderTarget, .shaderRead, .shaderWrite])
 
@@ -166,8 +173,25 @@
             hizMips = []
             history = []
             ldr = []
+            heap = nil
             config = nil
             historyValid = false
+        }
+
+        private var heap: (any MTLHeap)?
+
+        /// One private heap for the view's targets. Allocation falls back to a standalone
+        /// texture when the heap is full. Offset aliasing follows `TransientHeapPlan` and is
+        /// not applied here: bloom and depth of field are created later, and MSAA attachments
+        /// cannot be memoryless across the separate prepass and main encoders.
+        private func ensureHeap() -> (any MTLHeap)? {
+            if let heap { return heap }
+            let desc = MTLHeapDescriptor()
+            desc.storageMode = .private
+            desc.size = min(max(device.recommendedMaxWorkingSetSize / 8, 64 << 20), 512 << 20)
+            heap = device.makeHeap(descriptor: desc)
+            heap?.label = "Ferox.RenderTargetHeap"
+            return heap
         }
 
         private func make(
@@ -183,7 +207,14 @@
             d.mipmapLevelCount = samples > 1 ? 1 : max(mips, 1)
             d.usage = usage
             d.storageMode = .private
-            guard let t = device.makeTexture(descriptor: d) else { throw RenderError.allocation(label) }
+            let t: any MTLTexture
+            if let heap = ensureHeap(), let placed = heap.makeTexture(descriptor: d) {
+                t = placed
+            } else if let made = device.makeTexture(descriptor: d) {
+                t = made
+            } else {
+                throw RenderError.allocation(label)
+            }
             t.label = label
             trackedBytes += t.allocatedSize
             MemoryTracker.shared.allocate("GPU.RenderTargets", bytes: t.allocatedSize)

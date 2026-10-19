@@ -96,10 +96,11 @@ public enum JointDesc3D: Sendable {
 /// A 3D rigid-body physics world. Same solver architecture as `PhysicsWorld2D` (sequential
 /// impulses, warm starting, two friction directions, speculative contacts, sleep islands).
 ///
-/// Supported shape pairs: sphere, box, capsule (all pairs), plane vs convex, triangle mesh
-/// vs sphere/capsule (boxes vs mesh are approximated by an inscribed capsule). Convex hulls
-/// are not implemented; continuous collision covers fast dynamic bodies against static and
-/// kinematic ones only. See Docs/13-Physics.md.
+/// Supported shape pairs: sphere, box, capsule and convex hull (face SAT; sphere and capsule
+/// use the closest point), plane vs those shapes, triangle mesh vs sphere/capsule (boxes vs
+/// mesh are approximated by an inscribed capsule; mesh vs hull has no manifold). Continuous
+/// collision sweeps fast dynamic bodies against static and kinematic shapes, then against
+/// other dynamic bodies. See Docs/13-Physics.md.
 public final class PhysicsWorld3D {
     public var gravity = Vec3(0, -9.81, 0)
     public var settings = SolverSettings()
@@ -372,6 +373,7 @@ public final class PhysicsWorld3D {
             for k in active { contacts[k]!.solve(&bodies) }
         }
 
+        var motions: [(index: Int, dp: Vec3, oldCenter: Vec3, dynamic: Bool)] = []
         for i in 0..<n {
             guard var b = bodies[i], b.type != .static, b.isAwake else { continue }
             var dp = b.linearVelocity * dt
@@ -387,13 +389,20 @@ public final class PhysicsWorld3D {
             }
             let oldCenter = b.worldCenter
             if settings.continuousCollision && b.type == .dynamic { dp = clampContinuous(i, b, from: oldCenter, dp) }
+            bodies[i] = b
+            motions.append((i, dp, oldCenter, b.type == .dynamic))
+        }
+        if settings.continuousCollision { clampDynamicPairs(&motions) }
+        for m in motions {
+            guard var b = bodies[m.index] else { continue }
+            let w = b.angularVelocity
             // Quaternion integration: q' = q + ½ (ω, 0) q dt.
             let wq = Quat(x: w.x, y: w.y, z: w.z, w: 0)
             let dq = wq * b.rotation
             b.rotation = Quat(b.rotation.vector + dq.vector * (0.5 * dt)).normalized
-            b.position = (oldCenter + dp) - b.rotation.act(b.localCenter)
+            b.position = (m.oldCenter + m.dp) - b.rotation.act(b.localCenter)
             b.updateWorldInertia()
-            bodies[i] = b
+            bodies[m.index] = b
         }
         for i in 0..<n where bodies[i] != nil { updateAABB(i) }
 
@@ -401,10 +410,9 @@ public final class PhysicsWorld3D {
         if let onContact { for e in contactEvents { onContact(e) } }
     }
 
-    /// Continuous collision: shortens a dynamic body's step motion `dp` (from its centre `c`) so
-    /// its core sphere stops just short of the first static or kinematic surface in the way; the
-    /// contact solver stops it on the next step. Velocity is kept.
-    /// ponytail: core-sphere sweep, Box2D-style; fast dynamic-vs-dynamic pairs can still tunnel.
+    /// Continuous collision against static and kinematic bodies. Dynamic-versus-dynamic pairs
+    /// are a second pass (`clampDynamicPairs`) so each pair is scaled once.
+    /// ponytail: core-sphere sweep, Box2D-style.
     private func clampContinuous(_ i: Int, _ b: Body3D, from c: Vec3, _ dp: Vec3) -> Vec3 {
         let ext = b.aabb.extents - Vec3(repeating: settings.speculativeDistance)
         let core = 0.5 * min(ext.x, min(ext.y, ext.z))
@@ -426,6 +434,39 @@ public final class PhysicsWorld3D {
             }
         }
         return best < len ? d * max(best - settings.linearSlop, 0) : dp
+    }
+
+    /// Scales both displacements of each dynamic pair by the earliest time of impact along
+    /// their relative motion. Each pair is visited once (`i < j`).
+    private func clampDynamicPairs(_ motions: inout [(index: Int, dp: Vec3, oldCenter: Vec3, dynamic: Bool)]) {
+        for a in motions.indices where motions[a].dynamic {
+            let ia = motions[a].index
+            guard let ba = bodies[ia] else { continue }
+            let ext = ba.aabb.extents - Vec3(repeating: settings.speculativeDistance)
+            let core = 0.5 * min(ext.x, min(ext.y, ext.z))
+            guard core > 0, let filter = ba.shapes.first(where: { !$0.isTrigger })?.filter else { continue }
+            for b in (a + 1)..<motions.count where motions[b].dynamic {
+                let ib = motions[b].index
+                guard let bb = bodies[ib], !jointsDisableCollision(ia, ib) else { continue }
+                let rel = motions[a].dp - motions[b].dp
+                let len = rel.length
+                guard len > core else { continue }
+                let direction = rel / len
+                var best = len
+                for s in bb.shapes where !s.isTrigger && filter.shouldCollide(with: s.filter) {
+                    guard
+                        let (t, n) = Collide3D.rayShape(
+                            s, bb.pose, motions[a].oldCenter, direction, best, inflate: core),
+                        t > 0, n.dot(direction) < 0
+                    else { continue }
+                    best = t
+                }
+                guard best < len else { continue }
+                let scale = max(best - settings.linearSlop, 0) / len
+                motions[a].dp *= scale
+                motions[b].dp *= scale
+            }
+        }
     }
 
     func updateContacts() {
@@ -737,6 +778,16 @@ public final class PhysicsWorld3D {
                         lines.append(DebugLine(a: wa, b: wb, kind: kind))
                         lines.append(DebugLine(a: wb, b: wc, kind: kind))
                         lines.append(DebugLine(a: wc, b: wa, kind: kind))
+                    }
+                case .convex(let hull):
+                    let limit = min(hull.triangleCount, 20000)
+                    for t in 0..<limit {
+                        let a = pose.apply(hull.vertices[Int(hull.indices[t * 3])])
+                        let b = pose.apply(hull.vertices[Int(hull.indices[t * 3 + 1])])
+                        let c = pose.apply(hull.vertices[Int(hull.indices[t * 3 + 2])])
+                        lines.append(DebugLine(a: a, b: b, kind: kind))
+                        lines.append(DebugLine(a: b, b: c, kind: kind))
+                        lines.append(DebugLine(a: c, b: a, kind: kind))
                     }
                 }
             }

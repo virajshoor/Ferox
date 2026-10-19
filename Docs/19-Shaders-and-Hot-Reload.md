@@ -1,6 +1,6 @@
 # Shaders and Hot Reload
 
-Ferox's GPU code is written in Metal Shading Language and lives in `Sources/FeroxRender/Shaders/`. The Swift side that compiles, caches and reloads it is `ShaderLibrary`, in `Sources/FeroxRender/Metal/ShaderLibrary.swift`. Shaders are compiled at runtime from source, not from precompiled `.metallib` files. That choice is what makes hot reload possible: the same code path compiles the bundled sources at launch and recompiles an edited file while the game runs.
+Ferox's GPU code is written in Metal Shading Language and lives in `Sources/FeroxRender/Shaders/`. The Swift side that compiles, caches and reloads it is `ShaderLibrary`, in `Sources/FeroxRender/Metal/ShaderLibrary.swift`. Hot reload (`FEROX_SHADER_DIR`, or a directory passed to `Renderer`) always compiles from source. Otherwise `ShaderLibrary` loads `FEROX_METALLIB` or a bundled `FeroxShaders.metallib` when one of those files is present, and compiles the bundled sources when neither is. The repository does not commit a metallib, because the binary is specific to the OS and GPU.
 
 Hot reload is a development feature. It is enabled only when a shader directory is supplied, either in code or through an environment variable. Nothing in this document has been compiled, run or tested on a Mac. The shaders, the compile options and the reload path are unverified on hardware, and no compiler output has been produced from them.
 
@@ -30,9 +30,9 @@ The renderer as a whole is described in [07-Rendering-2D.md](07-Rendering-2D.md)
 | Hot reload by polling modification dates | Implemented: `ShaderLibrary.reloadIfChanged()`, called from `Renderer.render`. |
 | Function-constant variants | Implemented: `ShaderVariant`. |
 | Pipeline and function caches | Implemented: `renderPipeline`, `computePipeline`, `function`. |
-| Precompiled `.metallib` build step | **Not implemented.** Sources are compiled at startup, every run. |
+| Precompiled `.metallib` | Loaded when hot reload is off and `FEROX_METALLIB` or `FeroxShaders.metallib` in the bundle exists. Otherwise sources compile at launch. |
 | Shader debugging or profiling tools | **Not implemented** in the repository. |
-| Automated tests | None found in `Tests/` for `ShaderLibrary` or any shader. |
+| Automated tests | `RenderPathTests` checks shader-source policy, prewarm keys and the new `Mesh.metal` entry points. The macOS CI job runs `Scripts/compile-shaders.sh`. `MetalDeviceTests` constructs a `Renderer` when a GPU is present. |
 
 ## 2. The shader sources
 
@@ -170,12 +170,12 @@ let skinned = try shaders.function("meshVertex", variant: ShaderVariant(skinning
 
 ## 10. Limitations
 
-- **No precompiled path.** Every launch compiles all ten modules from text. There is no `.metallib` build step, so startup time includes compilation.
+- **Metallib is optional.** A checkout without `FEROX_METALLIB` or a bundled metallib still compiles all ten modules from text at launch. There is no committed metallib, so a normal developer run pays that compile. `Renderer` then prewarms the mesh pipelines into `FeroxPipelines.binaryarchive` under the caches directory.
 - **Reload is polled, not watched.** Changes are detected at most twice a second, and only while frames are being rendered.
 - **Reload is synchronous.** The recompile runs on the render thread. A large edit to `Common.metal` rebuilds all ten modules in one frame.
 - **Full rebuild for shared edits.** A change to `Common.metal` rebuilds every module, even if the change affects only one.
 - **Pipeline keys are trusted.** A caller that omits state from a key gets a stale pipeline with no warning.
-- **Function-constant variants are fixed.** `ShaderVariant` covers five flags. Adding a flag requires changing `Common.metal`, the struct and `constantValues` together.
+- **Function-constant variants are fixed.** `ShaderVariant` covers skinning, alpha test, vertex colour, clusters, unlit, and material argument buffers (index 5, with index 6 as the discrete-bind complement). Adding a flag requires changing `Common.metal`, the struct and `constantValues` together.
 - **Only text sources.** Shaders are compiled from source at runtime, so a shader compile error appears at run time rather than at build time.
 - **No shader debugging tools.** The repository has no shader profiler or capture helper.
 - **Ray-tracing shaders need hardware.** The `RayTracing` module compiles only where the device supports ray tracing, and that path is not verified on any device.
@@ -185,7 +185,7 @@ let skinned = try shaders.function("meshVertex", variant: ShaderVariant(skinning
 
 This document was written from the source. No macOS machine or Swift toolchain was available while the engine was written, so none of the ten modules has been compiled, and no compiler diagnostics, pipeline counts or reload timings are reported here. The function names quoted above are taken from the source and have not been resolved against a compiled library.
 
-`FeroxRenderTests` covers the CPU side of rendering, including a source check that `Culling.metal` declares `access::read` and an 8-uint indirect stride. The macOS CI job compiles every shader module with `Scripts/compile-shaders.sh` (`xcrun metal`, `Common.metal` prepended). That is a compile, not a GPU run. Hot reload, `ShaderLibrary` pipeline caches and MetalFX have not been executed on hardware in CI.
+`FeroxRenderTests` covers the CPU side of rendering, including a source check that `Culling.metal` declares `access::read` and an 8-uint indirect stride, and that `Mesh.metal` declares `prepassPickFragment` and the material argument-buffer path. The macOS CI job compiles every shader module with `Scripts/compile-shaders.sh` (`xcrun metal`, `Common.metal` prepended). That is a compile, not a GPU run. `MetalDeviceTests` constructs a `Renderer` on a Mac that has a device, which compiles the libraries through Metal and records the MetalFX probe. Hot reload has not been executed on hardware in CI.
 
 ## 12. Related documents
 

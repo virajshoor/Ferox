@@ -320,13 +320,19 @@
 
         // MARK: - 2D layer
 
-        private func spritePipeline(_ blend: SpriteBlendMode, mask: Bool, samples: Int) throws
-            -> any MTLRenderPipelineState
-        {
-            try shaders.renderPipeline("sprite.\(mask ? "mask" : blend.rawValue).s\(samples)") { d in
+        private func spritePipeline(
+            _ blend: SpriteBlendMode, mask: Bool, samples: Int, colorFormat: MTLPixelFormat, depth: Bool
+        ) throws -> any MTLRenderPipelineState {
+            let key = "sprite.\(mask ? "mask" : blend.rawValue).s\(samples).c\(colorFormat.rawValue).d\(depth ? 1 : 0)"
+            return try shaders.renderPipeline(key) { d in
                 d.vertexFunction = try shaders.function("spriteVertex")
                 d.fragmentFunction = try shaders.function(mask ? "spriteMaskFragment" : "spriteFragment")
-                Self.configureMainPass(d, samples: samples)
+                d.colorAttachments[0].pixelFormat = colorFormat
+                if depth {
+                    d.depthAttachmentPixelFormat = TargetFormat.depth
+                    d.stencilAttachmentPixelFormat = TargetFormat.depth
+                }
+                d.rasterSampleCount = max(samples, 1)
                 if mask {
                     d.colorAttachments[0].writeMask = []
                 } else {
@@ -339,7 +345,7 @@
         /// layer and order); stencil masks are written and tested per `SpriteBatch.stencil`.
         func encodeSprites(
             _ enc: any MTLRenderCommandEncoder, data: SpriteFrameData, samples: Int,
-            resources r: SceneResources
+            resources r: SceneResources, colorFormat: MTLPixelFormat = TargetFormat.hdr, depth: Bool = true
         ) {
             guard !data.isEmpty, !data.vertices.isEmpty, !data.indices.isEmpty,
                 let vb = r.allocator.upload(data.vertices), let ib = r.allocator.upload(data.indices)
@@ -361,12 +367,17 @@
                 let isMask: Bool
                 if case .write = b.stencil { isMask = true } else { isMask = false }
                 do {
-                    enc.setRenderPipelineState(try spritePipeline(b.blend, mask: isMask, samples: samples))
+                    enc.setRenderPipelineState(
+                        try spritePipeline(
+                            b.blend, mask: isMask, samples: samples, colorFormat: colorFormat, depth: depth)
+                    )
                 } catch {
                     Log.error("Render", "Sprite pipeline unavailable: \(error)")
                     return
                 }
-                if let ds = cachedDepthState(compare: .always, stencil: b.stencil) { enc.setDepthStencilState(ds) }
+                if depth, let ds = cachedDepthState(compare: .always, stencil: b.stencil) {
+                    enc.setDepthStencilState(ds)
+                }
                 switch b.stencil {
                 case .none: break
                 case .write(let id), .test(let id): enc.setStencilReferenceValue(UInt32(id))

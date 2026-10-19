@@ -29,7 +29,7 @@ Frame timing is driven by the engine loop described in [05-Engine-Lifecycle.md](
 | `Profiler` (CPU scopes, GPU samples, counters, history, Chrome trace export) | Implemented: `Sources/FeroxCore/Profiler.swift`. Not run. |
 | Renderer counters (`RenderCounters`) | Implemented in the Metal path. **Not run on hardware.** |
 | Frame and render statistics | Implemented: `FrameStatistics`, `RenderFrameStatistics`. |
-| `MemoryTracker` and `MemoryBudget` | Implemented. Texture budget enforced by the asset manager; audio budget enforced by streaming over-budget clips. Mesh budget enforced for cached model data (unreferenced models are evicted LRU); registered meshes are counted but never evicted. |
+| `MemoryTracker` and `MemoryBudget` | Implemented. Texture budget enforced by the asset manager; audio budget enforced by streaming over-budget clips. Mesh budget evicts unreferenced CPU models and, on the GPU, idle then least-recently-used meshes by real buffer size. Registered CPU meshes are counted and kept. |
 | `FeroxBenchmarks` | Implemented: `Sources/FeroxBenchmarks/FeroxBenchmarks.swift`. Run on one M1 Max (`--quick`); no numbers are cited as targets. |
 | `FeroxDiag` | Implemented: `Sources/FeroxDiag/FeroxDiag.swift`. Run on one M1 Max, including the offscreen `--render` check. |
 | CI benchmark workflow | Implemented: `.github/workflows/benchmarks.yml`, manual trigger only. **Never run.** |
@@ -89,7 +89,7 @@ These are counts. They describe what the renderer asked the GPU to do, which is 
 
 `MemoryBudget` holds three limits in bytes: textures, meshes and audio. `MemoryBudget.recommended(workingSetBytes:)` derives a budget from the GPU's recommended working-set size, giving textures half, meshes an eighth and audio the smaller of a thirty-second and 512 MB. `AssetManager` is created with a default budget of 1 GB of textures, 256 MB of meshes and 128 MB of audio.
 
-Enforcement is partial. The asset manager's `update` compares texture memory with `budget.textureBytes` and evicts unreferenced textures in least-recently-used order, logging a warning if the budget is still exceeded. `meshBytes` evicts unreferenced cached models the same way. Meshes registered in memory are counted and are not evicted. The GPU `MeshCache` is a separate residency cache: it drops a mesh after it has not been drawn for `maxIdleFrames` (600), and it does not read `meshBytes`. `Engine` copies `audioBytes` into the audio backend, which streams a clip instead of decoding it when decoding would exceed the budget. See [16-Audio.md](16-Audio.md#3-loading-clips).
+Enforcement is partial. The asset manager's `update` compares texture memory with `budget.textureBytes` and evicts unreferenced textures in least-recently-used order, logging a warning if the budget is still exceeded. `meshBytes` evicts unreferenced cached models the same way. Meshes registered in memory are counted and are not evicted by the asset manager. The GPU `MeshCache` drops a mesh after `maxIdleFrames` (600) without a draw, then drops the least-recently-used meshes that were not drawn this frame until `GPUMesh.byteCount` fits `meshBytes`. `Engine` copies `audioBytes` into the audio backend, which streams a clip instead of decoding it when decoding would exceed the budget. See [16-Audio.md](16-Audio.md#3-loading-clips).
 
 ## 5. FeroxBenchmarks
 
@@ -223,7 +223,7 @@ Tests pin these behaviours: `PerformancePathTests` (scene), `PhysicsDeterminismT
 - **Benchmark names can mislead.** Physics benchmark names include the full body count even in quick runs, which use fewer bodies.
 - **The benchmark tool has no statistical tests.** It reports a mean, median, minimum and maximum, but does not check for noise or thermal throttling.
 - **Hosted runners are not representative.** The CI benchmark runs on virtualised hardware and is only a trend indicator.
-- **Mesh budget covers CPU model caches only.** Unreferenced loaded models are evicted LRU under `meshBytes`. Registered meshes are counted and kept. GPU meshes stay resident until they go idle, independent of that budget.
+- **Mesh budget is split.** Unreferenced loaded models are evicted LRU under `meshBytes`. Registered CPU meshes are counted and kept. GPU meshes are evicted by idle time and then by real `byteCount` against the same budget, but a mesh drawn this frame stays.
 - **Counters are unlabelled.** Counter names are plain strings with no registry, so a misspelled name silently creates a new counter.
 - **Device-dependent paths are unverified.** Ray tracing, MetalFX and the dynamic-resolution controller have not been exercised on hardware.
 

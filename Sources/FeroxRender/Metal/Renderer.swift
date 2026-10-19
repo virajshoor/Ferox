@@ -156,11 +156,8 @@
         private var nextHookID = 0
 
         /// Written by command-buffer completion handlers (any thread), read on the render thread.
-        private let gpuLock = NSLock()
-        private var lastGPUMilliseconds: Double?
-        /// Scene command buffer GPU time per frame slot, handed from the scene completion
-        /// handler to the post one. Guarded by `gpuLock`.
-        private var sceneGPUMilliseconds: [Double]
+        /// The handlers capture this clock, not `Renderer`.
+        private let gpuClock: GPUFrameClock
 
         private var offscreen: (any MTLTexture)?
         private var offscreenBytes = 0
@@ -196,7 +193,7 @@
             maxFramesInFlight = min(max(settings.frame.maxFramesInFlight, 1), 3)
             inFlight = DispatchSemaphore(value: maxFramesInFlight)
             allocators = (0..<maxFramesInFlight).map { FrameAllocator(device: d, label: "Ferox.Frame\($0)") }
-            sceneGPUMilliseconds = Array(repeating: 0, count: maxFramesInFlight)
+            gpuClock = GPUFrameClock(framesInFlight: maxFramesInFlight)
             shaders = try ShaderLibrary(device: d, sourceDirectory: shaderDirectory)
             pool = TexturePool(device: d)
             meshes = MeshCache(
@@ -468,28 +465,23 @@
 
             // GPU time for dynamic resolution and the profiler is the scene buffer's duration
             // plus the post buffer's. The scene handler always runs before the post handler
-            // (same queue, committed in order), so the per-slot hand-off below is race free;
-            // the lock only orders it against the CPU reading `lastGPUMilliseconds`.
+            // (same queue, committed in order). The handlers capture `gpuClock`, which is
+            // Sendable, and not this renderer.
             let sem = inFlight
-            cbScene.addCompletedHandler { [weak self] cb in
+            let clock = gpuClock
+            cbScene.addCompletedHandler { cb in
                 let ms = max((cb.gpuEndTime - cb.gpuStartTime) * 1000, 0)
                 if ms > 0 { Profiler.shared.recordGPU(name: "GPU.Scene", duration: ms / 1000) }
-                if let self { self.gpuLock.locked { self.sceneGPUMilliseconds[slot] = ms } }
+                clock.recordScene(slot: slot, milliseconds: ms)
             }
-            cbPost.addCompletedHandler { [weak self] cb in
+            cbPost.addCompletedHandler { cb in
                 if cb.status == .error {
                     Log.error("Render", "GPU frame failed: \(cb.error.map { "\($0)" } ?? "unknown error")")
                 }
                 let postMs = max((cb.gpuEndTime - cb.gpuStartTime) * 1000, 0)
                 if postMs > 0 { Profiler.shared.recordGPU(name: "GPU.Post", duration: postMs / 1000) }
-                if let self {
-                    let total: Double = self.gpuLock.locked {
-                        let t = self.sceneGPUMilliseconds[slot] + postMs
-                        if t > 0 { self.lastGPUMilliseconds = t }
-                        return t
-                    }
-                    if total > 0 { Profiler.shared.recordGPUFrame(duration: total / 1000) }
-                }
+                let total = clock.recordPost(slot: slot, postMilliseconds: postMs)
+                if total > 0 { Profiler.shared.recordGPUFrame(duration: total / 1000) }
                 // Signal last: once the slot is free the CPU may reuse its allocator.
                 sem.signal()
             }
@@ -505,7 +497,7 @@
             debugDraw.clear()
             statistics.frameIndex = frameIndex
             statistics.cpuMilliseconds = (MonotonicClock.now() - cpuStart) * 1000
-            statistics.gpuMilliseconds = gpuLock.locked { lastGPUMilliseconds }
+            statistics.gpuMilliseconds = gpuClock.lastMilliseconds()
             statistics.reflectionProbeCaptures = probes.captures
             return true
         }
@@ -527,7 +519,7 @@
             statistics.outputHeight = oh
 
             // Dynamic resolution reacts to the last completed frame's GPU time.
-            if resolved.settings.dynamicResolution.enabled, let gpu = gpuLock.locked({ lastGPUMilliseconds }) {
+            if resolved.settings.dynamicResolution.enabled, let gpu = gpuClock.lastMilliseconds() {
                 let budget = 1000 / Double(max(resolved.settings.frame.targetFPS ?? 60, 1))
                 dynamicResolution.update(gpuMilliseconds: gpu, budgetMs: budget)
             }

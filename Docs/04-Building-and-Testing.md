@@ -56,7 +56,7 @@ The package has no external dependencies, so there is no resolution step. Metal 
 | `FeroxRenderTests` | `FeroxRender`, `Ferox` | The CPU side of the renderer: render maths, uniforms, dynamic resolution, tessellation, debug drawing, sprite batching, scene extraction |
 | `FeroxIntegrationTests` | `Ferox` | Engine lifecycle, editor session (undo, Play/Stop, save and load), launcher |
 
-The portable tests need no GPU, so all seven targets run on Linux. The suite is 537 XCTest tests on Swift 6.2.3 (Linux). `MetalDeviceTests` is compiled only where Metal exists: it constructs a `Renderer` (which compiles the shaders) and probes MetalFX, and it skips with a stated reason when `MTLCreateSystemDefaultDevice()` is nil. On Swift 6.2, `swift test` without `--enable-xctest` can exit 0 after running zero tests, so use the flag below. An earlier Mac run of a previous suite (504 tests, Swift 6.4) passed.
+The portable tests need no GPU, so all seven targets run on Linux. The suite is 542 XCTest tests on Swift 6.2.3 (Linux). `MetalDeviceTests` is compiled only where Metal exists: it constructs a `Renderer` (which compiles the shaders) and probes MetalFX, and it skips with a stated reason when `MTLCreateSystemDefaultDevice()` is nil. On Swift 6.2, `swift test` without `--enable-xctest` can exit 0 after running zero tests, so use the flag below. An earlier Mac run of a previous suite (504 tests, Swift 6.4) passed.
 
 ## 4. Running tests
 
@@ -76,13 +76,13 @@ Three workflows are defined under `.github/workflows`.
 
 ### 5.1 `ci.yml`
 
-The workflow runs on pushes to `main` and on every pull request. Concurrent runs for the same ref are cancelled. It has three jobs.
+The workflow runs on pushes to `main` and on every pull request. Concurrent runs for the same ref are cancelled. It has four jobs.
 
 | Job | Runner | Steps |
 | --- | --- | --- |
 | `build-and-test` | `macos-15` | Requires `/Applications/Xcode_16.4.app` (`xcode-select` fails the job if it is missing). Builds in debug, runs `swift test --enable-xctest --parallel`, compiles every `.metal` module with `Scripts/compile-shaders.sh` (`xcrun metal`, Common.metal prepended, `-std=metal3.0`), then builds in release. |
 | `linux-swift-5-10` | `ubuntu-latest`, `swift:5.10` pinned by digest | Tools-version floor. Builds `Ferox` and runs all seven test targets with `-warnings-as-errors`. Does not pass `--enable-xctest` (that flag is not in Swift 5.10). |
-| `linux-swift-6-2` | `ubuntu-latest`, `swift:6.2` pinned by digest | `swift format lint --strict` on `Sources`, `Tests` and `Package.swift`, then `swift test --enable-xctest --parallel`. |
+| `linux-swift-6-2` | `ubuntu-latest`, `swift:6.2` pinned by digest | `swift format lint --strict` on `Sources`, `Tests` and `Package.swift`, then `-strict-concurrency=complete` with warnings as errors for `FeroxMath` and `FeroxCore` only, then `swift test --enable-xctest --parallel`. |
 | `docs` | `ubuntu-latest` | Runs `lycheeverse/lychee-action` with `--offline --no-progress README.md "Docs/**/*.md"` and fails on any broken link. |
 
 One point follows from the file as written:
@@ -178,7 +178,7 @@ The steps for adding a shader are in [19-Shaders-and-Hot-Reload.md](19-Shaders-a
 
 ## 11. Limitations
 
-- **Limitation: the current suite is verified on Linux.** 537 XCTest tests pass on Swift 6.2.3. An earlier suite of 504 tests passed on an M1 Max, macOS 27, Swift 6.4. The macOS CI job compiles shaders and runs the suite, including `MetalDeviceTests` when the runner has a GPU. That is not a frame capture on Apple Silicon.
+- **Limitation: the current suite is verified on Linux.** 542 XCTest tests pass on Swift 6.2.3. An earlier suite of 504 tests passed on an M1 Max, macOS 27, Swift 6.4. The macOS CI job compiles shaders and runs the suite, including `MetalDeviceTests` when the runner has a GPU. That is not a frame capture on Apple Silicon.
 - **Limitation: no GPU tests.** Shaders and render passes are exercised only by running the examples or `FeroxDiag --render` on a Mac.
 - **Limitation: shader compile is not a GPU run.** The macOS job compiles every module with `xcrun metal`. It does not execute the shaders, and it does not construct a `Renderer` unless a later test does.
 - **Limitation: no benchmark figures are published here.** Use the tool, in release configuration, on the machine of interest.

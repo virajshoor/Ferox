@@ -193,7 +193,7 @@ _ = world.withDenseStorage(Transform.self) { _, transforms in
 }
 ```
 
-Workers may read the world and write their own indices. They must not call `add`, `remove`, `destroy` or `setParent`.
+`Jobs.parallelFor` takes an `@Sendable` closure. Workers may read buffers they were given and write their own indices. They must not call `add`, `remove`, `destroy`, `setParent`, or `denseIndex`. `TransformSystem` builds the flat-root index list on the calling thread, then hands each worker a disjoint range of that list and of the dense transform buffers.
 
 ## 8. Deferred structural changes
 
@@ -278,7 +278,7 @@ print(world.isActiveInHierarchy(wheel))    // false
 `TransformSystem.update(_:)` runs once per rendered frame, after gameplay and physics:
 
 1. Every `Transform` without a `WorldTransform` gets one.
-2. **Flat roots** (no parent, no children) are processed in parallel from the dense arrays, with a minimum chunk of 2048.
+2. **Flat roots** (no parent, no children) are listed on the calling thread. `Jobs.parallelFor` then updates disjoint ranges of the dense arrays, with a minimum chunk of 2048. Workers do not read the component stores.
 3. **Hierarchy roots** are walked depth-first. A subtree is recomputed only if an ancestor or the entity itself is dirty.
 
 In each pass, `previous` is set to the old `matrix` first. A second call in the same frame therefore makes `previous` equal to `matrix`, and motion vectors become zero.
@@ -494,7 +494,7 @@ let overlayAlpha = scenes.fadeAlpha             // draw fadeColor with this alph
 - `entities(with:)`, `entities(tagged:)`, `entities(inGroup:)`, `find(named:)` and `rootEntities` allocate or scan, and `rootEntities` also sorts. Cache their results.
 - `worldMatrix(of:)` costs O(depth). `WorldTransform` is O(1) to read.
 - This document gives no measured figures. See [21-Performance.md](21-Performance.md).
-- A `World` is owned by the engine or a test, and is mutated from one thread at a time, normally the main thread. It has no internal locking. Parallelism happens only inside `withDenseStorage`, through `Jobs.parallelFor`.
+- A `World` is owned by the engine or a test, and is mutated from one thread at a time, normally the main thread. It has no internal locking. Parallelism happens only inside `withDenseStorage`, through `Jobs.parallelFor`. The closure is `@Sendable` and must not capture the world.
 - `ComponentRegistry` is lock-protected. `SceneDocument` is `Sendable`, so it may be decoded off the main thread. `SystemScheduler` holds the world weakly.
 
 ## 19. Limitations

@@ -26,6 +26,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **Breaking:** `Jobs.parallelMap` is removed. Nothing in the engine called it. Use `Jobs.parallelFor` over a buffer you own. `parallelFor`'s closure is now `@Sendable`, so it must not capture a `World` or a component store.
+- **Breaking:** `JSONValue.encode` and `JSONValue.decode` take `[CodingUserInfoKey: any Sendable]` instead of `[CodingUserInfoKey: Any]`. `EntityRemapTable` is `@unchecked Sendable` for that dictionary. A value that is not `Sendable` no longer type-checks.
+- The Swift 6.2 CI job builds `FeroxMath` and `FeroxCore` with `-strict-concurrency=complete` and warnings as errors. The package stays in Swift 5 language mode.
+- Flat-root transforms are indexed on the calling thread. Workers write disjoint dense-buffer ranges and do not call `denseIndex`.
+- Command-buffer completion handlers record GPU time on `GPUFrameClock` instead of capturing `Renderer`.
+
 - **Source-breaking for external switches:** `ShapeGeometry3D` and `ColliderShape3D.Geometry` gained `.convex`. A `switch` that was exhaustive must handle the new case. Degenerate point sets make `Shape3D.convex` return nil, and the physics system skips a collider it cannot build.
 - `ShaderVariant` gained `materialArguments` (default `false`). Existing call sites keep the discrete texture binds.
 - A sprite-only frame with tone mapping, bloom, depth of field, SSAO, TAA, motion blur, ray tracing, stencil masks and debug lines all off draws sprites into the LDR target and skips the HDR scene pass. The default tone mapper is AgX, so this path is off unless those features are off.

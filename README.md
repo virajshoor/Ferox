@@ -22,7 +22,7 @@ The open-source game engine for macOS and Apple Silicon.
 > [!IMPORTANT]
 > **Project status: pre-release (0.1.0, unreleased).** An earlier commit was verified on a Mac
 > (Apple M1 Max, macOS 27, Swift 6.4): every target built with no warnings, 504 tests passed, the
-> Metal renderer drew offscreen frames, and the examples ran. The current portable suite is 537
+> Metal renderer drew offscreen frames, and the examples ran. The current portable suite is 542
 > XCTest tests on Swift 6.2.3 (Linux, `swift test --enable-xctest`). On Swift 6.2, plain
 > `swift test` can exit 0 without running this suite. The Linux CI builds the engine without
 > executing Metal. The macOS CI job compiles every shader and runs `MetalDeviceTests` when the
@@ -79,7 +79,7 @@ Every row has limits, which are listed honestly in [Limitations and Roadmap](Doc
 
 ## Quick start
 
-You need macOS 14 or later and Xcode 15.3 or later (Swift 5.10, the package's tools version). CI builds with Swift 5.10, Swift 6.2, and Xcode 16.4 on `macos-15`. Apple Silicon is recommended.
+You need macOS 14 or later and Xcode 15.3 or later (Swift 5.10, the package's tools version). CI builds with Swift 5.10, Swift 6.2, and Xcode 16.4 on `macos-15`. The Swift 6.2 job also builds `FeroxMath` and `FeroxCore` with strict concurrency. Apple Silicon is recommended.
 
 ```sh
 git clone https://github.com/virajshoor/Ferox.git

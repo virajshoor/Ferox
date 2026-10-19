@@ -7,6 +7,28 @@ import XCTest
 
 @testable import FeroxRender
 
+final class GPUFrameClockTests: XCTestCase {
+    func testScenePlusPostBecomesTheLastSample() {
+        let clock = GPUFrameClock(framesInFlight: 2)
+        XCTAssertNil(clock.lastMilliseconds())
+        clock.recordScene(slot: 1, milliseconds: 4)
+        XCTAssertEqual(clock.recordPost(slot: 1, postMilliseconds: 1.5), 5.5, accuracy: 1e-9)
+        XCTAssertEqual(clock.lastMilliseconds() ?? -1, 5.5, accuracy: 1e-9)
+        clock.recordScene(slot: 0, milliseconds: 0)
+        XCTAssertEqual(clock.recordPost(slot: 0, postMilliseconds: 0), 0, accuracy: 1e-9)
+        XCTAssertEqual(clock.lastMilliseconds() ?? -1, 5.5, accuracy: 1e-9)
+    }
+
+    func testUnknownSlotDoesNotChangeTheLastSample() {
+        let clock = GPUFrameClock(framesInFlight: 1)
+        clock.recordScene(slot: 0, milliseconds: 2)
+        XCTAssertEqual(clock.recordPost(slot: 0, postMilliseconds: 1), 3, accuracy: 1e-9)
+        clock.recordScene(slot: 4, milliseconds: 9)
+        XCTAssertEqual(clock.recordPost(slot: 4, postMilliseconds: 9), 0, accuracy: 1e-9)
+        XCTAssertEqual(clock.lastMilliseconds() ?? -1, 3, accuracy: 1e-9)
+    }
+}
+
 final class FramePathTests: XCTestCase {
     func testOpaqueGeometryNeedsAPrepass() {
         XCTAssertTrue(

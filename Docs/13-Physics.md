@@ -80,10 +80,11 @@ Entities and components are described in [06-Scene-and-Entities.md](06-Scene-and
 | Box and capsule | Sphere tests at both endpoints and at the closest segment point; up to two points. |
 | Plane and sphere, capsule, box or convex hull | Per-point tests. A box contributes up to eight corners, reduced to four. A hull contributes its vertices. |
 | Convex hull and sphere or capsule | Closest point on the hull. The normal points from shape A toward shape B. |
-| Convex hull and box, or hull and hull | Face separating-axis test. Edge-edge axes are not tested. |
+| Convex hull and box, or hull and hull | Face normals and edge-edge crosses. Face axes are preferred. A face contact is clipped against the reference face (up to four points). An edge-edge contact is one point. |
 | Triangle mesh and sphere or capsule | BVH query, closest point on each triangle, up to four deepest points, averaged normal. |
+| Triangle mesh and convex hull | BVH query, then the same face and edge-edge test as hull versus hull, up to four deepest points. |
 | Triangle mesh and box | **Approximated** by an inscribed capsule along the box's longest axis. |
-| Triangle mesh and convex hull; plane against plane or mesh; mesh against mesh or plane | **Not supported.** No contacts are produced. |
+| Plane against plane or mesh; mesh against mesh or plane | **Not supported.** No contacts are produced. |
 
 The mesh BVH splits at the median of the largest centroid extent, with leaves of up to four triangles. Out-of-range indices log an error and produce an empty mesh.
 
@@ -404,7 +405,7 @@ func movePlayer(_ player: Entity, input: Vec2, jumpPressed: Bool, dt: Float) {
 ## 14. Limitations
 
 - **Limitation: continuous collision is a core sweep.** Dynamic bodies are swept against static and kinematic shapes, then each dynamic pair is scaled once along the relative motion. The sweep uses a core sphere or circle, so a thin feature can still be missed. Sphere sweeps against boxes and meshes are conservative approximations. `maxTranslation` limits explosions but is not a substitute.
-- **Limitation: convex hull contacts are face-only.** `ConvexHull3D.build` returns nil for coplanar or collinear points. Sphere and capsule contacts use the closest point. Hull versus box or hull uses face axes only (no edge-edge). Hull versus triangle mesh produces an empty manifold. Inertia is taken from the hull's AABB about its centroid.
+- **Limitation: hull inertia is the AABB.** `ConvexHull3D.build` returns nil for coplanar or collinear points. Sphere and capsule contacts use the closest point. Hull versus box, hull versus hull, and hull versus triangle mesh use face axes and edge-edge axes, with a clipped face manifold (one point on an edge-edge axis). Inertia is taken from the hull's AABB about its centroid.
 - **Limitation: 2D polygons are convex, with at most 16 vertices.** Split concave outlines.
 - **Limitation: box against mesh is approximated.** Mesh against plane, mesh against mesh and plane against plane produce no contacts.
 - **Limitation: sphere casts against boxes and meshes are approximations** (see [section 8](#8-queries)).
@@ -421,8 +422,8 @@ func movePlayer(_ player: Entity, input: Vec2, jumpPressed: Bool, dt: Float) {
 
 ## 15. Validation status
 
-- `Tests/FeroxPhysicsTests` covers free fall, resting contacts, restitution, triggers, raycasts, filtering, sleeping, teleporting, contact events, the ECS bridge, continuous collision (`ContinuousCollisionTests.swift`), dynamic-versus-dynamic sweeps and convex hulls (`ConvexAndDynamicCCDTests.swift`), and determinism (`PhysicsDeterminismTests.swift`).
-- The physics tests (41 in total) were run on an M1 Max with macOS 27 and Swift 6.4, and all pass.
+- `Tests/FeroxPhysicsTests` covers free fall, resting contacts, restitution, triggers, raycasts, filtering, sleeping, teleporting, contact events, the ECS bridge, continuous collision (`ContinuousCollisionTests.swift`), dynamic-versus-dynamic sweeps and convex hulls (`ConvexAndDynamicCCDTests.swift`), and determinism (`PhysicsDeterminismTests.swift`). Hull tests cover sphere, capsule, box, hull-hull face manifolds, edge-edge separation, and mesh-hull contacts.
+- The physics target is 58 XCTest cases. They pass on Swift 6.2.3 (Linux) and previously passed on an M1 Max with macOS 27 and Swift 6.4.
 - Contact keys are sorted before the solve, so results are repeatable from run to run. `PhysicsDeterminismTests.swift` checks this.
 - The behaviour in this document was derived from the source and checked against those tests.
 - No benchmark numbers are given. Performance should be measured, as described in [21-Performance.md](21-Performance.md).

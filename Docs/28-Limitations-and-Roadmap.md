@@ -83,7 +83,7 @@ The items below are plans. They are based on gaps that the source records or tha
 - **GPU particles.** Support colour over lifetime on the GPU path, and let local-space emitters follow the emitter.
 - **More glTF features.** The importer's header lists what it rejects or skips: sparse accessors, morph target rendering (weights are imported only as animation channels), non-triangle primitives, Draco and meshopt compression, and `KHR_texture_transform`. Any of these could be supported in a later version.
 - **Stronger transport security.** Verify the DTLS-PSK handshake on hardware, and consider per-player credentials so that one leaked passphrase does not expose every session.
-- **Physics.** Convex hulls and dynamic-versus-dynamic sweeps are in. Remaining gaps in [13-Physics.md](13-Physics.md), section 14, include edge-edge hull contacts, hull-versus-mesh manifolds, and a less conservative core sweep.
+- **Physics.** Convex hulls, edge-edge axes, hull-versus-mesh manifolds, and dynamic-versus-dynamic sweeps are in. The remaining gap in [13-Physics.md](13-Physics.md), section 14, is a less conservative core sweep.
 
 ## 9. Related documents
 

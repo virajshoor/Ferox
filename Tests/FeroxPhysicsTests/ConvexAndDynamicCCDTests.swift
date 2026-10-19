@@ -63,6 +63,65 @@ final class ConvexHullTests: XCTestCase {
         XCTAssertGreaterThan(hit!.1.y, 0.9)
     }
 
+    func testCapsuleTouchesTheTopFace() {
+        let hull = ConvexHull3D.build(boxCorners())!
+        let m = Collide3D.manifold(
+            Shape3D.capsule(height: 1, radius: 0.25), Pose3D(position: Vec3(0, 1.4, 0)),
+            Shape3D(.convex(hull)), Pose3D(), margin: 0)
+        XCTAssertFalse(m.points.isEmpty)
+        XCTAssertLessThan(m.normal.y, -0.5)
+    }
+
+    func testBoxHullFaceManifoldHasSeveralPoints() {
+        let hull = ConvexHull3D.build(boxCorners())!
+        let m = Collide3D.manifold(
+            Shape3D.box(Vec3(1, 1, 1)), Pose3D(position: Vec3(0, 1.5, 0)),
+            Shape3D(.convex(hull)), Pose3D(), margin: 0)
+        XCTAssertGreaterThanOrEqual(m.points.count, 2)
+        XCTAssertLessThan(m.normal.y, -0.9)
+        XCTAssertTrue(m.points.allSatisfy { $0.separation < 0 })
+    }
+
+    func testHullHullFaceManifold() {
+        let hull = ConvexHull3D.build(boxCorners())!
+        let m = Collide3D.manifold(
+            Shape3D(.convex(hull)), Pose3D(),
+            Shape3D(.convex(hull)), Pose3D(position: Vec3(0, 1.5, 0)), margin: 0)
+        XCTAssertGreaterThanOrEqual(m.points.count, 2)
+        XCTAssertGreaterThan(m.normal.y, 0.9)
+    }
+
+    func testEdgeCrossSeparatesSkewRods() {
+        // Long rods along X and along a diagonal. A gap along their edge cross separates
+        // them; face projections still overlap, so face-only SAT would report a hit.
+        let rod = Shape3D.box(Vec3(1, 0.05, 0.05))
+        let tilt = Quat(from: Vec3(1, 0, 0), to: Vec3(0, 1, 1).normalized)
+        let axis = Vec3(1, 0, 0).cross(tilt.act(Vec3(1, 0, 0)))
+        let gap = axis.normalized * 0.2
+        let separated = Collide3D.manifold(
+            rod, Pose3D(), rod, Pose3D(position: gap, rotation: tilt), margin: 0)
+        XCTAssertTrue(separated.points.isEmpty, "edge-edge axis must separate the rods")
+        let hit = Collide3D.manifold(
+            rod, Pose3D(), rod, Pose3D(position: axis.normalized * 0.04, rotation: tilt), margin: 0)
+        XCTAssertEqual(hit.points.count, 1)
+        XCTAssertGreaterThan(abs(hit.normal.normalized.dot(axis.normalized)), 0.9)
+    }
+
+    func testMeshHullContactsAndMisses() {
+        let mesh = TriangleMesh(
+            vertices: [
+                Vec3(-2, 0, -2), Vec3(2, 0, -2), Vec3(2, 0, 2), Vec3(-2, 0, 2),
+            ],
+            indices: [0, 1, 2, 0, 2, 3])
+        let hull = Shape3D.convex(boxCorners())!
+        let floor = Shape3D(.mesh(mesh))
+        let hit = Collide3D.manifold(floor, Pose3D(), hull, Pose3D(position: Vec3(0, 0.9, 0)), margin: 0)
+        XCTAssertFalse(hit.points.isEmpty)
+        XCTAssertGreaterThan(hit.normal.y, 0.5)
+        let miss = Collide3D.manifold(floor, Pose3D(), hull, Pose3D(position: Vec3(0, 2, 0)), margin: 0)
+        XCTAssertTrue(miss.points.isEmpty)
+    }
+
     func testDynamicSphereRestsOnAStaticHull() {
         let world = PhysicsWorld3D(gravity: Vec3(0, -10, 0))
         let hull = Shape3D.convex(boxCorners())!

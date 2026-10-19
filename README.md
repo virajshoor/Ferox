@@ -68,7 +68,7 @@ The engine is a set of small Swift modules. The parts that do not need Metal are
 | **Post-processing** | Bloom, SSAO, depth of field, motion blur, colour grading, auto exposure, tone mapping (Reinhard, ACES, AgX) |
 | **Anti-aliasing** | MSAA, FXAA, SMAA, TAA |
 | **Upscaling** | Ferox temporal upscaler, MetalFX spatial and temporal upscaling, dynamic resolution, quality presets |
-| **Physics** | Built-in 2D and 3D rigid bodies: sequential impulses, joints, triggers, queries, character controller, dynamic continuous collision, 3D convex hulls |
+| **Physics** | Built-in 2D and 3D rigid bodies: sequential impulses, joints, triggers, queries, character controller, dynamic continuous collision, 3D convex hulls with edge-edge axes and mesh contacts |
 | **Gameplay** | `Game` protocol hooks, input actions and contexts, retained-mode UI, spatial audio, animation clips and state machines, CPU and GPU particles |
 | **Assets** | glTF 2.0, PNG and JPEG decoding, a validated asset database, memory budgets, hot reload |
 | **Shaders** | Metal Shading Language, run-time hot reload, optional metallib, pipeline binary-archive prewarm |
